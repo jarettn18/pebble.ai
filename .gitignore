@@ -1,0 +1,34 @@
+# Environment / Secrets
+.env
+.env.local
+.env.production
+*.pem
+*.key
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# Node
+node_modules/
+.expo/
+npm-debug.log*
+
+# iOS / Android builds
+ios/
+android/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
