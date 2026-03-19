@@ -43,11 +43,17 @@ pebble/
 │       │   ├── chat.py              # ChatConversation + ChatMessage
 │       │   └── api_usage.py         # API usage metering
 │       ├── schemas/                 # Pydantic request/response
-│       │   └── auth.py              # Register, Login, Token, User schemas
+│       │   ├── auth.py              # Register, Login, Token, User schemas
+│       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
+│       │   └── transaction.py       # TransactionOut, TransactionList schemas
 │       ├── routers/
-│       │   └── auth.py              # /v1/auth/* (register, login, refresh, me)
+│       │   ├── auth.py              # /v1/auth/* (register, login, refresh, me)
+│       │   ├── plaid.py             # /v1/plaid/* (link-token, exchange, sync, sync-all)
+│       │   └── transactions.py      # /v1/transactions (list with pagination)
 │       ├── services/
-│       │   └── auth.py              # Auth business logic
+│       │   ├── auth.py              # Auth business logic
+│       │   ├── plaid.py             # Plaid API integration (link, exchange, sync)
+│       │   └── transactions.py      # Transaction queries
 │       ├── middleware/
 │       │   └── auth.py              # JWT + API key auth dependencies
 │       ├── ai/                      # AI module (Phase 3)
@@ -66,15 +72,18 @@ pebble/
 │   │   └── (tabs)/
 │   │       ├── _layout.tsx          # Tab navigator (5 tabs)
 │   │       ├── index.tsx            # Dashboard
-│   │       ├── transactions.tsx     # Transaction list (placeholder)
+│   │       ├── transactions.tsx     # Transaction list with cached sync
 │   │       ├── budgets.tsx          # Budgets (placeholder)
 │   │       ├── ai-chat.tsx          # AI chat (placeholder)
 │   │       └── settings.tsx         # Settings + logout
 │   └── src/
 │       ├── api/
 │       │   └── client.ts            # API client with auto JWT refresh
+│       ├── hooks/
+│       │   └── usePlaidLink.ts      # Plaid Link hook (fetch token, open modal)
 │       └── stores/
-│           └── auth.ts              # Zustand auth store
+│           ├── auth.ts              # Zustand auth store
+│           └── transactions.ts      # Zustand transactions store (24h cache)
 ```
 
 ---
@@ -140,7 +149,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 | Phase | Focus | Status |
 |-------|-------|--------|
 | 1 | Foundation — Docker, FastAPI, models, auth, Expo scaffold | **Done** |
-| 2 | Plaid + Transactions — bank linking, sync, transaction list | Not started |
+| 2 | Plaid + Transactions — bank linking, sync, transaction list | **In progress** |
 | 3 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
 | 4 | Budgets + Polish — CRUD, charts, search, error states | Not started |
 | 5 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
@@ -187,17 +196,23 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 
 ## Remaining Work
 
+## TODO:
+### General
+- [ ] Add "Report a Bug or Leave Feedback" section with link to GitHub Issues
+- [ ] Ask Claude about password hashing vulnerabilities
+
 ### Phase 2 — Plaid + Transactions
-- [ ] Plaid service: create link token, exchange public token, encrypt/store access token
-- [ ] Plaid client utility (`plaid-python` SDK setup)
-- [ ] Transaction sync service using `transactions/sync` (cursor-based)
+- [x] Plaid service: create link token, exchange public token, encrypt/store access token
+- [x] ~~Plaid client utility (`plaid-python` SDK setup)~~ — using httpx directly instead of plaid-python SDK
+- [x] Transaction sync service using `transactions/sync` (cursor-based)
 - [ ] Auto-categorization of Plaid transactions to internal categories
 - [ ] Seed default categories (Food, Transport, Shopping, Bills, etc.)
-- [ ] Router: `POST /v1/plaid/link-token`, `POST /v1/plaid/exchange`, `POST /v1/plaid/sync`
-- [ ] Router: `GET /v1/accounts`, `GET /v1/transactions`
-- [ ] Mobile: Plaid Link integration (`react-native-plaid-link-sdk`)
-- [ ] Mobile: Account connection flow
-- [ ] Mobile: Transaction list with pull-to-refresh sync
+- [x] Router: `POST /v1/plaid/link-token`, `POST /v1/plaid/exchange`, `POST /v1/plaid/sync`, `POST /v1/plaid/sync-all`
+- [ ] Router: `GET /v1/accounts`
+- [x] Router: `GET /v1/transactions`
+- [x] Mobile: Plaid Link integration (`react-native-plaid-link-sdk`)
+- [x] Mobile: Account connection flow
+- [x] Mobile: Transaction list with pull-to-refresh sync + 24-hour cache
 - [ ] Mobile: Transaction detail/edit (recategorize)
 - [ ] Mobile: Dashboard wired to real account balances + spending data
 
@@ -233,6 +248,10 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Mobile: API key management in settings
 - [ ] API documentation for external consumers
 
+
+### Phase 6 - Iteration
+- [ ] AI System: Allow asset optimization/Balance Transfers
+- [ ] API: Debt Restructuring/Credit Optimization
 ---
 
 ## Running Locally
