@@ -260,6 +260,9 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Mobile: Update Transaction Categories to mimic Mint Category Schema
 - [ ] Mobile: Update Settings screen to support account changes
 - [ ] Mobile: Earning summary charts
+- [ ] Mobile: Account details when tapping accounts by dashboard
+- [ ] Router: Add a property end point `POST/GET/PUT/DELETE /v1/Property`
+- [ ] Mobile: Add a property frontend
 
 ### Phase 4 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id
@@ -288,6 +291,9 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] AI System: Allow asset optimization/Balance Transfers
 - [ ] API: Debt Restructuring/Credit Optimization
 - [ ] Mobile: Support for dark mode
+- [ ] API: Rate limiting on API calls
+- [ ] Data imports and exports
+- [ ] Sign in Google/Apple
 ---
 
 ## Running Locally
