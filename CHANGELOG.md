@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-03-19 — Phase 2: Transaction Categories, Detail & Edit
+
+### Backend — Categories
+- Added `plaid_primary` column to `Category` model for mapping Plaid's `personal_finance_category.primary` to internal categories
+- Created Alembic migration (`b3f1a2c4d5e6`) that adds the column and seeds 16 default categories (Income, Food & Drink, Transportation, Shopping, etc.)
+- Migration resets all Plaid cursors so next sync re-fetches transactions with category assignments
+- Added categories service (`services/categories.py`) with `get_plaid_category_map()` for sync-time lookups and `get_all_categories()` for the API
+- Added categories router (`routers/categories.py`): `GET /v1/categories` — returns all categories (auth required)
+- Added category schemas (`schemas/category.py`): `CategoryOut`, `CategoryListResponse`
+
+### Backend — Auto-Categorization
+- Updated Plaid sync to auto-categorize transactions on add/modify using Plaid's `personal_finance_category.primary` field
+- Added `_resolve_category_id()` helper in Plaid service that maps Plaid category → internal category UUID
+
+### Backend — Transaction Detail & Edit
+- Added `GET /v1/transactions/{id}` endpoint — returns full transaction detail including `category_id` and `notes`
+- Added `PATCH /v1/transactions/{id}` endpoint — supports updating `category_id` and `notes` fields
+- Added `TransactionDetailOut` and `TransactionUpdateRequest` schemas
+- Added `get_transaction()` and `update_transaction()` service functions with ownership validation
+
+### Mobile — Transaction Detail Screen
+- Created `app/transaction/[id].tsx` — full transaction detail screen with:
+  - Transaction header (merchant, amount, date, pending status)
+  - Category picker: scrollable list of all categories fetched from API, with color dots and selection state
+  - Clear category option to remove category assignment
+  - Notes field with save button
+  - Optimistic updates for category changes (instant UI, reverts on API failure)
+- Added `TouchableOpacity` wrapper on transaction list rows for navigation to detail screen
+- Added `updateTransactionCategory()` to transactions Zustand store for optimistic category updates in the list view
+
+### Bug Fix
+- Fixed `[object Object]` error when saving notes — removed double `JSON.stringify()` on PATCH request bodies (API client already serializes)
+
+---
+
 ## 2026-03-18 — Phase 2: Plaid Integration & Transactions
 
 ### Backend — Plaid Service

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pebble.config import settings
 from pebble.models.account import Account, PlaidItem
 from pebble.models.transaction import Transaction
+from pebble.services.categories import get_plaid_category_map
 from pebble.utils.security import decrypt_value, encrypt_value
 
 PLAID_ENV_URLS = {
@@ -130,6 +131,15 @@ async def exchange_public_token(
     return {"item_id": str(plaid_item.id), "accounts_linked": accounts_linked}
 
 
+def _resolve_category_id(
+    txn: dict, category_map: dict[str, uuid.UUID]
+) -> uuid.UUID | None:
+    pfc = txn.get("personal_finance_category")
+    if not pfc:
+        return None
+    return category_map.get(pfc.get("primary"))
+
+
 async def sync_transactions(
     item_id: str,
     user_id: str,
@@ -159,6 +169,8 @@ async def sync_transactions(
         a.plaid_account_id: a.id for a in acct_result.scalars().all()
     }
 
+    category_map = await get_plaid_category_map(db)
+
     cursor = plaid_item.cursor
     total_added = 0
     total_modified = 0
@@ -186,6 +198,7 @@ async def sync_transactions(
                 name=txn["name"],
                 merchant_name=txn.get("merchant_name"),
                 pending=txn.get("pending", False),
+                category_id=_resolve_category_id(txn, category_map),
             ))
             total_added += 1
 
@@ -203,6 +216,7 @@ async def sync_transactions(
                 existing_txn.name = txn["name"]
                 existing_txn.merchant_name = txn.get("merchant_name")
                 existing_txn.pending = txn.get("pending", False)
+                existing_txn.category_id = _resolve_category_id(txn, category_map)
                 total_modified += 1
 
         # Process removed transactions

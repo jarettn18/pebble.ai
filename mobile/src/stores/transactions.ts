@@ -30,6 +30,8 @@ type TransactionsState = {
   load: () => Promise<void>;
   /** Force sync with Plaid then refresh the list. */
   syncAndRefresh: () => Promise<void>;
+  /** Update a transaction's category_name in the local list (optimistic). */
+  updateTransactionCategory: (id: string, categoryName: string | null) => void;
 };
 
 export const useTransactionsStore = create<TransactionsState>((set, get) => ({
@@ -77,5 +79,13 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     } finally {
       set({ isSyncing: false });
     }
+  },
+
+  updateTransactionCategory: (id, categoryName) => {
+    set((state) => ({
+      transactions: state.transactions.map((t) =>
+        t.id === id ? { ...t, category_name: categoryName } : t
+      ),
+    }));
   },
 }));

@@ -203,6 +203,13 @@ class TestExchangePublicToken:
         assert resp.status_code in (401, 403)
 
 
+def _empty_category_result():
+    """Mock result for get_plaid_category_map query (returns no rows)."""
+    result = MagicMock()
+    result.all.return_value = []
+    return result
+
+
 class TestSyncTransactions:
     SYNC_RESPONSE = httpx.Response(
         200,
@@ -216,6 +223,11 @@ class TestSyncTransactions:
                     "name": "Grocery Store",
                     "merchant_name": "Whole Foods",
                     "pending": False,
+                    "personal_finance_category": {
+                        "primary": "FOOD_AND_DRINK",
+                        "detailed": "FOOD_AND_DRINK_GROCERIES",
+                        "confidence_level": "VERY_HIGH",
+                    },
                 },
                 {
                     "transaction_id": "txn-2",
@@ -225,6 +237,11 @@ class TestSyncTransactions:
                     "name": "Streaming Service",
                     "merchant_name": "Netflix",
                     "pending": False,
+                    "personal_finance_category": {
+                        "primary": "ENTERTAINMENT",
+                        "detailed": "ENTERTAINMENT_TV_AND_MOVIES",
+                        "confidence_level": "VERY_HIGH",
+                    },
                 },
             ],
             "modified": [],
@@ -262,7 +279,7 @@ class TestSyncTransactions:
         acct_scalars.all.return_value = [account]
         acct_result.scalars.return_value = acct_scalars
 
-        fake_db.execute.side_effect = [item_result, acct_result]
+        fake_db.execute.side_effect = [item_result, acct_result, _empty_category_result()]
 
         mock_cls, _ = _mock_plaid_client([self.SYNC_RESPONSE])
 
@@ -325,7 +342,7 @@ class TestSyncTransactions:
         txn_result = MagicMock()
         txn_result.scalar_one_or_none.return_value = existing_txn
 
-        fake_db.execute.side_effect = [item_result, acct_result, txn_result]
+        fake_db.execute.side_effect = [item_result, acct_result, _empty_category_result(), txn_result]
 
         mock_cls, _ = _mock_plaid_client([sync_response])
 
@@ -368,7 +385,7 @@ class TestSyncTransactions:
         acct_scalars.all.return_value = [account]
         acct_result.scalars.return_value = acct_scalars
 
-        fake_db.execute.side_effect = [item_result, acct_result, MagicMock()]
+        fake_db.execute.side_effect = [item_result, acct_result, _empty_category_result(), MagicMock()]
 
         mock_cls, _ = _mock_plaid_client([sync_response])
 
