@@ -26,7 +26,19 @@ function AuthGate() {
     }
   }, [isAuthenticated, isLoading, segments]);
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen
+        name="spending"
+        options={{
+          headerShown: true,
+          title: "Spending Summary",
+          headerStyle: { backgroundColor: "#fff" },
+          headerTitleStyle: { fontWeight: "600" },
+        }}
+      />
+    </Stack>
+  );
 }
 
 export default function RootLayout() {

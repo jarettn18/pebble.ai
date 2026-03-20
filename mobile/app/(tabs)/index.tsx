@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,19 +6,94 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  ScrollView,
+  RefreshControl,
 } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import type { AccountSummary } from "../../src/stores/dashboard";
 import { useAuthStore } from "../../src/stores/auth";
+import { useDashboardStore } from "../../src/stores/dashboard";
+import { useAccountsStore } from "../../src/stores/accounts";
+import { useTransactionsStore } from "../../src/stores/transactions";
 import { usePlaidLink } from "../../src/hooks/usePlaidLink";
 import { apiRequest } from "../../src/api/client";
+import { formatCurrency } from "../../src/utils/dashboard";
+import PieChart from "../../src/components/PieChart";
+import NetWorthChart from "../../src/components/NetWorthChart";
+
+const PIE_COLORS = [
+  "#1a1a2e",
+  "#16213e",
+  "#0f3460",
+  "#533483",
+  "#e94560",
+  "#f38181",
+  "#fce38a",
+  "#95e1d3",
+  "#aa96da",
+  "#c4edde",
+];
+
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  depository: "Bank",
+  credit: "Credit Card",
+  loan: "Loan",
+  investment: "Investment",
+};
+
+function AccountRow({ account, isLast }: { account: AccountSummary; isLast: boolean }) {
+  const bal = account.balance_current ? parseFloat(account.balance_current) : null;
+  const isDebt = account.type === "credit" || account.type === "loan";
+  const typeLabel = ACCOUNT_TYPE_LABELS[account.type] ?? account.type;
+  const label = account.institution_name
+    ? `${account.institution_name} — ${account.name}`
+    : account.name;
+
+  return (
+    <View style={[styles.accountRow, !isLast && styles.accountRowBorder]}>
+      <View style={styles.accountInfo}>
+        <Text style={styles.accountName} numberOfLines={1}>{label}</Text>
+        <Text style={styles.accountType}>{typeLabel}{account.subtype ? ` · ${account.subtype}` : ""}</Text>
+      </View>
+      {bal !== null && Number.isFinite(bal) && (
+        <Text style={[styles.accountBalance, isDebt && styles.negative]}>
+          {isDebt ? "-" : ""}{formatCurrency(bal)}
+        </Text>
+      )}
+    </View>
+  );
+}
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const [linked, setLinked] = useState(false);
   const [exchanging, setExchanging] = useState(false);
+
+  const {
+    netWorth,
+    monthlySpending,
+    accounts,
+    budgetSummaries,
+    spendingByCategory,
+    isLoading: dashLoading,
+    load: loadDashboard,
+    refresh: refreshDashboard,
+  } = useDashboardStore();
+
+  const refreshAccounts = useAccountsStore((s) => s.refresh);
+  const syncTransactions = useTransactionsStore((s) => s.syncAndRefresh);
 
   const { isLoading, error, linkResult, openLink, clearResult } =
     usePlaidLink();
 
+  // Refresh dashboard on tab focus
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [])
+  );
+
+  // Plaid exchange flow
   useEffect(() => {
     if (!linkResult) return;
 
@@ -41,11 +116,14 @@ export default function DashboardScreen() {
         });
 
         if (!cancelled) {
-          setLinked(true);
           Alert.alert(
             "Account Connected",
             `Linked ${result.accounts_linked} account${result.accounts_linked === 1 ? "" : "s"} from ${metadata.institution?.name ?? "your institution"}`
           );
+          // Refresh all data after linking
+          refreshAccounts();
+          syncTransactions();
+          refreshDashboard();
         }
       } catch (err) {
         if (!cancelled) {
@@ -71,10 +149,21 @@ export default function DashboardScreen() {
     };
   }, [linkResult, clearResult]);
 
+  const hasAccounts = accounts.length > 0;
   const busy = isLoading || exchanging;
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={dashLoading}
+          onRefresh={refreshDashboard}
+          tintColor="#1a1a2e"
+        />
+      }
+    >
       <Text style={styles.greeting}>
         Hello, {user?.full_name?.split(" ")[0] ?? "there"}
       </Text>
@@ -82,32 +171,120 @@ export default function DashboardScreen() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Net Worth</Text>
-        <Text style={styles.cardValue}>--</Text>
-        <Text style={styles.cardHint}>Connect a bank account to get started</Text>
+        {dashLoading && !hasAccounts ? (
+          <ActivityIndicator size="small" color="#1a1a2e" style={styles.cardLoader} />
+        ) : (
+          <Text style={[styles.cardValue, netWorth !== null && netWorth < 0 && styles.negative]}>
+            {netWorth !== null ? formatCurrency(netWorth) : "--"}
+          </Text>
+        )}
+        {hasAccounts && <NetWorthChart />}
+        {!hasAccounts && !dashLoading && (
+          <Text style={styles.cardHint}>Connect a bank account to get started</Text>
+        )}
       </View>
 
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => router.push("/spending")}
+        activeOpacity={0.7}
+      >
         <Text style={styles.cardTitle}>This Month's Spending</Text>
-        <Text style={styles.cardValue}>--</Text>
-      </View>
+        {dashLoading && !hasAccounts ? (
+          <ActivityIndicator size="small" color="#1a1a2e" style={styles.cardLoader} />
+        ) : (
+          <Text style={styles.cardValue}>
+            {hasAccounts ? formatCurrency(monthlySpending) : "--"}
+          </Text>
+        )}
+        {spendingByCategory.length > 0 && (
+          <PieChart
+            slices={spendingByCategory.map((cat, i) => ({
+              label: cat.category_name,
+              value: parseFloat(cat.amount),
+              color: PIE_COLORS[i % PIE_COLORS.length],
+            }))}
+          />
+        )}
+        {hasAccounts && (
+          <Text style={styles.cardLink}>View details →</Text>
+        )}
+      </TouchableOpacity>
 
-      {!linked && (
-        <TouchableOpacity
-          style={[styles.connectButton, busy && styles.connectButtonDisabled]}
-          onPress={openLink}
-          disabled={busy}
-          activeOpacity={0.8}
-        >
-          {busy ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.connectButtonText}>Connect Bank Account</Text>
-          )}
-        </TouchableOpacity>
+      {/* Top spending categories */}
+      {spendingByCategory.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Spending by Category</Text>
+          {spendingByCategory.slice(0, 5).map((cat, i) => (
+            <View
+              key={cat.category_name}
+              style={[styles.catRow, i < Math.min(spendingByCategory.length, 5) - 1 && styles.catRowBorder]}
+            >
+              <Text style={styles.catName}>{cat.category_name}</Text>
+              <Text style={styles.catAmount}>{formatCurrency(parseFloat(cat.amount))}</Text>
+            </View>
+          ))}
+        </View>
       )}
 
+      {/* Budget overview */}
+      {budgetSummaries.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Budget Overview</Text>
+          {budgetSummaries.map((b, i) => {
+            const budgeted = parseFloat(b.amount || "0");
+            const spent = parseFloat(b.spent || "0");
+            const progress = budgeted > 0 ? Math.min(spent / budgeted, 1) : 0;
+            const overBudget = spent > budgeted;
+            return (
+              <View key={i} style={[styles.budgetRow, i < budgetSummaries.length - 1 && styles.budgetRowBorder]}>
+                <View style={styles.budgetInfo}>
+                  <Text style={styles.budgetName}>{b.category_name || "Uncategorized"}</Text>
+                  <Text style={[styles.budgetSpent, overBudget && styles.negative]}>
+                    {formatCurrency(spent)} / {formatCurrency(budgeted)}
+                  </Text>
+                </View>
+                <View style={styles.progressBar}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${progress * 100}%` },
+                      overBudget && styles.progressOverBudget,
+                    ]}
+                  />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {hasAccounts && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Accounts</Text>
+          {accounts.map((acct, i) => (
+            <AccountRow key={acct.id} account={acct} isLast={i === accounts.length - 1} />
+          ))}
+        </View>
+      )}
+
+      <TouchableOpacity
+        style={[styles.connectButton, busy && styles.connectButtonDisabled]}
+        onPress={openLink}
+        disabled={busy}
+        activeOpacity={0.8}
+      >
+        {busy ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.connectButtonText}>
+            {hasAccounts ? "+ Add Another Account" : "Connect Bank Account"}
+          </Text>
+        )}
+      </TouchableOpacity>
+
       {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -115,6 +292,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
+  },
+  content: {
     padding: 20,
   },
   greeting: {
@@ -150,10 +329,81 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1a1a2e",
   },
+  cardLoader: {
+    alignSelf: "flex-start",
+    marginVertical: 8,
+  },
   cardHint: {
     fontSize: 12,
     color: "#999",
     marginTop: 8,
+  },
+  cardLink: {
+    fontSize: 13,
+    color: "#0f3460",
+    fontWeight: "600",
+    marginTop: 8,
+  },
+  negative: {
+    color: "#d32f2f",
+  },
+  catRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  catRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e0e0e0",
+  },
+  catName: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#1a1a2e",
+    flex: 1,
+  },
+  catAmount: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1a1a2e",
+  },
+  budgetRow: {
+    paddingVertical: 10,
+  },
+  budgetRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e0e0e0",
+  },
+  budgetInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  budgetName: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1a1a2e",
+    flex: 1,
+  },
+  budgetSpent: {
+    fontSize: 13,
+    color: "#666",
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 2,
+    overflow: "hidden" as const,
+  },
+  progressFill: {
+    height: "100%" as unknown as number,
+    backgroundColor: "#1a1a2e",
+    borderRadius: 2,
+  },
+  progressOverBudget: {
+    backgroundColor: "#d32f2f",
   },
   connectButton: {
     backgroundColor: "#1a1a2e",
@@ -169,6 +419,35 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  accountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  accountRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e0e0e0",
+  },
+  accountInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  accountName: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#1a1a2e",
+  },
+  accountType: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 2,
+  },
+  accountBalance: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1a1a2e",
   },
   errorText: {
     color: "#d32f2f",

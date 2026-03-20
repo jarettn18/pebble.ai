@@ -1,5 +1,54 @@
 # Changelog
 
+## 2026-03-20 — Phase 3: Dashboard, Budgets & Spending Charts
+
+### Backend — Dashboard
+- Created dashboard service (`services/dashboard.py`) with aggregated `GET /v1/dashboard?month=&year=` endpoint returning:
+  - Net worth (computed from account balances, debt types subtracted)
+  - Monthly spending total
+  - Spending by category (ranked by amount)
+  - Budget summaries with spent vs. budgeted per category
+  - Spending over time (last 6 months)
+- Added `GET /v1/dashboard/net-worth-history?period=1M|3M|1Y|5Y` endpoint
+  - Computes historical net worth by working backwards from current balances using daily transaction sums
+  - Downsamples for longer periods (weekly for 5Y, every 3 days for 1Y)
+  - Returns change amount and percentage vs. period start
+- Created dashboard schemas (`schemas/dashboard.py`): `DashboardResponse`, `NetWorthHistoryResponse`, `AccountSummary`, `BudgetSummary`, `SpendingByCategory`, `MonthlySpendingPoint`, `NetWorthPoint`
+
+### Backend — Budget CRUD
+- Created budget service (`services/budgets.py`) with full CRUD: `get_budgets`, `get_budget`, `create_budget`, `update_budget`, `delete_budget`
+- Server-side spending calculation via `_get_spending_by_category()` — sums non-pending debit transactions per category per month
+- Created budget router (`routers/budgets.py`): `GET /v1/budgets?month=&year=`, `GET /v1/budgets/{id}`, `POST /v1/budgets` (201), `PUT /v1/budgets/{id}`, `DELETE /v1/budgets/{id}` (204)
+- Created budget schemas (`schemas/budget.py`): `BudgetOut` (with `spent` field), `BudgetCreateRequest`, `BudgetUpdateRequest`, `BudgetListResponse`
+
+### Mobile — Dashboard Overhaul
+- Replaced client-side dashboard computation with server-side `GET /v1/dashboard` endpoint
+- Created dashboard Zustand store (`stores/dashboard.ts`) for aggregated data
+- Added `NetWorthChart` component — SVG line chart with gradient fill, period filter tabs (1M, 3M, 1Y, 5Y), gain/loss indicator with percentage (green/red)
+- Added `PieChart` component — SVG pie chart with color-coded legend showing category percentages
+- Added `LineChart` component — reusable SVG line chart using `react-native-svg`
+- Dashboard now shows: net worth with historical chart, monthly spending with pie chart breakdown, spending by category, budget overview with mini progress bars, accounts list
+- Added pull-to-refresh and `useFocusEffect` for fresh data on tab focus
+
+### Mobile — Spending Summary Screen
+- Created `app/spending.tsx` — dedicated spending details screen with:
+  - Monthly total card
+  - Vertical bar chart showing 6-month spending trend (current month highlighted)
+  - Stacked color bar showing proportional category spending
+  - Individual horizontal bars per category with color-coded dots and amounts
+- Accessible from dashboard via tappable "This Month's Spending" card
+
+### Mobile — Budget Screens
+- Created `app/budget/[id].tsx` — budget create/edit screen with amount input, horizontal category picker, period display, save (POST/PUT), and delete with confirmation
+- Rebuilt `app/(tabs)/budgets.tsx` — month selector with arrow navigation, total budgeted card, budget rows with progress bars (green/red for over budget), `useFocusEffect` for live updates
+- Created budgets Zustand store (`stores/budgets.ts`) with `load`, `refresh`, `upsertBudget`, `removeBudget`
+- Budget store syncs transactions before loading to ensure spending data is fresh
+
+### Dependencies
+- Added `react-native-svg` for chart rendering
+
+---
+
 ## 2026-03-19 — Phase 2: Transaction Categories, Detail & Edit
 
 ### Backend — Categories
