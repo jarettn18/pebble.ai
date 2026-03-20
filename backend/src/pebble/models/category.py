@@ -11,5 +11,6 @@ class Category(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=gen_uuid)
     name: Mapped[str] = mapped_column(String(100), unique=True)
+    plaid_primary: Mapped[str | None] = mapped_column(String(50), unique=True)
     icon: Mapped[str | None] = mapped_column(String(50))
     color: Mapped[str | None] = mapped_column(String(7))  # hex color

@@ -1,5 +1,89 @@
 # Changelog
 
+## 2026-03-20 — Phase 3: Dashboard, Budgets & Spending Charts
+
+### Backend — Dashboard
+- Created dashboard service (`services/dashboard.py`) with aggregated `GET /v1/dashboard?month=&year=` endpoint returning:
+  - Net worth (computed from account balances, debt types subtracted)
+  - Monthly spending total
+  - Spending by category (ranked by amount)
+  - Budget summaries with spent vs. budgeted per category
+  - Spending over time (last 6 months)
+- Added `GET /v1/dashboard/net-worth-history?period=1M|3M|1Y|5Y` endpoint
+  - Computes historical net worth by working backwards from current balances using daily transaction sums
+  - Downsamples for longer periods (weekly for 5Y, every 3 days for 1Y)
+  - Returns change amount and percentage vs. period start
+- Created dashboard schemas (`schemas/dashboard.py`): `DashboardResponse`, `NetWorthHistoryResponse`, `AccountSummary`, `BudgetSummary`, `SpendingByCategory`, `MonthlySpendingPoint`, `NetWorthPoint`
+
+### Backend — Budget CRUD
+- Created budget service (`services/budgets.py`) with full CRUD: `get_budgets`, `get_budget`, `create_budget`, `update_budget`, `delete_budget`
+- Server-side spending calculation via `_get_spending_by_category()` — sums non-pending debit transactions per category per month
+- Created budget router (`routers/budgets.py`): `GET /v1/budgets?month=&year=`, `GET /v1/budgets/{id}`, `POST /v1/budgets` (201), `PUT /v1/budgets/{id}`, `DELETE /v1/budgets/{id}` (204)
+- Created budget schemas (`schemas/budget.py`): `BudgetOut` (with `spent` field), `BudgetCreateRequest`, `BudgetUpdateRequest`, `BudgetListResponse`
+
+### Mobile — Dashboard Overhaul
+- Replaced client-side dashboard computation with server-side `GET /v1/dashboard` endpoint
+- Created dashboard Zustand store (`stores/dashboard.ts`) for aggregated data
+- Added `NetWorthChart` component — SVG line chart with gradient fill, period filter tabs (1M, 3M, 1Y, 5Y), gain/loss indicator with percentage (green/red)
+- Added `PieChart` component — SVG pie chart with color-coded legend showing category percentages
+- Added `LineChart` component — reusable SVG line chart using `react-native-svg`
+- Dashboard now shows: net worth with historical chart, monthly spending with pie chart breakdown, spending by category, budget overview with mini progress bars, accounts list
+- Added pull-to-refresh and `useFocusEffect` for fresh data on tab focus
+
+### Mobile — Spending Summary Screen
+- Created `app/spending.tsx` — dedicated spending details screen with:
+  - Monthly total card
+  - Vertical bar chart showing 6-month spending trend (current month highlighted)
+  - Stacked color bar showing proportional category spending
+  - Individual horizontal bars per category with color-coded dots and amounts
+- Accessible from dashboard via tappable "This Month's Spending" card
+
+### Mobile — Budget Screens
+- Created `app/budget/[id].tsx` — budget create/edit screen with amount input, horizontal category picker, period display, save (POST/PUT), and delete with confirmation
+- Rebuilt `app/(tabs)/budgets.tsx` — month selector with arrow navigation, total budgeted card, budget rows with progress bars (green/red for over budget), `useFocusEffect` for live updates
+- Created budgets Zustand store (`stores/budgets.ts`) with `load`, `refresh`, `upsertBudget`, `removeBudget`
+- Budget store syncs transactions before loading to ensure spending data is fresh
+
+### Dependencies
+- Added `react-native-svg` for chart rendering
+
+---
+
+## 2026-03-19 — Phase 2: Transaction Categories, Detail & Edit
+
+### Backend — Categories
+- Added `plaid_primary` column to `Category` model for mapping Plaid's `personal_finance_category.primary` to internal categories
+- Created Alembic migration (`b3f1a2c4d5e6`) that adds the column and seeds 16 default categories (Income, Food & Drink, Transportation, Shopping, etc.)
+- Migration resets all Plaid cursors so next sync re-fetches transactions with category assignments
+- Added categories service (`services/categories.py`) with `get_plaid_category_map()` for sync-time lookups and `get_all_categories()` for the API
+- Added categories router (`routers/categories.py`): `GET /v1/categories` — returns all categories (auth required)
+- Added category schemas (`schemas/category.py`): `CategoryOut`, `CategoryListResponse`
+
+### Backend — Auto-Categorization
+- Updated Plaid sync to auto-categorize transactions on add/modify using Plaid's `personal_finance_category.primary` field
+- Added `_resolve_category_id()` helper in Plaid service that maps Plaid category → internal category UUID
+
+### Backend — Transaction Detail & Edit
+- Added `GET /v1/transactions/{id}` endpoint — returns full transaction detail including `category_id` and `notes`
+- Added `PATCH /v1/transactions/{id}` endpoint — supports updating `category_id` and `notes` fields
+- Added `TransactionDetailOut` and `TransactionUpdateRequest` schemas
+- Added `get_transaction()` and `update_transaction()` service functions with ownership validation
+
+### Mobile — Transaction Detail Screen
+- Created `app/transaction/[id].tsx` — full transaction detail screen with:
+  - Transaction header (merchant, amount, date, pending status)
+  - Category picker: scrollable list of all categories fetched from API, with color dots and selection state
+  - Clear category option to remove category assignment
+  - Notes field with save button
+  - Optimistic updates for category changes (instant UI, reverts on API failure)
+- Added `TouchableOpacity` wrapper on transaction list rows for navigation to detail screen
+- Added `updateTransactionCategory()` to transactions Zustand store for optimistic category updates in the list view
+
+### Bug Fix
+- Fixed `[object Object]` error when saving notes — removed double `JSON.stringify()` on PATCH request bodies (API client already serializes)
+
+---
+
 ## 2026-03-18 — Phase 2: Plaid Integration & Transactions
 
 ### Backend — Plaid Service

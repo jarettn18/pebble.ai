@@ -4,8 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pebble.database import get_db
 from pebble.middleware.auth import get_current_user
 from pebble.models.user import User
-from pebble.schemas.transaction import TransactionListResponse
-from pebble.services.transactions import get_transactions
+from pebble.schemas.transaction import (
+    TransactionDetailOut,
+    TransactionListResponse,
+    TransactionUpdateRequest,
+)
+from pebble.services.transactions import get_transaction, get_transactions, update_transaction
 
 router = APIRouter(prefix="/v1/transactions", tags=["transactions"])
 
@@ -22,4 +26,25 @@ async def list_transactions(
         db=db,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/{transaction_id}", response_model=TransactionDetailOut)
+async def get_transaction_detail(
+    transaction_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_transaction(str(user.id), transaction_id, db)
+
+
+@router.patch("/{transaction_id}", response_model=TransactionDetailOut)
+async def update_transaction_endpoint(
+    transaction_id: str,
+    req: TransactionUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await update_transaction(
+        str(user.id), transaction_id, req.model_dump(exclude_unset=True), db
     )

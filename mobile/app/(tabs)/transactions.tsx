@@ -6,10 +6,13 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { useTransactionsStore } from "../../src/stores/transactions";
 
 export default function TransactionsScreen() {
+  const router = useRouter();
   const { transactions, isLoading, isSyncing, error, load, syncAndRefresh } =
     useTransactionsStore();
 
@@ -49,7 +52,11 @@ export default function TransactionsScreen() {
             tintColor="#1a1a2e"
           />
         }
-        renderItem={({ item }) => <TransactionRow txn={item} />}
+        renderItem={({ item }) => (
+          <TouchableOpacity onPress={() => router.push(`/transaction/${item.id}`)}>
+            <TransactionRow txn={item} />
+          </TouchableOpacity>
+        )}
         ItemSeparatorComponent={Separator}
         contentContainerStyle={styles.listContent}
       />

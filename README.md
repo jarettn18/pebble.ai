@@ -44,19 +44,31 @@ pebble/
 │       │   └── api_usage.py         # API usage metering
 │       ├── schemas/                 # Pydantic request/response
 │       │   ├── auth.py              # Register, Login, Token, User schemas
+│       │   ├── account.py           # AccountOut, AccountListResponse
+│       │   ├── budget.py            # BudgetOut, Create/Update, ListResponse
+│       │   ├── category.py          # CategoryOut, CategoryListResponse
+│       │   ├── dashboard.py         # DashboardResponse, NetWorthHistory, SpendingByCategory
 │       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
-│       │   └── transaction.py       # TransactionOut, TransactionList schemas
+│       │   └── transaction.py       # TransactionOut, Detail, Update, List schemas
 │       ├── routers/
 │       │   ├── auth.py              # /v1/auth/* (register, login, refresh, me)
+│       │   ├── accounts.py          # /v1/accounts (list user accounts)
+│       │   ├── budgets.py           # /v1/budgets (CRUD)
+│       │   ├── categories.py        # /v1/categories (list all)
+│       │   ├── dashboard.py         # /v1/dashboard (aggregated overview + net worth history)
 │       │   ├── plaid.py             # /v1/plaid/* (link-token, exchange, sync, sync-all)
-│       │   └── transactions.py      # /v1/transactions (list with pagination)
+│       │   └── transactions.py      # /v1/transactions (list, detail, update)
 │       ├── services/
 │       │   ├── auth.py              # Auth business logic
+│       │   ├── accounts.py          # Account queries with institution join
+│       │   ├── budgets.py           # Budget CRUD + spending calculation
+│       │   ├── categories.py        # Category queries, Plaid category map
+│       │   ├── dashboard.py         # Aggregated dashboard + net worth history
 │       │   ├── plaid.py             # Plaid API integration (link, exchange, sync)
-│       │   └── transactions.py      # Transaction queries
+│       │   └── transactions.py      # Transaction queries, detail, update
 │       ├── middleware/
 │       │   └── auth.py              # JWT + API key auth dependencies
-│       ├── ai/                      # AI module (Phase 3)
+│       ├── ai/                      # AI module (Phase 4)
 │       └── utils/
 │           └── security.py          # bcrypt, JWT, Fernet, API key utils
 │
@@ -69,20 +81,34 @@ pebble/
 │   │   │   ├── _layout.tsx          # Stack navigator (no header)
 │   │   │   ├── login.tsx            # Login screen
 │   │   │   └── register.tsx         # Register screen
-│   │   └── (tabs)/
-│   │       ├── _layout.tsx          # Tab navigator (5 tabs)
-│   │       ├── index.tsx            # Dashboard
-│   │       ├── transactions.tsx     # Transaction list with cached sync
-│   │       ├── budgets.tsx          # Budgets (placeholder)
-│   │       ├── ai-chat.tsx          # AI chat (placeholder)
-│   │       └── settings.tsx         # Settings + logout
+│   │   ├── (tabs)/
+│   │   │   ├── _layout.tsx          # Tab navigator (5 tabs)
+│   │   │   ├── index.tsx            # Dashboard (net worth chart, pie chart, budgets)
+│   │   │   ├── transactions.tsx     # Transaction list with cached sync
+│   │   │   ├── budgets.tsx          # Budget list with progress bars
+│   │   │   ├── ai-chat.tsx          # AI chat (placeholder)
+│   │   │   └── settings.tsx         # Settings + logout
+│   │   ├── budget/
+│   │   │   └── [id].tsx             # Budget create/edit screen
+│   │   ├── transaction/
+│   │   │   └── [id].tsx             # Transaction detail & edit screen
+│   │   └── spending.tsx             # Spending summary (trend chart, category bars)
 │   └── src/
 │       ├── api/
 │       │   └── client.ts            # API client with auto JWT refresh
+│       ├── components/
+│       │   ├── LineChart.tsx         # SVG line chart with gradient fill
+│       │   ├── NetWorthChart.tsx     # Net worth chart with period filters
+│       │   └── PieChart.tsx          # SVG pie chart with legend
 │       ├── hooks/
 │       │   └── usePlaidLink.ts      # Plaid Link hook (fetch token, open modal)
+│       ├── utils/
+│       │   └── dashboard.ts         # Net worth, spending calc, currency formatting
 │       └── stores/
 │           ├── auth.ts              # Zustand auth store
+│           ├── accounts.ts          # Zustand accounts store (24h cache)
+│           ├── budgets.ts           # Zustand budgets store
+│           ├── dashboard.ts         # Zustand dashboard store (server-side aggregation)
 │           └── transactions.ts      # Zustand transactions store (24h cache)
 ```
 
@@ -97,7 +123,7 @@ pebble/
 | `users` | Auth, profile, subscription tier, optional API key hash |
 | `plaid_items` | Plaid connections (access token encrypted with Fernet) |
 | `accounts` | Bank accounts linked via Plaid |
-| `categories` | Spending categories (name, icon, color) |
+| `categories` | Spending categories (name, icon, color, Plaid mapping) |
 | `transactions` | Financial transactions, indexed on `(user_id, date DESC)` |
 | `budgets` | Monthly budget per category |
 | `chat_conversations` | AI chat conversation threads |
@@ -117,7 +143,7 @@ pebble/
 
 ---
 
-## AI Assistant Architecture (Phase 3)
+## AI Assistant Architecture (Phase 4)
 
 Claude tool-use (function-calling) — not RAG, not direct SQL.
 
@@ -149,9 +175,9 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 | Phase | Focus | Status |
 |-------|-------|--------|
 | 1 | Foundation — Docker, FastAPI, models, auth, Expo scaffold | **Done** |
-| 2 | Plaid + Transactions — bank linking, sync, transaction list | **In progress** |
-| 3 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
-| 4 | Budgets + Polish — CRUD, charts, search, error states | Not started |
+| 2 | Plaid + Transactions — bank linking, sync, transaction list | **Done** |
+| 3 | Budgets + Polish — CRUD, charts, search, error states | **In progress** |
+| 4 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
 | 5 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
 
 ---
@@ -197,26 +223,45 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 ## Remaining Work
 
 ## TODO:
+
 ### General
 - [ ] Add "Report a Bug or Leave Feedback" section with link to GitHub Issues
 - [ ] Ask Claude about password hashing vulnerabilities
+- [ ] MFA phone authentication
+
+### Known Bugs
+- [ ] Link session ended under 'Add Another Account' when plaid linking is cancelled
 
 ### Phase 2 — Plaid + Transactions
 - [x] Plaid service: create link token, exchange public token, encrypt/store access token
 - [x] ~~Plaid client utility (`plaid-python` SDK setup)~~ — using httpx directly instead of plaid-python SDK
 - [x] Transaction sync service using `transactions/sync` (cursor-based)
-- [ ] Auto-categorization of Plaid transactions to internal categories
-- [ ] Seed default categories (Food, Transport, Shopping, Bills, etc.)
+- [x] Auto-categorization of Plaid transactions to internal categories
+- [x] Seed default categories (Food, Transport, Shopping, Bills, etc.)
 - [x] Router: `POST /v1/plaid/link-token`, `POST /v1/plaid/exchange`, `POST /v1/plaid/sync`, `POST /v1/plaid/sync-all`
-- [ ] Router: `GET /v1/accounts`
+- [x] Router: `GET /v1/accounts`
 - [x] Router: `GET /v1/transactions`
 - [x] Mobile: Plaid Link integration (`react-native-plaid-link-sdk`)
 - [x] Mobile: Account connection flow
 - [x] Mobile: Transaction list with pull-to-refresh sync + 24-hour cache
-- [ ] Mobile: Transaction detail/edit (recategorize)
-- [ ] Mobile: Dashboard wired to real account balances + spending data
+- [x] Mobile: Transaction detail/edit (recategorize)
+- [x] Mobile: Dashboard wired to real account balances + spending data
+- [x] Mobile: Add capability to add multiple accounts
 
-### Phase 3 — AI Assistant
+### Phase 3 — Budgets + Polish
+- [x] Budget CRUD service + router (`POST/GET/PUT/DELETE /v1/budgets`)
+- [x] Budget progress calculation (spent vs. budget per category per month)
+- [x] Dashboard router (`GET /v1/dashboard`) — aggregated overview data
+- [x] Mobile: Budget creation/edit screens
+- [x] Mobile: Budget progress bars/cards
+- [x] Mobile: Spending summary charts
+- [ ] Mobile: Transaction search + filtering (by category, merchant, date range)
+- [ ] Mobile: Loading states, error handling, empty states across all screens
+- [ ] Mobile: Update Transaction Categories to mimic Mint Category Schema
+- [ ] Mobile: Update Settings screen to support account changes
+- [ ] Mobile: Earning summary charts
+
+### Phase 4 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id
 - [ ] AI tool definitions (`ai/tools.py`) — 8 tools for Claude function-calling
 - [ ] AI system prompts (`ai/prompts.py`)
@@ -227,16 +272,6 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Basic usage tracking (request + token counts)
 - [ ] Mobile: Chat UI with message bubbles, input, streaming display
 - [ ] Mobile: Conversation list/history
-
-### Phase 4 — Budgets + Polish
-- [ ] Budget CRUD service + router (`POST/GET/PUT/DELETE /v1/budgets`)
-- [ ] Budget progress calculation (spent vs. budget per category per month)
-- [ ] Dashboard router (`GET /v1/dashboard`) — aggregated overview data
-- [ ] Mobile: Budget creation/edit screens
-- [ ] Mobile: Budget progress bars/cards
-- [ ] Mobile: Spending summary charts
-- [ ] Mobile: Transaction search + filtering (by category, merchant, date range)
-- [ ] Mobile: Loading states, error handling, empty states across all screens
 
 ### Phase 5 — Monetization + External API
 - [ ] Subscription tier enforcement (free vs. pro feature gating)
@@ -252,6 +287,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 ### Phase 6 - Iteration
 - [ ] AI System: Allow asset optimization/Balance Transfers
 - [ ] API: Debt Restructuring/Credit Optimization
+- [ ] Mobile: Support for dark mode
 ---
 
 ## Running Locally

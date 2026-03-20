@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Slot, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "../src/stores/auth";
 
@@ -26,7 +26,19 @@ function AuthGate() {
     }
   }, [isAuthenticated, isLoading, segments]);
 
-  return <Slot />;
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen
+        name="spending"
+        options={{
+          headerShown: true,
+          title: "Spending Summary",
+          headerStyle: { backgroundColor: "#fff" },
+          headerTitleStyle: { fontWeight: "600" },
+        }}
+      />
+    </Stack>
+  );
 }
 
 export default function RootLayout() {
