@@ -8,6 +8,9 @@ import {
   Alert,
   ScrollView,
   RefreshControl,
+  Dimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import type { AccountSummary } from "../../src/stores/dashboard";
@@ -32,6 +35,19 @@ const PIE_COLORS = [
   "#95e1d3",
   "#aa96da",
   "#c4edde",
+];
+
+const INCOME_COLORS = [
+  "#2e7d32",
+  "#388e3c",
+  "#43a047",
+  "#4caf50",
+  "#66bb6a",
+  "#81c784",
+  "#a5d6a7",
+  "#c8e6c9",
+  "#1b5e20",
+  "#2e7d32",
 ];
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -72,9 +88,12 @@ export default function DashboardScreen() {
   const {
     netWorth,
     monthlySpending,
+    monthlyIncome,
+    refreshCount,
     accounts,
     budgetSummaries,
     spendingByCategory,
+    incomeByCategory,
     isLoading: dashLoading,
     load: loadDashboard,
     refresh: refreshDashboard,
@@ -86,10 +105,18 @@ export default function DashboardScreen() {
   const { isLoading, error, linkResult, openLink, clearResult } =
     usePlaidLink();
 
-  // Refresh dashboard on tab focus
+  // Refresh balances (if stale) and reload dashboard on tab focus
   useFocusEffect(
     useCallback(() => {
-      loadDashboard();
+      async function refreshAndLoad() {
+        try {
+          await apiRequest("/v1/plaid/refresh-balances", { method: "POST" });
+        } catch {
+          // may fail if no items linked
+        }
+        await loadDashboard(undefined, undefined, true);
+      }
+      refreshAndLoad();
     }, [])
   );
 
@@ -151,6 +178,13 @@ export default function DashboardScreen() {
 
   const hasAccounts = accounts.length > 0;
   const busy = isLoading || exchanging;
+  const [carouselPage, setCarouselPage] = useState(0);
+  const cardWidth = Dimensions.get("window").width - 40;
+
+  const onCarouselScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const page = Math.round(e.nativeEvent.contentOffset.x / cardWidth);
+    setCarouselPage(page);
+  };
 
   return (
     <ScrollView
@@ -178,38 +212,84 @@ export default function DashboardScreen() {
             {netWorth !== null ? formatCurrency(netWorth) : "--"}
           </Text>
         )}
-        {hasAccounts && <NetWorthChart />}
+        {hasAccounts && <NetWorthChart refreshKey={refreshCount} />}
         {!hasAccounts && !dashLoading && (
           <Text style={styles.cardHint}>Connect a bank account to get started</Text>
         )}
       </View>
 
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() => router.push("/spending")}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.cardTitle}>This Month's Spending</Text>
-        {dashLoading && !hasAccounts ? (
-          <ActivityIndicator size="small" color="#1a1a2e" style={styles.cardLoader} />
-        ) : (
-          <Text style={styles.cardValue}>
-            {hasAccounts ? formatCurrency(monthlySpending) : "--"}
-          </Text>
-        )}
-        {spendingByCategory.length > 0 && (
-          <PieChart
-            slices={spendingByCategory.map((cat, i) => ({
-              label: cat.category_name,
-              value: parseFloat(cat.amount),
-              color: PIE_COLORS[i % PIE_COLORS.length],
-            }))}
-          />
-        )}
-        {hasAccounts && (
-          <Text style={styles.cardLink}>View details →</Text>
-        )}
-      </TouchableOpacity>
+      <View style={styles.carouselWrapper}>
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={onCarouselScroll}
+          contentContainerStyle={styles.carouselContent}
+        >
+          <TouchableOpacity
+            style={[styles.card, styles.carouselCard, { width: cardWidth }]}
+            onPress={() => router.push("/spending")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cardTitle}>This Month's Spending</Text>
+            {dashLoading && !hasAccounts ? (
+              <ActivityIndicator size="small" color="#1a1a2e" style={styles.cardLoader} />
+            ) : (
+              <Text style={styles.cardValue}>
+                {hasAccounts ? formatCurrency(monthlySpending) : "--"}
+              </Text>
+            )}
+            {spendingByCategory.length > 0 && (
+              <PieChart
+                slices={spendingByCategory.map((cat, i) => ({
+                  label: cat.category_name,
+                  value: parseFloat(cat.amount),
+                  color: PIE_COLORS[i % PIE_COLORS.length],
+                }))}
+              />
+            )}
+            {hasAccounts && (
+              <Text style={styles.cardLink}>View details →</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.card, styles.carouselCard, { width: cardWidth }]}
+            onPress={() => router.push("/income")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cardTitle}>This Month's Income</Text>
+            {dashLoading && !hasAccounts ? (
+              <ActivityIndicator size="small" color="#1a1a2e" style={styles.cardLoader} />
+            ) : (
+              <Text style={[styles.cardValue, styles.incomeValue]}>
+                {hasAccounts ? formatCurrency(monthlyIncome) : "--"}
+              </Text>
+            )}
+            {incomeByCategory.length > 0 && (
+              <PieChart
+                slices={incomeByCategory.map((cat, i) => ({
+                  label: cat.category_name,
+                  value: parseFloat(cat.amount),
+                  color: INCOME_COLORS[i % INCOME_COLORS.length],
+                }))}
+              />
+            )}
+            {hasAccounts && (
+              <Text style={styles.cardLink}>View details →</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+
+        <View style={styles.dots}>
+          {[0, 1].map((i) => (
+            <View
+              key={i}
+              style={[styles.dot, carouselPage === i && styles.dotActive]}
+            />
+          ))}
+        </View>
+      </View>
 
       {/* Top spending categories */}
       {spendingByCategory.length > 0 && (
@@ -343,6 +423,34 @@ const styles = StyleSheet.create({
     color: "#0f3460",
     fontWeight: "600",
     marginTop: 8,
+  },
+  incomeValue: {
+    color: "#2e7d32",
+  },
+  carouselWrapper: {
+    marginBottom: 16,
+  },
+  carouselContent: {
+    paddingRight: 20,
+  },
+  carouselCard: {
+    marginBottom: 0,
+    marginRight: 12,
+  },
+  dots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#d0d0d0",
+    marginHorizontal: 4,
+  },
+  dotActive: {
+    backgroundColor: "#1a1a2e",
   },
   negative: {
     color: "#d32f2f",

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   FlatList,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiRequest } from "../../src/api/client";
@@ -43,6 +44,7 @@ export default function TransactionDetailScreen() {
   const updateTransactionCategory = useTransactionsStore(
     (s) => s.updateTransactionCategory
   );
+  const removeTransaction = useTransactionsStore((s) => s.removeTransaction);
 
   const [txn, setTxn] = useState<TransactionDetail | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -131,6 +133,30 @@ export default function TransactionDetailScreen() {
     }
   }
 
+  function handleDelete() {
+    Alert.alert(
+      "Delete Transaction",
+      "Are you sure you want to delete this transaction?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await removeTransaction(id!);
+              router.back();
+            } catch (err) {
+              setError(
+                err instanceof Error ? err.message : "Failed to delete"
+              );
+            }
+          },
+        },
+      ]
+    );
+  }
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -178,6 +204,7 @@ export default function TransactionDetailScreen() {
         <View style={styles.card}>
           <InfoRow label="Merchant" value={txn.merchant_name || txn.name} />
           <InfoRow label="Description" value={txn.name} />
+          <InfoRow label="Type" value={isDebit ? "Expense" : "Income"} />
           <InfoRow label="Date" value={txn.date} />
           {txn.pending && <InfoRow label="Status" value="Pending" />}
         </View>
@@ -254,6 +281,10 @@ export default function TransactionDetailScreen() {
             </TouchableOpacity>
           )}
         </View>
+        {/* Delete Button */}
+        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
+          <Text style={styles.deleteBtnText}>Delete Transaction</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -433,6 +464,19 @@ const styles = StyleSheet.create({
   },
   backBtnText: {
     color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  deleteBtn: {
+    borderWidth: 1,
+    borderColor: "#d32f2f",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  deleteBtnText: {
+    color: "#d32f2f",
     fontSize: 14,
     fontWeight: "600",
   },

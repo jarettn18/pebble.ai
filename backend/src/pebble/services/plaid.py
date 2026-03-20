@@ -1,5 +1,5 @@
 import uuid
-from datetime import date as date_type
+from datetime import date as date_type, datetime, timezone
 
 import httpx
 from fastapi import HTTPException, status
@@ -38,7 +38,7 @@ async def create_link_token(user_id: str) -> dict:
     }
 
     async with httpx.AsyncClient() as client:
-        resp = await client.post(url, json=payload, timeout=30)
+        resp = await client.post(url, json=payload, timeout=90)
 
     if resp.status_code != 200:
         detail = resp.json().get("error_message", "Failed to create link token")
@@ -56,7 +56,7 @@ async def _plaid_post(path: str, payload: dict) -> dict:
     payload = {"client_id": settings.plaid_client_id, "secret": settings.plaid_secret, **payload}
 
     async with httpx.AsyncClient() as client:
-        resp = await client.post(url, json=payload, timeout=30)
+        resp = await client.post(url, json=payload, timeout=90)
 
     if resp.status_code != 200:
         detail = resp.json().get("error_message", f"Plaid error on {path}")
@@ -237,6 +237,56 @@ async def sync_transactions(
     await db.commit()
 
     return {"added": total_added, "modified": total_modified, "removed": total_removed}
+
+
+BALANCE_STALE_SECONDS = 15 * 60  # 15 minutes
+
+
+async def refresh_balances(item: "PlaidItem", db: AsyncSession) -> None:
+    """Refresh account balances from Plaid for a given item."""
+    access_token = decrypt_value(item.access_token_encrypted)
+    data = await _plaid_post("/accounts/get", {"access_token": access_token})
+
+    for acct_data in data.get("accounts", []):
+        result = await db.execute(
+            select(Account).where(Account.plaid_account_id == acct_data["account_id"])
+        )
+        account = result.scalars().first()
+        if account:
+            balances = acct_data.get("balances", {})
+            account.balance_current = balances.get("current")
+            account.balance_available = balances.get("available")
+
+
+async def refresh_balances_if_stale(user_id: str, db: AsyncSession) -> bool:
+    """Refresh balances only if the most recent account update is older than the TTL.
+
+    Returns True if balances were refreshed, False if still fresh.
+    """
+    result = await db.execute(
+        select(Account.updated_at)
+        .where(Account.user_id == user_id)
+        .order_by(Account.updated_at.desc())
+        .limit(1)
+    )
+    latest = result.scalar()
+
+    if latest is not None:
+        age = (datetime.now(timezone.utc) - latest.replace(tzinfo=timezone.utc)).total_seconds()
+        if age < BALANCE_STALE_SECONDS:
+            return False
+
+    # Stale or no accounts — refresh all items
+    items_result = await db.execute(
+        select(PlaidItem).where(PlaidItem.user_id == uuid.UUID(user_id) if isinstance(user_id, str) else user_id)
+    )
+    items = items_result.scalars().all()
+
+    for item in items:
+        await refresh_balances(item, db)
+
+    await db.commit()
+    return True
 
 
 async def sync_all_items(user_id: str, db: AsyncSession) -> dict:

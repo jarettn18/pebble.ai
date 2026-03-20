@@ -37,6 +37,15 @@ function AuthGate() {
           headerTitleStyle: { fontWeight: "600" },
         }}
       />
+      <Stack.Screen
+        name="income"
+        options={{
+          headerShown: true,
+          title: "Income Summary",
+          headerStyle: { backgroundColor: "#fff" },
+          headerTitleStyle: { fontWeight: "600" },
+        }}
+      />
     </Stack>
   );
 }

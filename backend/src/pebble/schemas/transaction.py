@@ -19,6 +19,16 @@ class TransactionDetailOut(TransactionOut):
     notes: str | None = None
 
 
+class TransactionCreateRequest(BaseModel):
+    account_id: str
+    amount: str
+    date: str
+    name: str
+    merchant_name: str | None = None
+    category_id: str | None = None
+    notes: str | None = None
+
+
 class TransactionUpdateRequest(BaseModel):
     category_id: str | None = None
     notes: str | None = None

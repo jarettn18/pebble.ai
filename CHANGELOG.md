@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-03-20 — Phase 3: Income Summary & Dashboard Polish
+
+### Backend — Income Data
+- Added `monthly_income`, `income_by_category`, and `income_over_time` fields to dashboard endpoint
+- Income calculated as sum of absolute values of negative (income) transactions
+- Income by category sorted by amount descending, income over time covers last 6 months
+- Added `IncomeByCategory` schema to `schemas/dashboard.py`
+
+### Mobile — Income Summary
+- Added income card to dashboard with green color scheme and pie chart breakdown
+- Created `app/income.tsx` — income detail screen with monthly total, 6-month bar chart trend, and category breakdown (stacked bar + horizontal bars)
+- Added `Stack.Screen` entry for income page with "Income Summary" header and back button
+- Dashboard store updated with `monthlyIncome`, `incomeByCategory`, `incomeOverTime` fields
+
+### Mobile — Dashboard Carousel
+- Spending and income cards displayed in a horizontal paging carousel with dot indicators
+- Swipe between spending and income summaries; tap to navigate to detail pages
+
+### Mobile — Dashboard UX Fix
+- Added `silent` parameter to dashboard store `load()` to prevent `RefreshControl` from triggering on focus reload
+- Dashboard no longer snaps scroll to top when navigating back from detail pages
+
+---
+
 ## 2026-03-20 — Phase 3: Dashboard, Budgets & Spending Charts
 
 ### Backend — Dashboard

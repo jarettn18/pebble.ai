@@ -49,7 +49,7 @@ pebble/
 │       │   ├── category.py          # CategoryOut, CategoryListResponse
 │       │   ├── dashboard.py         # DashboardResponse, NetWorthHistory, SpendingByCategory
 │       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
-│       │   └── transaction.py       # TransactionOut, Detail, Update, List schemas
+│       │   └── transaction.py       # TransactionOut, Detail, Create, Update, List schemas
 │       ├── routers/
 │       │   ├── auth.py              # /v1/auth/* (register, login, refresh, me)
 │       │   ├── accounts.py          # /v1/accounts (list user accounts)
@@ -57,15 +57,15 @@ pebble/
 │       │   ├── categories.py        # /v1/categories (list all)
 │       │   ├── dashboard.py         # /v1/dashboard (aggregated overview + net worth history)
 │       │   ├── plaid.py             # /v1/plaid/* (link-token, exchange, sync, sync-all)
-│       │   └── transactions.py      # /v1/transactions (list, detail, update)
+│       │   └── transactions.py      # /v1/transactions (list, detail, create, update, delete)
 │       ├── services/
 │       │   ├── auth.py              # Auth business logic
 │       │   ├── accounts.py          # Account queries with institution join
 │       │   ├── budgets.py           # Budget CRUD + spending calculation
 │       │   ├── categories.py        # Category queries, Plaid category map
 │       │   ├── dashboard.py         # Aggregated dashboard + net worth history
-│       │   ├── plaid.py             # Plaid API integration (link, exchange, sync)
-│       │   └── transactions.py      # Transaction queries, detail, update
+│       │   ├── plaid.py             # Plaid API integration (link, exchange, sync, balance refresh)
+│       │   └── transactions.py      # Transaction queries, detail, create, update, delete
 │       ├── middleware/
 │       │   └── auth.py              # JWT + API key auth dependencies
 │       ├── ai/                      # AI module (Phase 4)
@@ -84,21 +84,23 @@ pebble/
 │   │   ├── (tabs)/
 │   │   │   ├── _layout.tsx          # Tab navigator (5 tabs)
 │   │   │   ├── index.tsx            # Dashboard (net worth chart, pie chart, budgets)
-│   │   │   ├── transactions.tsx     # Transaction list with cached sync
+│   │   │   ├── transactions.tsx     # Transaction list with search, filters & FAB
 │   │   │   ├── budgets.tsx          # Budget list with progress bars
 │   │   │   ├── ai-chat.tsx          # AI chat (placeholder)
 │   │   │   └── settings.tsx         # Settings + logout
 │   │   ├── budget/
 │   │   │   └── [id].tsx             # Budget create/edit screen
 │   │   ├── transaction/
-│   │   │   └── [id].tsx             # Transaction detail & edit screen
-│   │   └── spending.tsx             # Spending summary (trend chart, category bars)
+│   │   │   ├── create.tsx           # Create transaction (expense/income toggle)
+│   │   │   └── [id].tsx             # Transaction detail, edit & delete screen
+│   │   ├── spending.tsx             # Spending summary (trend chart, category bars)
+│   │   └── income.tsx              # Income summary (trend chart, category bars)
 │   └── src/
 │       ├── api/
 │       │   └── client.ts            # API client with auto JWT refresh
 │       ├── components/
-│       │   ├── LineChart.tsx         # SVG line chart with gradient fill
-│       │   ├── NetWorthChart.tsx     # Net worth chart with period filters
+│       │   ├── LineChart.tsx         # SVG line chart with gradient, y-axis labels, x-axis labels
+│       │   ├── NetWorthChart.tsx     # Net worth history chart with period tabs (1M/3M/1Y/5Y)
 │       │   └── PieChart.tsx          # SVG pie chart with legend
 │       ├── hooks/
 │       │   └── usePlaidLink.ts      # Plaid Link hook (fetch token, open modal)
@@ -166,7 +168,9 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 2. User connects bank → mobile sends public token to backend
 3. Backend exchanges for access token, encrypts with Fernet, stores
 4. Sync via `transactions/sync` (cursor-based)
-5. MVP: sync on app open. Later: Plaid webhooks
+5. Balance refresh via `accounts/get` with 15-minute staleness TTL (avoids excessive API calls)
+6. Auto-categorization maps Plaid categories to internal categories on sync
+7. MVP: sync on app open. Later: Plaid webhooks
 
 ---
 
@@ -220,17 +224,76 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] `.gitignore` (Python, Node, IDE, OS, env files)
 - [x] Local `.env` with generated JWT secret + Fernet key
 
+## Completed (Phase 2)
+
+### Backend
+- [x] Plaid service: link token, exchange, encrypt/store access token (httpx, not plaid-python SDK)
+- [x] Transaction sync using `transactions/sync` (cursor-based)
+- [x] Balance refresh endpoint with 15-minute staleness TTL to minimize API calls
+- [x] Auto-categorization of Plaid transactions to internal categories on sync
+- [x] Seed 30+ default categories (Food, Transport, Shopping, Bills, etc.) with Plaid mapping
+- [x] Routers: `POST /v1/plaid/link-token`, `exchange`, `sync`, `sync-all`, `refresh-balances`
+- [x] Routers: `GET /v1/accounts`, `GET /v1/transactions`
+- [x] Plaid timeout increased from 30s to 90s for reliability
+
+### Mobile
+- [x] Plaid Link integration (`react-native-plaid-link-sdk`)
+- [x] Account connection flow with multi-account support
+- [x] Transaction list with pull-to-refresh sync + 24-hour cache
+- [x] Transaction detail/edit screen (recategorize, view details)
+- [x] Dashboard wired to real account balances + spending data
+
+## Completed (Phase 3 — In Progress)
+
+### Backend
+- [x] Budget CRUD service + router (`POST/GET/PUT/DELETE /v1/budgets`)
+- [x] Budget progress calculation (spent vs. budget per category per month)
+- [x] Dashboard aggregation endpoint (`GET /v1/dashboard`) — net worth, spending, budgets, categories
+- [x] Net worth history endpoint (`GET /v1/dashboard/net-worth-history?period=`) with walk-back algorithm
+- [x] Net worth includes manual transactions (not captured in Plaid balances)
+- [x] Transaction create/delete endpoints (`POST /v1/transactions`, `DELETE /v1/transactions/{id}`)
+- [x] Transaction filtering: search, category, type (expense/income), date range
+- [x] Downsampling for long chart periods (3-day for 1Y, 7-day for 5Y) with guaranteed latest point
+- [x] Dashboard returns monthly income, income by category, and income over time (6 months)
+
+### Mobile
+- [x] Budget creation/edit screens with category picker
+- [x] Budget progress bars in dashboard and budgets tab
+- [x] Spending summary page with 6-month trend chart + category breakdown
+- [x] Transaction search (debounced 400ms) + filter panel (type toggle, category chips)
+- [x] Create transaction screen with expense/income toggle, account picker, category chips
+- [x] Delete transaction with confirmation dialog
+- [x] Net worth chart with period tabs (1M/3M/1Y/5Y), y-axis dollar labels, x-axis date labels
+- [x] Dashboard auto-refreshes balances on tab focus (15-min TTL, cost-efficient)
+- [x] SVG chart re-rendering fix (keyed on path data to bust react-native-svg cache)
+- [x] Pie chart for spending by category on dashboard
+- [x] Income summary card on dashboard with pie chart (green color scheme)
+- [x] Income detail page (`app/income.tsx`) with monthly total, 6-month trend chart, category breakdown
+- [x] Spending/Income cards in horizontal paging carousel with dot indicators
+- [x] Dashboard silent reload on focus (no scroll-to-top snap)
+- [x] API client handles Pydantic array validation errors and 204 No Content responses
+
+---
+
 ## Remaining Work
 
 ## TODO:
 
+### Notes:
+- Cached balances on dashboard have TTL of 15 minutes, might be better to switch to manual refresh syncing if API calls are not too expensive.
+
 ### General
-- [ ] Add "Report a Bug or Leave Feedback" section with link to GitHub Issues
+- [ ] Mobile: Add "Report a Bug or Leave Feedback" section with link to GitHub Issues
+- [ ] API: Add logging everywhere
 - [ ] Ask Claude about password hashing vulnerabilities
 - [ ] MFA phone authentication
 
 ### Known Bugs
 - [ ] Link session ended under 'Add Another Account' when plaid linking is cancelled
+- [ ] Budgets get a hanging loading icon if the back tab is pressed while making a budget
+- [ ] Positive values that are categorized do not update the progress bar on the budget (design choice?)
+- [ ] Handle budgets of the same category
+- [x] Net Worth number does not reflect real-time changes made to transactions, add focus refresh to dashboard tab
 
 ### Phase 2 — Plaid + Transactions
 - [x] Plaid service: create link token, exchange public token, encrypt/store access token
@@ -238,7 +301,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Transaction sync service using `transactions/sync` (cursor-based)
 - [x] Auto-categorization of Plaid transactions to internal categories
 - [x] Seed default categories (Food, Transport, Shopping, Bills, etc.)
-- [x] Router: `POST /v1/plaid/link-token`, `POST /v1/plaid/exchange`, `POST /v1/plaid/sync`, `POST /v1/plaid/sync-all`
+- [x] Router: `POST /v1/plaid/link-token`, `POST /v1/plaid/exchange`, `POST /v1/plaid/sync`, `POST /v1/plaid/sync-all`, `POST /v1/plaid/refresh-balances`
 - [x] Router: `GET /v1/accounts`
 - [x] Router: `GET /v1/transactions`
 - [x] Mobile: Plaid Link integration (`react-native-plaid-link-sdk`)
@@ -255,14 +318,14 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Mobile: Budget creation/edit screens
 - [x] Mobile: Budget progress bars/cards
 - [x] Mobile: Spending summary charts
-- [ ] Mobile: Transaction search + filtering (by category, merchant, date range)
+- [x] Mobile: Transaction search + filtering (by category, type, date range)
+- [x] Mobile: Add/Delete a transaction (with expense/income toggle)
 - [ ] Mobile: Loading states, error handling, empty states across all screens
-- [ ] Mobile: Update Transaction Categories to mimic Mint Category Schema
-- [ ] Mobile: Update Settings screen to support account changes
-- [ ] Mobile: Earning summary charts
-- [ ] Mobile: Account details when tapping accounts by dashboard
+- [x] Mobile: Income/Earning summary charts
+- [ ] Mobile: Transaction details by account when tapping on an account in dashboard
 - [ ] Router: Add a property end point `POST/GET/PUT/DELETE /v1/Property`
 - [ ] Mobile: Add a property frontend
+- [ ] Mobile: Dropdown menu for adding accounts and property
 
 ### Phase 4 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id
@@ -287,13 +350,15 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] API documentation for external consumers
 
 
-### Phase 6 - Iteration
+### Phase 6 — Iteration
 - [ ] AI System: Allow asset optimization/Balance Transfers
-- [ ] API: Debt Restructuring/Credit Optimization
-- [ ] Mobile: Support for dark mode
+- [ ] AI System: Debt Restructuring/Credit Optimization
 - [ ] API: Rate limiting on API calls
-- [ ] Data imports and exports
-- [ ] Sign in Google/Apple
+- [ ] Mobile: Support for dark mode
+- [ ] Mobile: Update Transaction Categories to mimic Mint Category Schema
+- [ ] Mobile: Data imports and exports
+- [ ] Mobile: Sign in Google/Apple
+- [ ] Mobile: Update Settings screen to support account changes
 ---
 
 ## Running Locally
