@@ -81,6 +81,26 @@ function AuthGate() {
           headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
         }}
       />
+      <Stack.Screen
+        name="budget-transactions"
+        options={{
+          headerShown: true,
+          title: "Budget Transactions",
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+        }}
+      />
+      <Stack.Screen
+        name="account-transactions"
+        options={{
+          headerShown: true,
+          title: "Account Details",
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+        }}
+      />
     </Stack>
   );
 }

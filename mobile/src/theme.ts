@@ -71,6 +71,9 @@ export const colors = {
     "#5488A8",
   ],
 
+  // Progress bars
+  progressBar: "#45655a",
+
   // Borders/dividers
   border: "#c1c8c4",
   outlineVariant: "#c1c8c4",
@@ -116,5 +119,54 @@ export const shadows = {
     shadowOpacity: 0.02,
     shadowRadius: 20,
     elevation: 1,
+  },
+};
+
+/** Reusable progress-bar styles (budget pill pattern). */
+export const progressBarStyles = {
+  container: {
+    padding: 20,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+  },
+  header: {
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "flex-end" as const,
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 11,
+    fontFamily: fonts.labelMedium,
+    letterSpacing: 1,
+    textTransform: "uppercase" as const,
+    color: colors.textPrimary,
+    opacity: 0.7,
+    marginBottom: 4,
+  },
+  value: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+  },
+  valueSub: {
+    fontSize: 13,
+    fontWeight: "400" as const,
+    opacity: 0.7,
+  },
+  remaining: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+  },
+  track: {
+    height: 16,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 9999,
+  },
+  fill: {
+    height: "100%" as unknown as number,
+    backgroundColor: colors.progressBar,
+    borderRadius: 9999,
   },
 };

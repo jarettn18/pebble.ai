@@ -12,26 +12,15 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useBudgetsStore } from "../../src/stores/budgets";
 import { formatCurrency } from "../../src/utils/dashboard";
-import { colors, borderRadius, shadows, fonts } from "../../src/theme";
+import { colors, fonts, progressBarStyles } from "../../src/theme";
 
-function getCurrentMonth() {
-  const now = new Date();
-  return { month: now.getMonth() + 1, year: now.getFullYear() };
-}
-
-function monthLabel(month: number, year: number) {
-  const date = new Date(year, month - 1);
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
-
-// Cycle through design-system accent backgrounds for category icon circles
 const ICON_BG_COLORS = [
   colors.secondaryContainer,
   colors.primaryFixed,
   colors.tertiaryFixed,
-  `${colors.secondaryContainer}80`, // 50% opacity
-  `${colors.primaryFixed}99`, // 60% opacity
-  `${colors.tertiaryFixed}66`, // 40% opacity
+  `${colors.secondaryContainer}80`,
+  `${colors.primaryFixed}99`,
+  `${colors.tertiaryFixed}66`,
 ];
 
 const ICON_FG_COLORS = [
@@ -43,17 +32,6 @@ const ICON_FG_COLORS = [
   colors.tertiary,
 ];
 
-// Progress bar colors cycle through primary/secondary/tertiary
-const PROGRESS_COLORS = [
-  colors.primary,
-  colors.secondary,
-  colors.primaryContainer,
-  colors.tertiaryContainer,
-  colors.primary,
-  colors.secondary,
-];
-
-// Category icon mapping (MaterialCommunityIcons names)
 const CATEGORY_ICONS: Record<string, string> = {
   dining: "silverware-fork-knife",
   food: "silverware-fork-knife",
@@ -84,6 +62,16 @@ function getCategoryIcon(name: string): string {
     if (lower.includes(key)) return icon;
   }
   return "clipboard-text-outline";
+}
+
+function getCurrentMonth() {
+  const now = new Date();
+  return { month: now.getMonth() + 1, year: now.getFullYear() };
+}
+
+function monthLabel(month: number, year: number) {
+  const date = new Date(year, month - 1);
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
 export default function BudgetsScreen() {
@@ -148,34 +136,32 @@ export default function BudgetsScreen() {
           <Text style={styles.heroSubtitle}>Total monthly spend so far</Text>
 
           {/* Summary Progress Pill */}
-          <View style={styles.summaryPill}>
-            <View style={styles.summaryPillTop}>
+          <View style={[progressBarStyles.container, styles.summaryPill]}>
+            <View style={progressBarStyles.header}>
               <View>
-                <Text style={styles.summaryPillLabel}>Overall Budget</Text>
-                <Text style={styles.summaryPillValue}>
+                <Text style={progressBarStyles.label}>Overall Budget</Text>
+                <Text style={progressBarStyles.value}>
                   {budgetPct}%{" "}
-                  <Text style={styles.summaryPillValueSub}>
+                  <Text style={progressBarStyles.valueSub}>
                     of {formatCurrency(totalBudgeted)}
                   </Text>
                 </Text>
               </View>
-              <View style={styles.summaryPillRight}>
-                <Text
-                  style={[
-                    styles.summaryPillRemaining,
-                    isOverBudget && styles.errorText,
-                  ]}
-                >
-                  {isOverBudget ? "Over by " : ""}
-                  {formatCurrency(Math.abs(budgetRemaining))}{" "}
-                  {isOverBudget ? "" : "left"}
-                </Text>
-              </View>
+              <Text
+                style={[
+                  progressBarStyles.remaining,
+                  isOverBudget && styles.errorText,
+                ]}
+              >
+                {isOverBudget ? "Over by " : ""}
+                {formatCurrency(Math.abs(budgetRemaining))}{" "}
+                {isOverBudget ? "" : "left"}
+              </Text>
             </View>
-            <View style={styles.summaryProgressTrack}>
+            <View style={progressBarStyles.track}>
               <View
                 style={[
-                  styles.summaryProgressFill,
+                  progressBarStyles.fill,
                   { width: `${Math.min(budgetPct, 100)}%` },
                   isOverBudget && { backgroundColor: colors.error },
                 ]}
@@ -237,19 +223,16 @@ export default function BudgetsScreen() {
             const budgeted = parseFloat(item.amount || "0");
             const spent = parseFloat(item.spent || "0");
             const remaining = budgeted - spent;
-            const progress = budgeted > 0 ? spent / budgeted : 0;
-            const clampedProgress = Math.min(progress, 1);
+            const pct = budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0;
+            const clampedPct = Math.min(pct, 100);
             const overBudget = spent > budgeted;
             const categoryName = item.category_name || "Uncategorized";
             const iconBg = ICON_BG_COLORS[index % ICON_BG_COLORS.length];
             const iconFg = ICON_FG_COLORS[index % ICON_FG_COLORS.length];
-            const progressColor = overBudget
-              ? colors.error
-              : PROGRESS_COLORS[index % PROGRESS_COLORS.length];
 
             return (
               <TouchableOpacity
-                style={styles.budgetCard}
+                style={[progressBarStyles.container, styles.budgetCard]}
                 onPress={() =>
                   router.push(
                     `/budget/${item.id}?month=${period.month}&year=${period.year}`
@@ -257,54 +240,53 @@ export default function BudgetsScreen() {
                 }
                 activeOpacity={0.7}
               >
-                <View style={styles.budgetCardTop}>
-                  <View style={styles.budgetCardLeft}>
-                    <View
-                      style={[styles.iconCircle, { backgroundColor: iconBg }]}
-                    >
+                <View style={progressBarStyles.header}>
+                  <View style={styles.labelRow}>
+                    <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
                       <MaterialCommunityIcons
                         name={getCategoryIcon(categoryName) as any}
                         size={22}
                         color={iconFg}
                       />
                     </View>
-                    <View style={styles.budgetCardInfo}>
-                      <Text style={styles.budgetCategoryName}>
-                        {categoryName}
-                      </Text>
-                      <Text style={styles.budgetSpentLabel}>
-                        {formatCurrency(spent)} spent
+                    <View>
+                      <Text style={progressBarStyles.label}>{categoryName}</Text>
+                      <Text style={[progressBarStyles.value, overBudget && styles.errorText]}>
+                        {overBudget
+                          ? `${formatCurrency(Math.floor(Math.abs(remaining)))} over`
+                          : `${formatCurrency(Math.floor(remaining))} left`}
+                        {" "}
+                        <Text style={progressBarStyles.valueSub}>
+                          of {formatCurrency(Math.floor(budgeted))}
+                        </Text>
                       </Text>
                     </View>
                   </View>
-                  <View style={styles.budgetAmountCol}>
-                    {overBudget ? (
-                      <>
-                        <Text style={styles.overBudgetLabel}>Over budget</Text>
-                        <Text style={styles.overBudgetAmount}>
-                          -{formatCurrency(Math.abs(remaining))}
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.remainingAmount}>
-                          {formatCurrency(remaining)}
-                        </Text>
-                        <Text style={styles.remainingLabel}>REMAINING</Text>
-                      </>
-                    )}
+                  <View style={styles.rightActions}>
+                    <TouchableOpacity
+                      style={styles.viewTxnBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        router.push(
+                          `/budget-transactions?category_id=${item.category_id}&category_name=${encodeURIComponent(categoryName)}&budget_amount=${item.amount}&spent=${item.spent}&month=${period.month}&year=${period.year}`
+                        );
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name="format-list-bulleted"
+                        size={20}
+                        color={colors.textMuted}
+                      />
+                    </TouchableOpacity>
                   </View>
                 </View>
-
-                {/* Progress Bar */}
-                <View style={styles.progressTrack}>
+                <View style={progressBarStyles.track}>
                   <View
                     style={[
-                      styles.progressFill,
-                      {
-                        width: `${clampedProgress * 100}%`,
-                        backgroundColor: progressColor,
-                      },
+                      progressBarStyles.fill,
+                      { width: `${clampedPct}%`, backgroundColor: iconFg },
+                      overBudget && { backgroundColor: colors.error },
                     ]}
                   />
                 </View>
@@ -374,52 +356,6 @@ const styles = StyleSheet.create({
   // Summary Progress Pill
   summaryPill: {
     marginTop: 24,
-    padding: 20,
-    backgroundColor: `${colors.primaryFixed}4D`, // 30% opacity
-    borderRadius: borderRadius.lg,
-  },
-  summaryPillTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 12,
-  },
-  summaryPillLabel: {
-    fontSize: 11,
-    fontFamily: fonts.labelMedium,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: colors.onPrimaryFixedVariant,
-    opacity: 0.7,
-    marginBottom: 4,
-  },
-  summaryPillValue: {
-    fontSize: 22,
-    fontFamily: fonts.bold,
-    color: colors.onPrimaryFixedVariant,
-  },
-  summaryPillValueSub: {
-    fontSize: 13,
-    fontWeight: "400",
-    opacity: 0.7,
-  },
-  summaryPillRight: {
-    alignItems: "flex-end",
-  },
-  summaryPillRemaining: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.onPrimaryFixedVariant,
-  },
-  summaryProgressTrack: {
-    height: 16,
-    backgroundColor: "rgba(255,255,255,0.4)",
-    borderRadius: 9999,
-  },
-  summaryProgressFill: {
-    height: "100%" as unknown as number,
-    backgroundColor: colors.primary,
-    borderRadius: 9999,
   },
 
   // Categories Header
@@ -446,24 +382,11 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   budgetCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 20,
     marginHorizontal: 24,
-    borderWidth: 1,
-    borderColor: `${colors.outlineVariant}1A`, // 10% opacity
-    ...shadows.card,
   },
-  budgetCardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  budgetCardLeft: {
+  labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
   },
   iconCircle: {
     width: 48,
@@ -472,62 +395,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
-  },
-  budgetCardInfo: {
-    flex: 1,
-  },
-  budgetCategoryName: {
-    fontSize: 15,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-    marginBottom: 2,
-  },
-  budgetSpentLabel: {
-    fontSize: 13,
-    fontFamily: fonts.medium,
-    color: colors.textSecondary,
-  },
-  budgetAmountCol: {
-    alignItems: "flex-end",
-    marginLeft: 8,
-  },
-  remainingAmount: {
-    fontSize: 14,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-  },
-  remainingLabel: {
-    fontSize: 9,
-    fontFamily: fonts.labelMedium,
-    color: `${colors.textSecondary}99`,
-    letterSpacing: -0.3,
-    textTransform: "uppercase",
-    marginTop: 1,
-  },
-  overBudgetLabel: {
-    fontSize: 14,
-    fontFamily: fonts.bold,
-    color: colors.error,
-  },
-  overBudgetAmount: {
-    fontSize: 9,
-    fontFamily: fonts.labelMedium,
-    color: `${colors.error}99`,
-    letterSpacing: -0.3,
-    textTransform: "uppercase",
-    marginTop: 1,
-  },
-
-  // Progress Bar
-  progressTrack: {
-    height: 10,
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 9999,
-    overflow: "hidden" as const,
-  },
-  progressFill: {
-    height: "100%" as unknown as number,
-    borderRadius: 9999,
   },
 
   separator: {
@@ -558,5 +425,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 24,
     paddingVertical: 8,
+  },
+  rightActions: {
+    alignItems: "flex-end" as const,
+    gap: 4,
+  },
+  viewTxnBtn: {
+    padding: 4,
   },
 });

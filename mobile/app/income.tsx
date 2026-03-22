@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,10 @@ import {
 import { useFocusEffect } from "expo-router";
 import { useDashboardStore } from "../src/stores/dashboard";
 import { formatCurrency } from "../src/utils/dashboard";
-import { colors, borderRadius, shadows, fonts } from "../src/theme";
+import { apiRequest } from "../src/api/client";
+import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../src/theme";
+import { Transaction } from "../src/components/TransactionRow";
+import { TransactionListCard } from "../src/components/TransactionListCard";
 
 const CATEGORY_COLORS = colors.incomePalette;
 
@@ -23,9 +26,20 @@ export default function IncomeScreen() {
     refresh,
   } = useDashboardStore();
 
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
   useFocusEffect(
     useCallback(() => {
       load();
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = now.getMonth() + 1;
+      const dateFrom = `${y}-${String(m).padStart(2, "0")}-01`;
+      const lastDay = new Date(y, m, 0).getDate();
+      const dateTo = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      apiRequest<{ transactions: Transaction[] }>(
+        `/v1/transactions?limit=50&type=income&date_from=${dateFrom}&date_to=${dateTo}`
+      ).then((data) => setTransactions(data.transactions));
     }, [])
   );
 
@@ -151,14 +165,11 @@ export default function IncomeScreen() {
                     {formatCurrency(amount)}
                   </Text>
                 </View>
-                <View style={styles.horizontalBarTrack}>
+                <View style={progressBarStyles.track}>
                   <View
                     style={[
-                      styles.horizontalBar,
-                      {
-                        width: `${pct}%`,
-                        backgroundColor: color,
-                      },
+                      progressBarStyles.fill,
+                      { width: `${pct}%`, backgroundColor: color },
                     ]}
                   />
                 </View>
@@ -168,13 +179,17 @@ export default function IncomeScreen() {
         </View>
       )}
 
+      {/* Transactions */}
+      {transactions.length > 0 && (
+        <TransactionListCard transactions={transactions} />
+      )}
+
       {incomeByCategory.length === 0 && !isLoading && (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No income data yet</Text>
-          <Text style={styles.emptyHint}>
-            Income transactions will appear here once synced
-          </Text>
-        </View>
+        <TransactionListCard
+          transactions={[]}
+          emptyMessage="No income data yet"
+          emptyHint="Income transactions will appear here once synced"
+        />
       )}
     </ScrollView>
   );
@@ -300,31 +315,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.semiBold,
     color: colors.textPrimary,
-  },
-  horizontalBarTrack: {
-    height: 10,
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 9999,
-    overflow: "hidden",
-  },
-  horizontalBar: {
-    height: "100%",
-    borderRadius: 9999,
-  },
-  emptyCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 40,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 18,
-    fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
-  },
-  emptyHint: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 8,
   },
 });

@@ -340,6 +340,7 @@ async def get_dashboard(
 
     budget_summaries = [
         {
+            "category_id": str(b.category_id),
             "category_name": b.category.name if b.category else None,
             "amount": str(b.amount),
             "spent": str(cat_spending_map.get(b.category_id, Decimal("0"))),

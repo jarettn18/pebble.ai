@@ -99,6 +99,8 @@ pebble/
 │   │   │   └── [id].tsx             # Transaction detail, edit & delete screen
 │   │   ├── spending.tsx             # Spending summary (trend chart, category bars)
 │   │   ├── income.tsx              # Income summary (trend chart, category bars)
+│   │   ├── budget-transactions.tsx # Budget category drill-down (transactions for a budget)
+│   │   ├── account-transactions.tsx# Account drill-down (balance + transactions for an account)
 │   │   ├── add-asset.tsx           # Add asset form (properties + vehicles)
 │   │   └── asset/
 │   │       └── [id].tsx            # Asset detail, edit & delete screen
@@ -108,7 +110,9 @@ pebble/
 │       ├── components/
 │       │   ├── LineChart.tsx         # SVG line chart with bezier curves, gradient fill, axis labels
 │       │   ├── NetWorthChart.tsx     # Net worth history chart with period tabs (1M/3M/1Y/5Y)
-│       │   └── PieChart.tsx          # SVG donut chart with interactive segments + legend
+│       │   ├── PieChart.tsx          # SVG donut chart with interactive segments + legend
+│       │   ├── TransactionRow.tsx    # Shared transaction row + separator components
+│       │   └── TransactionListCard.tsx # Shared transaction list card (used across 4+ screens)
 │       ├── hooks/
 │       │   └── usePlaidLink.ts      # Plaid Link hook (fetch token, open modal)
 │       ├── utils/
@@ -299,12 +303,24 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Header "+" button with dropdown menu for adding accounts and assets
 - [x] Accounts widget card with dark teal-green background, white text, decorative icon overlay, and shadow
 - [x] Account names truncate with ellipsis (75% width) to prevent overlap with balance
-- [x] Account-filtered transactions (tap account → transactions filtered by that account)
+- [x] Account-filtered transactions (tap account → dedicated account transactions screen)
 - [x] Multi-select filters (multiple types + categories simultaneously)
 - [x] Account name displayed in transaction rows
 - [x] Net worth chart renders when user has assets but no bank accounts
 - [x] Overall budget pill uses surface color for better visual consistency
 - [x] Budget progress bar track near-white for contrast against surface background
+- [x] Centralized `progressBarStyles` in theme.ts — shared across dashboard, budgets, spending, income screens
+- [x] Extracted `TransactionRow` component from transactions tab into reusable `src/components/TransactionRow.tsx`
+- [x] Dashboard budget pill expands on chevron tap to show per-category budget breakdowns with individual progress bars
+- [x] Spending & income summary screens show current month's transactions (tappable to detail screen)
+- [x] Budget store loads non-blocking (transaction sync fires in background, silent reload when data exists)
+- [x] Budget category drill-down screen (tap budget category → see filtered transactions with budget progress)
+- [x] Account drill-down screen (tap account → see balance and transactions for that account)
+- [x] "See all" transactions link in dashboard accounts widget
+- [x] Shared `TransactionListCard` component — used across spending, income, budget-transactions, account-transactions, and transactions screens
+- [x] Transactions screen restyled with always-visible filter card (search + type/category chips) and card-based transaction list
+- [x] Dashboard budget categories show "$X left of $Y" with tappable rows and list icon buttons
+- [x] `formatCurrency` drops `.00` decimals for whole numbers
 
 ---
 
@@ -329,6 +345,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Net Worth number does not reflect real-time changes made to transactions, add focus refresh to dashboard tab
 - [ ] Fix the way net worth is plotted on the chart. Maybe just plot each individual day regardless of calculation time and zustand store the data.
 - [ ] Income summary not refreshing when transactions are categorized. Will need to update based on refresh.
+- [x] Chevron becomes muted color when expands and collapses.
 
 ### Phase 2 — Plaid + Transactions
 - [x] Plaid service: create link token, exchange public token, encrypt/store access token
@@ -363,6 +380,8 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Mobile: Header "+" dropdown menu for adding accounts and property
 - [x] Mobile: Attach the account to the transactions details
 - [x] Mobile: Refactor filtering (multi-select types + categories, account filter)
+- [x] Mobile: Overall budget - down chevron that has cascading dropdown that gives an breakdown of progress toward each budget
+- [ ] Add more transaction filters
 
 ### Phase 4 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id
@@ -385,6 +404,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Mobile: Subscription/upgrade screen
 - [ ] Mobile: API key management in settings
 - [ ] API documentation for external consumers
+- [ ] AI: Bill negotiation, Credit optimization
 
 
 ### Phase 6 — Iteration
@@ -396,6 +416,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Mobile: Data imports and exports
 - [ ] Mobile: Sign in Google/Apple
 - [ ] Mobile: Update Settings screen to support account changes
+- [ ] Mobile: Remove FAB for adding transactions
 ---
 
 ## Running Locally

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
@@ -13,10 +12,10 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import {
   useTransactionsStore,
-  TransactionFilters,
 } from "../../src/stores/transactions";
 import { apiRequest } from "../../src/api/client";
-import { colors, borderRadius } from "../../src/theme";
+import { colors, borderRadius, shadows, fonts } from "../../src/theme";
+import { TransactionListCard } from "../../src/components/TransactionListCard";
 
 type Category = {
   id: string;
@@ -29,7 +28,6 @@ export default function TransactionsScreen() {
   const params = useLocalSearchParams<{ account_id?: string; account_name?: string }>();
   const {
     transactions,
-    totalCount,
     isLoading,
     isSyncing,
     error,
@@ -41,7 +39,6 @@ export default function TransactionsScreen() {
   } = useTransactionsStore();
 
   const [searchText, setSearchText] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -103,13 +100,12 @@ export default function TransactionsScreen() {
   function handleClearFilters() {
     setSearchText("");
     clearFilters();
-    // Clear route params so account filter doesn't re-apply
     if (params.account_id) {
       router.setParams({ account_id: "", account_name: "" });
     }
   }
 
-  if (!showFilters && !hasActiveFilters && isSyncing && transactions.length === 0) {
+  if (isSyncing && transactions.length === 0 && !hasActiveFilters) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -117,53 +113,43 @@ export default function TransactionsScreen() {
     );
   }
 
-  const selectedCategoryNames = categories
-    .filter((c) => filters.category_ids?.includes(c.id))
-    .map((c) => c.name);
-
   return (
     <View style={styles.container}>
       {error && <Text style={styles.errorText}>{error}</Text>}
 
-      {/* Search Bar */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchInputWrap}>
-          <TextInput
-            style={styles.searchInput}
-            value={searchText}
-            onChangeText={handleSearchChange}
-            placeholder="Search transactions..."
-            placeholderTextColor={colors.textMuted}
-            returnKeyType="search"
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={isSyncing}
+            onRefresh={syncAndRefresh}
+            tintColor={colors.primary}
           />
-          {searchText.length > 0 && (
-            <TouchableOpacity
-              onPress={() => handleSearchChange("")}
-              hitSlop={8}
-            >
-              <Text style={styles.clearSearch}>{"\u2715"}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <TouchableOpacity
-          style={[styles.filterToggle, showFilters && styles.filterToggleActive]}
-          onPress={() => setShowFilters(!showFilters)}
-        >
-          <Text
-            style={[
-              styles.filterToggleText,
-              showFilters && styles.filterToggleTextActive,
-            ]}
-          >
-            Filters
-          </Text>
-          {hasActiveFilters && <View style={styles.filterDot} />}
-        </TouchableOpacity>
-      </View>
+        }
+      >
+        {/* Filter Card */}
+        <View style={styles.card}>
+          {/* Search */}
+          <View style={styles.searchInputWrap}>
+            <TextInput
+              style={styles.searchInput}
+              value={searchText}
+              onChangeText={handleSearchChange}
+              placeholder="Search transactions..."
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="search"
+            />
+            {searchText.length > 0 && (
+              <TouchableOpacity
+                onPress={() => handleSearchChange("")}
+                hitSlop={8}
+              >
+                <Text style={styles.clearSearch}>{"\u2715"}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-      {/* Filter Panel */}
-      {showFilters && (
-        <View style={styles.filterPanel}>
           {/* Type Filter */}
           <Text style={styles.filterLabel}>Type</Text>
           <View style={styles.filterChipRow}>
@@ -245,60 +231,27 @@ export default function TransactionsScreen() {
             </TouchableOpacity>
           )}
         </View>
-      )}
 
-      {/* Active filter summary */}
-      {hasActiveFilters && !showFilters && (
-        <View style={styles.activeFiltersBar}>
-          <Text style={styles.activeFiltersText} numberOfLines={1}>
-            Filtered: {totalCount} result{totalCount !== 1 ? "s" : ""}
-            {filters.account_id && params.account_name ? ` · ${params.account_name}` : ""}
-            {filters.types?.length ? ` · ${filters.types.join(", ")}` : ""}
-            {selectedCategoryNames.length > 0 ? ` · ${selectedCategoryNames.join(", ")}` : ""}
-          </Text>
-          <TouchableOpacity onPress={handleClearFilters}>
-            <Text style={styles.clearAllText}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        {/* Transactions */}
+        {isLoading && transactions.length === 0 ? (
+          <ActivityIndicator
+            size="large"
+            color={colors.primary}
+            style={{ marginTop: 32 }}
+          />
+        ) : (
+          <TransactionListCard
+            transactions={transactions}
+            emptyMessage={hasActiveFilters ? "No matching transactions" : "No transactions yet"}
+            emptyHint={
+              hasActiveFilters
+                ? "Try adjusting your filters"
+                : "Connect a bank account and pull down to sync"
+            }
+          />
+        )}
+      </ScrollView>
 
-      {isLoading && transactions.length === 0 ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : transactions.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>
-            {hasActiveFilters ? "No matching transactions" : "No transactions yet"}
-          </Text>
-          <Text style={styles.emptyHint}>
-            {hasActiveFilters
-              ? "Try adjusting your filters"
-              : "Connect a bank account and pull down to sync"}
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={transactions}
-          keyExtractor={(item) => item.id}
-          refreshControl={
-            <RefreshControl
-              refreshing={isSyncing}
-              onRefresh={syncAndRefresh}
-              tintColor={colors.primary}
-            />
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => router.push(`/transaction/${item.id}`)}
-            >
-              <TransactionRow txn={item} />
-            </TouchableOpacity>
-          )}
-          ItemSeparatorComponent={Separator}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push("/transaction/create")}
@@ -309,52 +262,17 @@ export default function TransactionsScreen() {
   );
 }
 
-type Transaction = {
-  id: string;
-  account_name: string | null;
-  amount: string;
-  date: string;
-  name: string;
-  merchant_name: string | null;
-  pending: boolean;
-  category_name: string | null;
-};
-
-function TransactionRow({ txn }: { txn: Transaction }) {
-  const amount = parseFloat(txn.amount);
-  const isDebit = amount > 0;
-  const displayAmount = isDebit
-    ? `-$${amount.toFixed(2)}`
-    : `+$${Math.abs(amount).toFixed(2)}`;
-
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowLeft}>
-        <Text style={styles.txnName} numberOfLines={1}>
-          {txn.merchant_name || txn.name}
-        </Text>
-        <Text style={styles.txnDetail}>
-          {txn.date}
-          {txn.account_name ? ` · ${txn.account_name}` : ""}
-          {txn.category_name ? ` · ${txn.category_name}` : ""}
-          {txn.pending ? " · Pending" : ""}
-        </Text>
-      </View>
-      <Text style={[styles.txnAmount, isDebit ? styles.debit : styles.credit]}>
-        {displayAmount}
-      </Text>
-    </View>
-  );
-}
-
-function Separator() {
-  return <View style={styles.separator} />;
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 100,
   },
   centered: {
     flex: 1,
@@ -363,17 +281,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.textPrimary,
-  },
-  emptyHint: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 8,
-    textAlign: "center",
-  },
   errorText: {
     color: colors.error,
     fontSize: 14,
@@ -381,27 +288,30 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: colors.errorBackground,
   },
-  // Search
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 10,
-  },
-  searchInputWrap: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
+  // Card
+  card: {
     backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}1A`,
+    ...shadows.card,
+  },
+  // Search
+  searchInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.background,
     borderRadius: borderRadius.sm,
     paddingHorizontal: 14,
     height: 42,
+    marginBottom: 16,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
+    fontFamily: fonts.regular,
     color: colors.textPrimary,
   },
   clearSearch: {
@@ -409,46 +319,12 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     padding: 4,
   },
-  filterToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    height: 42,
-    borderRadius: borderRadius.sm,
-    backgroundColor: colors.surface,
-  },
-  filterToggleActive: {
-    backgroundColor: colors.primary,
-  },
-  filterToggleText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.textSecondary,
-  },
-  filterToggleTextActive: {
-    color: colors.textOnPrimary,
-  },
-  filterDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.error,
-    marginLeft: 6,
-  },
-  // Filter Panel
-  filterPanel: {
-    backgroundColor: colors.surface,
-    marginHorizontal: 16,
-    borderRadius: borderRadius.md,
-    padding: 16,
-    marginBottom: 8,
-  },
+  // Filters
   filterLabel: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 8,
-    marginTop: 4,
   },
   filterChipRow: {
     flexDirection: "row",
@@ -457,7 +333,7 @@ const styles = StyleSheet.create({
   },
   chipScroll: {
     flexGrow: 0,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   filterChip: {
     flexDirection: "row",
@@ -476,6 +352,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     fontSize: 13,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
   filterChipTextActive: {
@@ -490,74 +367,14 @@ const styles = StyleSheet.create({
   clearFiltersBtn: {
     alignItems: "center",
     paddingVertical: 10,
-    marginTop: 4,
+    marginTop: 8,
   },
   clearFiltersBtnText: {
     fontSize: 13,
+    fontFamily: fonts.semiBold,
     color: colors.error,
-    fontWeight: "600",
   },
-  // Active filters bar
-  activeFiltersBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: colors.surfaceGreen,
-  },
-  activeFiltersText: {
-    fontSize: 13,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  clearAllText: {
-    fontSize: 13,
-    color: colors.error,
-    fontWeight: "600",
-    marginLeft: 12,
-  },
-  // List
-  listContent: {
-    paddingVertical: 8,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.surface,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  rowLeft: {
-    flex: 1,
-    marginRight: 12,
-  },
-  txnName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.textPrimary,
-  },
-  txnDetail: {
-    fontSize: 13,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  txnAmount: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  debit: {
-    color: colors.textPrimary,
-  },
-  credit: {
-    color: colors.income,
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginLeft: 20,
-  },
+  // FAB
   fab: {
     position: "absolute",
     right: 20,
@@ -577,7 +394,7 @@ const styles = StyleSheet.create({
   fabText: {
     color: colors.textOnPrimary,
     fontSize: 28,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     marginTop: -2,
   },
 });

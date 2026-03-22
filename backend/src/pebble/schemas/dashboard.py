@@ -11,6 +11,7 @@ class AccountSummary(BaseModel):
 
 
 class BudgetSummary(BaseModel):
+    category_id: str
     category_name: str | None = None
     amount: str
     spent: str

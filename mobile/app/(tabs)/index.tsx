@@ -12,6 +12,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Pressable,
+  LayoutAnimation,
 } from "react-native";
 import { useFocusEffect, useRouter, useNavigation } from "expo-router";
 import type { AssetSummary } from "../../src/stores/dashboard";
@@ -25,7 +26,7 @@ import { formatCurrency } from "../../src/utils/dashboard";
 import PieChart from "../../src/components/PieChart";
 import NetWorthChart from "../../src/components/NetWorthChart";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors, borderRadius, shadows, fonts } from "../../src/theme";
+import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../../src/theme";
 
 const PIE_COLORS = colors.spendingPalette;
 const INCOME_COLORS = colors.incomePalette;
@@ -214,6 +215,7 @@ export default function DashboardScreen() {
 
   const hasAccounts = accounts.length > 0 || assets.length > 0;
   const [carouselPage, setCarouselPage] = useState(0);
+  const [budgetExpanded, setBudgetExpanded] = useState(false);
   const cardWidth = Dimensions.get("window").width - 40;
 
   const onCarouselScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -336,30 +338,117 @@ export default function DashboardScreen() {
 
       {/* Budget Summary — Overall Budget Pill */}
       {budgetSummaries.length > 0 && (
-        <View style={styles.budgetPill}>
-          <View style={styles.budgetPillTop}>
+        <View style={[progressBarStyles.container, styles.budgetPillMargin]}>
+          <Pressable
+            onPress={budgetExpanded ? () => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setBudgetExpanded(false);
+            } : undefined}
+          >
+          <View style={progressBarStyles.header}>
             <View>
-              <Text style={styles.budgetPillLabel}>Overall Budget</Text>
-              <Text style={styles.budgetPillValue}>
+              <Text style={progressBarStyles.label}>Overall Budget</Text>
+              <Text style={progressBarStyles.value}>
                 {budgetPct}%{" "}
-                <Text style={styles.budgetPillValueSub}>
+                <Text style={progressBarStyles.valueSub}>
                   of {formatCurrency(totalBudgeted)}
                 </Text>
               </Text>
             </View>
-            <Text style={[styles.budgetPillRemaining, isOverBudget && styles.negative]}>
+            <Text style={[progressBarStyles.remaining, isOverBudget && styles.negative]}>
               {isOverBudget ? "Over by " : ""}{formatCurrency(Math.abs(budgetRemaining))}{isOverBudget ? "" : " left"}
             </Text>
           </View>
-          <View style={styles.budgetProgressTrack}>
+          <View style={progressBarStyles.track}>
             <View
               style={[
-                styles.budgetProgressFill,
+                progressBarStyles.fill,
                 { width: `${Math.min(budgetPct, 100)}%` },
                 isOverBudget && { backgroundColor: colors.error },
               ]}
             />
           </View>
+          </Pressable>
+
+          {/* Expanded category breakdown */}
+          {budgetExpanded && budgetSummaries.map((b) => {
+            const catBudgeted = parseFloat(b.amount || "0");
+            const catSpent = parseFloat(b.spent || "0");
+            const catRemaining = catBudgeted - catSpent;
+            const catPct = catBudgeted > 0 ? Math.round((catSpent / catBudgeted) * 100) : 0;
+            const catOver = catSpent > catBudgeted;
+            const now = new Date();
+            return (
+              <TouchableOpacity
+                key={b.category_name}
+                style={styles.budgetCategoryRow}
+                activeOpacity={0.7}
+                onPress={() =>
+                  router.push(
+                    `/budget-transactions?category_id=${b.category_id}&category_name=${encodeURIComponent(b.category_name || "Uncategorized")}&budget_amount=${b.amount}&spent=${b.spent}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`
+                  )
+                }
+              >
+                <View style={progressBarStyles.header}>
+                  <View>
+                    <Text style={progressBarStyles.label}>
+                      {b.category_name || "Uncategorized"}
+                    </Text>
+                    <Text style={[progressBarStyles.value, styles.budgetCategoryValue, catOver && styles.negative]}>
+                      {catOver
+                        ? `${formatCurrency(Math.floor(Math.abs(catRemaining)))} over`
+                        : `${formatCurrency(Math.floor(catRemaining))} left`}
+                      {" "}
+                      <Text style={progressBarStyles.valueSub}>
+                        of {formatCurrency(Math.floor(catBudgeted))}
+                      </Text>
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.viewTxnBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      router.push(
+                        `/budget-transactions?category_id=${b.category_id}&category_name=${encodeURIComponent(b.category_name || "Uncategorized")}&budget_amount=${b.amount}&spent=${b.spent}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`
+                      );
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="format-list-bulleted"
+                      size={20}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                </View>
+                <View style={progressBarStyles.track}>
+                  <View
+                    style={[
+                      progressBarStyles.fill,
+                      { width: `${Math.min(catPct, 100)}%` },
+                      catOver && { backgroundColor: colors.error },
+                    ]}
+                  />
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* Chevron toggle */}
+          <TouchableOpacity
+            style={styles.budgetChevron}
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setBudgetExpanded((prev) => !prev);
+            }}
+            hitSlop={12}
+          >
+            <MaterialCommunityIcons
+              name={budgetExpanded ? "chevron-up" : "chevron-down"}
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
         </View>
       )}
 
@@ -370,7 +459,16 @@ export default function DashboardScreen() {
           <View style={styles.accountsWidgetDecor}>
             <MaterialCommunityIcons name="wallet-outline" size={140} color="#ffffff" />
           </View>
-          <Text style={styles.accountsWidgetTitle}>My Accounts</Text>
+          <View style={styles.accountsWidgetTitleRow}>
+            <Text style={styles.accountsWidgetTitle}>My Accounts</Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/transactions")}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.seeAllText}>See all</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.accountsWidgetList}>
             {accounts.map((acct, index) => (
               <TouchableOpacity
@@ -379,7 +477,7 @@ export default function DashboardScreen() {
                   styles.accountsWidgetRow,
                   index < accounts.length - 1 && styles.accountsWidgetRowBorder,
                 ]}
-                onPress={() => router.push(`/(tabs)/transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}`)}
+                onPress={() => router.push(`/account-transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}&balance_current=${acct.balance_current || ""}&account_type=${acct.type}&institution_name=${encodeURIComponent(acct.institution_name || "")}`)}
                 activeOpacity={0.7}
               >
                 <View style={{ flex: 0.75, marginRight: 12 }}>
@@ -624,51 +722,31 @@ const styles = StyleSheet.create({
   negative: {
     color: colors.negative,
   },
-  budgetPill: {
-    padding: 20,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
+  budgetPillMargin: {
     marginBottom: 16,
   },
-  budgetPillTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 12,
+  budgetChevron: {
+    alignItems: "center",
+    marginTop: 4,
+    marginBottom: -15,
   },
-  budgetPillLabel: {
-    fontSize: 11,
-    fontFamily: fonts.labelMedium,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: colors.textPrimary,
-    opacity: 0.7,
-    marginBottom: 4,
+  budgetCategoryRow: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  budgetPillValue: {
-    fontSize: 22,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
+  budgetCategoryValue: {
+    fontSize: 16,
   },
-  budgetPillValueSub: {
-    fontSize: 13,
-    fontWeight: "400",
-    opacity: 0.7,
+  viewTxnBtn: {
+    padding: 4,
   },
-  budgetPillRemaining: {
+  seeAllText: {
     fontSize: 14,
     fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
-  },
-  budgetProgressTrack: {
-    height: 16,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: 9999,
-  },
-  budgetProgressFill: {
-    height: "100%" as unknown as number,
-    backgroundColor: colors.primary,
-    borderRadius: 9999,
+    color: "#ffffff",
+    opacity: 0.8,
   },
   sectionTitle: {
     fontSize: 20,
@@ -819,12 +897,17 @@ const styles = StyleSheet.create({
     right: -10,
     opacity: 0.2,
   },
+  accountsWidgetTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
   accountsWidgetTitle: {
     fontSize: 18,
     fontFamily: fonts.bold,
     color: "#ffffff",
     opacity: 0.9,
-    marginBottom: 20,
   },
   accountsWidgetList: {
     position: "relative",

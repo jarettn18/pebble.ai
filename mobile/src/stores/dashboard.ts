@@ -11,6 +11,7 @@ export type AccountSummary = {
 };
 
 export type BudgetSummary = {
+  category_id: string;
   category_name: string | null;
   amount: string;
   spent: string;

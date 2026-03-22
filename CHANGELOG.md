@@ -1,5 +1,86 @@
 # Changelog
 
+## 2026-03-22 — Drill-Down Screens, Shared Components & Transactions Restyle
+
+### Backend — Dashboard Budget Summary
+- Added `category_id` field to `BudgetSummary` schema (`schemas/dashboard.py`) so the frontend can filter transactions by budget category
+- Updated dashboard service (`services/dashboard.py`) to include `category_id` in the budget summaries response
+
+### Mobile — Budget Transactions Screen
+- Created `app/budget-transactions.tsx` — dedicated screen for viewing transactions within a budget category
+- Shows budget summary card with category name, spent amount, progress bar (spent vs budgeted), and remaining/over amount
+- Fetches transactions filtered by `category_id` and current month date range
+- Tapping a transaction navigates to the transaction detail screen
+- Registered route in `_layout.tsx` with "Budget Transactions" header
+
+### Mobile — Account Transactions Screen
+- Created `app/account-transactions.tsx` — dedicated screen for viewing transactions within a specific account
+- Shows account summary card with institution name, account name, and current balance (debt accounts shown in red)
+- Fetches transactions filtered by `account_id`
+- Dashboard account taps now navigate to this dedicated screen instead of the transactions tab with a filter
+
+### Mobile — Dashboard Budget Categories
+- Budget category rows in the expanded breakdown are now tappable, navigating to the budget transactions screen
+- Added list icon button on each category row for quick access to filtered transactions
+- Replaced "X% of $Y" display with "$X left of $Y" (or "$X over of $Y" in red) using `Math.floor` to drop cents
+- Budget expand/collapse chevron now uses sage green (`colors.primary`) instead of muted gray
+- Reduced `progressBarStyles.value` font size from 22 to 16
+
+### Mobile — Budgets Tab
+- Added list icon button on each budget row that navigates to the budget transactions screen (tap-to-edit preserved)
+- Replaced percentage display with "$X left of $Y" format matching the dashboard
+
+### Mobile — Shared TransactionListCard Component
+- Extracted `TransactionListCard` from duplicated code across 4 screens into `src/components/TransactionListCard.tsx`
+- Handles card wrapper, "Transactions (N)" title, row mapping with separators, tap-to-detail navigation, and empty state
+- Refactored `spending.tsx`, `income.tsx`, `budget-transactions.tsx`, and `account-transactions.tsx` to use the shared component
+- Removed duplicated card, empty state styles and unused imports from all 4 screens
+
+### Mobile — Dashboard "See All" Link
+- Added "See all" link inline with "My Accounts" header in the accounts widget card
+- Navigates to the Transactions tab for full transaction browsing
+
+### Mobile — Transactions Screen Restyle
+- Replaced hidden filter toggle with always-visible filter card containing search, type chips, and category chips
+- Transaction list now renders inside `TransactionListCard` (card with border/shadow) instead of a plain FlatList
+- Wrapped everything in a ScrollView with pull-to-refresh support
+- Removed filter toggle button, active filters summary bar, and `showFilters` state
+- FAB (+) button for creating transactions preserved
+- Uses `fonts.medium`/`fonts.semiBold` from theme instead of inline `fontWeight`
+
+### Mobile — formatCurrency Enhancement
+- Updated `formatCurrency` in `utils/dashboard.ts` to drop `.00` decimals when the value is a whole number (e.g., "$500" instead of "$500.00")
+
+---
+
+## 2026-03-22 — Component Refactors, Budget Breakdown & Transaction Lists
+
+### Mobile — Shared TransactionRow Component
+- Extracted `TransactionRow`, `TransactionSeparator`, and `Transaction` type from `transactions.tsx` into reusable `src/components/TransactionRow.tsx`
+- Transaction list on transactions tab now imports from shared component
+
+### Mobile — Centralized Progress Bar Styles
+- Created `progressBarStyles` in `theme.ts` — shared container, header, label, value, track, and fill styles used across all budget/progress bar UIs
+- Added `colors.progressBar` (`#45655a`) as default progress bar fill color
+- Replaced duplicated progress bar styles in `budgets.tsx` (summary pill + individual budget cards) and `index.tsx` (dashboard budget pill)
+- Replaced duplicated horizontal bar track/fill styles in `income.tsx` and `spending.tsx` with shared `progressBarStyles.track` / `progressBarStyles.fill`
+
+### Mobile — Dashboard Budget Expandable Breakdown
+- Added chevron toggle below the overall budget pill on the dashboard
+- Tapping chevron expands to show per-category budget breakdowns, each with its own progress bar, percentage, and remaining amount
+- Collapsing animates smoothly via `LayoutAnimation.easeInEaseOut`
+
+### Mobile — Transaction Lists on Spending & Income Screens
+- `spending.tsx` and `income.tsx` now fetch current month's transactions (filtered by expense/income type) and display them below category breakdowns
+- Transaction rows are tappable, navigating to the transaction detail screen
+- Uses shared `TransactionRow` component
+
+### Mobile — Budget Store: Non-Blocking Sync
+- Budget loading no longer blocks on transaction sync — fires `load()` in background with `.catch(() => {})`
+- Silent reload (no loading spinner) when budgets already exist in state, preventing UI flash on revisit
+
+---
+
 ## 2026-03-22 — Dashboard Accounts Widget & Styling Polish
 
 ### Dashboard — Accounts Widget
