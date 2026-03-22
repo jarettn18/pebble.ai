@@ -14,7 +14,7 @@ import {
   Pressable,
 } from "react-native";
 import { useFocusEffect, useRouter, useNavigation } from "expo-router";
-import type { AccountSummary, AssetSummary } from "../../src/stores/dashboard";
+import type { AssetSummary } from "../../src/stores/dashboard";
 import { useAuthStore } from "../../src/stores/auth";
 import { useDashboardStore } from "../../src/stores/dashboard";
 import { useAccountsStore } from "../../src/stores/accounts";
@@ -37,26 +37,6 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   investment: "Investment",
 };
 
-const ACCOUNT_TYPE_ICONS: Record<string, string> = {
-  depository: "bank-outline",
-  credit: "credit-card-outline",
-  loan: "cash-minus",
-  investment: "chart-line",
-};
-
-const ACCOUNT_ICON_BG: Record<string, string> = {
-  depository: colors.primaryFixed,
-  credit: colors.secondaryContainer,
-  loan: colors.tertiaryFixed,
-  investment: `${colors.primaryFixed}99`,
-};
-
-const ACCOUNT_ICON_FG: Record<string, string> = {
-  depository: colors.primary,
-  credit: colors.secondary,
-  loan: colors.tertiary,
-  investment: colors.primary,
-};
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
   primary_residence: "Primary Residence",
@@ -82,43 +62,6 @@ const ASSET_TYPE_ICONS: Record<string, string> = {
   other: "package-variant-closed",
 };
 
-function AccountRow({ account, onPress }: { account: AccountSummary; onPress: () => void }) {
-  const bal = account.balance_current ? parseFloat(account.balance_current) : null;
-  const isDebt = account.type === "credit" || account.type === "loan";
-  const typeLabel = ACCOUNT_TYPE_LABELS[account.type] ?? account.type;
-  const iconName = ACCOUNT_TYPE_ICONS[account.type] ?? "wallet-outline";
-  const iconBg = ACCOUNT_ICON_BG[account.type] ?? colors.primaryFixed;
-  const iconFg = ACCOUNT_ICON_FG[account.type] ?? colors.primary;
-
-  return (
-    <TouchableOpacity style={styles.itemCard} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.itemCardRow}>
-        <View style={styles.itemCardLeft}>
-          <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
-            <MaterialCommunityIcons name={iconName as any} size={22} color={iconFg} />
-          </View>
-          <View style={styles.itemCardInfo}>
-            <Text style={styles.itemCardName} numberOfLines={1}>{account.name}</Text>
-            <Text style={styles.itemCardSub}>
-              {account.institution_name ? `${account.institution_name} · ` : ""}{typeLabel}
-              {account.subtype ? ` · ${account.subtype}` : ""}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.itemCardRight}>
-          {bal !== null && Number.isFinite(bal) && (
-            <>
-              <Text style={[styles.itemCardAmount, isDebt && styles.negative]}>
-                {isDebt ? "-" : ""}{formatCurrency(bal)}
-              </Text>
-              <Text style={styles.itemCardLabel}>BALANCE</Text>
-            </>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
 
 function AssetRow({ asset, onPress }: { asset: AssetSummary; onPress: () => void }) {
   const value = parseFloat(asset.estimated_value);
@@ -152,6 +95,7 @@ export default function DashboardScreen() {
   const user = useAuthStore((s) => s.user);
   const [exchanging, setExchanging] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
 
   const {
     netWorth,
@@ -232,9 +176,11 @@ export default function DashboardScreen() {
             `Linked ${result.accounts_linked} account${result.accounts_linked === 1 ? "" : "s"} from ${metadata.institution?.name ?? "your institution"}`
           );
           // Refresh all data after linking
-          refreshAccounts();
-          syncTransactions();
-          refreshDashboard();
+          await Promise.all([
+            refreshAccounts(),
+            syncTransactions(),
+            refreshDashboard(),
+          ]);
         }
       } catch (err) {
         if (!cancelled) {
@@ -293,6 +239,8 @@ export default function DashboardScreen() {
         </Text>
         <Text style={styles.subtitle}>Your financial overview</Text>
 
+        {/* Onboarding popup — shown when no accounts or assets */}
+
       <View style={styles.card}>
         <Text style={styles.netWorthLabel}>YOUR NETWORTH</Text>
         {dashLoading && !hasAccounts ? (
@@ -312,8 +260,10 @@ export default function DashboardScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          snapToInterval={cardWidth + 12}
+          snapToOffsets={[0, cardWidth + 12]}
+          snapToEnd={false}
           decelerationRate="fast"
+          disableIntervalMomentum
           onMomentumScrollEnd={onCarouselScroll}
           contentContainerStyle={styles.carouselContent}
         >
@@ -415,16 +365,42 @@ export default function DashboardScreen() {
 
       {/* Accounts */}
       {accounts.length > 0 && (
-        <>
-          <Text style={styles.sectionTitle}>Accounts</Text>
-          {accounts.map((acct) => (
-            <AccountRow
-              key={acct.id}
-              account={acct}
-              onPress={() => router.push(`/(tabs)/transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}`)}
-            />
-          ))}
-        </>
+        <View style={styles.accountsWidget}>
+          {/* Decorative background icon */}
+          <View style={styles.accountsWidgetDecor}>
+            <MaterialCommunityIcons name="wallet-outline" size={140} color="#ffffff" />
+          </View>
+          <Text style={styles.accountsWidgetTitle}>My Accounts</Text>
+          <View style={styles.accountsWidgetList}>
+            {accounts.map((acct, index) => (
+              <TouchableOpacity
+                key={acct.id}
+                style={[
+                  styles.accountsWidgetRow,
+                  index < accounts.length - 1 && styles.accountsWidgetRowBorder,
+                ]}
+                onPress={() => router.push(`/(tabs)/transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}`)}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 0.75, marginRight: 12 }}>
+                  <Text style={styles.accountsWidgetSub}>
+                    {acct.institution_name ?? ACCOUNT_TYPE_LABELS[acct.type] ?? acct.type}
+                  </Text>
+                  <Text style={styles.accountsWidgetName} numberOfLines={1} ellipsizeMode="tail">{acct.name}</Text>
+                </View>
+                {acct.balance_current && (
+                  <Text style={[
+                    styles.accountsWidgetBalance,
+                    (acct.type === "credit" || acct.type === "loan") && styles.accountsWidgetBalanceDebt,
+                  ]}>
+                    {(acct.type === "credit" || acct.type === "loan") ? "-" : ""}
+                    {formatCurrency(parseFloat(acct.balance_current))}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
       )}
 
       {/* Assets */}
@@ -445,6 +421,27 @@ export default function DashboardScreen() {
     </ScrollView>
 
       {/* Dropdown menu */}
+      {/* Onboarding popup */}
+      {!hasAccounts && !dashLoading && showOnboarding && (
+        <>
+          <Pressable style={styles.onboardingOverlay} onPress={() => setShowOnboarding(false)} />
+          <View style={styles.onboardingPopup}>
+            <View style={styles.onboardingTail} />
+            <TouchableOpacity
+              style={styles.onboardingClose}
+              onPress={() => setShowOnboarding(false)}
+              hitSlop={12}
+            >
+              <MaterialCommunityIcons name="close" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+            <Text style={styles.onboardingTitle}>Get Started</Text>
+            <Text style={styles.onboardingText}>
+              Tap the <Text style={styles.onboardingBold}>+</Text> button to add an account
+            </Text>
+          </View>
+        </>
+      )}
+
       {showAddMenu && (
         <>
           <Pressable style={styles.addMenuOverlay} onPress={() => setShowAddMenu(false)} />
@@ -629,7 +626,7 @@ const styles = StyleSheet.create({
   },
   budgetPill: {
     padding: 20,
-    backgroundColor: `${colors.primaryFixed}4D`,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     marginBottom: 16,
   },
@@ -665,7 +662,7 @@ const styles = StyleSheet.create({
   },
   budgetProgressTrack: {
     height: 16,
-    backgroundColor: "rgba(255,255,255,0.4)",
+    backgroundColor: "rgba(255,255,255,0.95)",
     borderRadius: 9999,
   },
   budgetProgressFill: {
@@ -743,5 +740,126 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginTop: 12,
+  },
+  onboardingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    zIndex: 20,
+  },
+  onboardingPopup: {
+    position: "absolute",
+    top: 10,
+    right: 7,
+    width: 160,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    padding: 14,
+    alignItems: "center",
+    zIndex: 21,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  onboardingTail: {
+    position: "absolute",
+    top: -8,
+    right: 16,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: colors.surface,
+  },
+  onboardingClose: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+  },
+  onboardingTitle: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+    marginBottom: 6,
+  },
+  onboardingText: {
+    fontSize: 14,
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  onboardingBold: {
+    fontFamily: fonts.bold,
+    color: colors.primary,
+  },
+  accountsWidget: {
+    backgroundColor: "#2d5a56",
+    borderRadius: borderRadius.lg,
+    padding: 24,
+    marginBottom: 16,
+    overflow: "hidden",
+    position: "relative",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 6,
+  },
+  accountsWidgetDecor: {
+    position: "absolute",
+    top: -10,
+    right: -10,
+    opacity: 0.2,
+  },
+  accountsWidgetTitle: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: "#ffffff",
+    opacity: 0.9,
+    marginBottom: 20,
+  },
+  accountsWidgetList: {
+    position: "relative",
+    zIndex: 1,
+  },
+  accountsWidgetRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    paddingVertical: 12,
+  },
+  accountsWidgetRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+  accountsWidgetSub: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    color: "#ffffff",
+    opacity: 0.7,
+    marginBottom: 2,
+  },
+  accountsWidgetName: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: "#ffffff",
+  },
+  accountsWidgetBalance: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: "#ffffff",
+    flexShrink: 0,
+    textAlign: "right",
+  },
+  accountsWidgetBalanceDebt: {
+    color: "#adeef0",
   },
 });

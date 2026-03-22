@@ -286,7 +286,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Smooth bezier curves on line charts with enhanced gradient fill
 - [x] Centralized theme with Plus Jakarta Sans + Inter font families
 - [x] MaterialCommunityIcons for iOS-safe icon rendering
-- [x] Carousel snap alignment fix using `snapToInterval`
+- [x] Carousel snap alignment fix using `snapToOffsets` with `disableIntervalMomentum`
 - [x] Interactive donut chart for spending by category on dashboard (tap segments for amounts)
 - [x] Income summary card on dashboard with donut chart
 - [x] Income detail page (`app/income.tsx`) with monthly total, 6-month trend chart, category breakdown
@@ -297,10 +297,14 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Asset detail/edit screen with save changes + delete with confirmation
 - [x] Assets card on dashboard with type labels and estimated values
 - [x] Header "+" button with dropdown menu for adding accounts and assets
+- [x] Accounts widget card with dark teal-green background, white text, decorative icon overlay, and shadow
+- [x] Account names truncate with ellipsis (75% width) to prevent overlap with balance
 - [x] Account-filtered transactions (tap account → transactions filtered by that account)
 - [x] Multi-select filters (multiple types + categories simultaneously)
 - [x] Account name displayed in transaction rows
 - [x] Net worth chart renders when user has assets but no bank accounts
+- [x] Overall budget pill uses surface color for better visual consistency
+- [x] Budget progress bar track near-white for contrast against surface background
 
 ---
 

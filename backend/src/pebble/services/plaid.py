@@ -1,7 +1,10 @@
+import logging
 import uuid
 from datetime import date as date_type, datetime, timezone
 
 import httpx
+
+logger = logging.getLogger(__name__)
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pebble.config import settings
 from pebble.models.account import Account, PlaidItem
 from pebble.models.transaction import Transaction
-from pebble.services.categories import get_plaid_category_map
+from pebble.services.categories import get_category_id_by_name, get_plaid_category_map
 from pebble.utils.security import decrypt_value, encrypt_value
 
 PLAID_ENV_URLS = {
@@ -131,13 +134,45 @@ async def exchange_public_token(
     return {"item_id": str(plaid_item.id), "accounts_linked": accounts_linked}
 
 
+# Plaid INCOME detailed subcategories → internal category name
+_INCOME_DETAILED_MAP: dict[str, str] = {
+    "INCOME_INTEREST_EARNED": "Interest",
+    "INCOME_DIVIDENDS": "Dividends",
+}
+
+# Fallback: keywords in transaction name → category name (for when Plaid
+# doesn't provide a detailed subcategory, e.g. sandbox)
+_INCOME_NAME_KEYWORDS: list[tuple[list[str], str]] = [
+    (["interest", "intrst", "int pymnt"], "Interest"),
+    (["dividend", "div pymnt"], "Dividends"),
+]
+
+
 def _resolve_category_id(
-    txn: dict, category_map: dict[str, uuid.UUID]
+    txn: dict,
+    category_map: dict[str, uuid.UUID],
+    detailed_overrides: dict[str, uuid.UUID],
 ) -> uuid.UUID | None:
     pfc = txn.get("personal_finance_category")
     if not pfc:
         return None
-    return category_map.get(pfc.get("primary"))
+    primary = pfc.get("primary")
+    detailed = pfc.get("detailed")
+
+    # For INCOME, check detailed subcategory first, then fall back to name matching
+    if primary == "INCOME":
+        if detailed and detailed in detailed_overrides:
+            return detailed_overrides[detailed]
+
+        # Fallback: match transaction name keywords
+        name_lower = (txn.get("name") or "").lower()
+        for keywords, cat_name in _INCOME_NAME_KEYWORDS:
+            if any(kw in name_lower for kw in keywords):
+                cat_id = detailed_overrides.get(f"_name_{cat_name}")
+                if cat_id:
+                    return cat_id
+
+    return category_map.get(primary)
 
 
 async def sync_transactions(
@@ -171,6 +206,19 @@ async def sync_transactions(
 
     category_map = await get_plaid_category_map(db)
 
+    # Build detailed overrides for INCOME subcategories (Interest, Dividends, etc.)
+    detailed_overrides: dict[str, uuid.UUID] = {}
+    income_cat_names = set(_INCOME_DETAILED_MAP.values()) | {cat for _, cat in _INCOME_NAME_KEYWORDS}
+    for cat_name in income_cat_names:
+        cat_id = await get_category_id_by_name(db, cat_name)
+        if cat_id:
+            # Add under detailed key
+            for detailed_name, mapped_name in _INCOME_DETAILED_MAP.items():
+                if mapped_name == cat_name:
+                    detailed_overrides[detailed_name] = cat_id
+            # Add under name-fallback key
+            detailed_overrides[f"_name_{cat_name}"] = cat_id
+
     cursor = plaid_item.cursor
     total_added = 0
     total_modified = 0
@@ -198,7 +246,7 @@ async def sync_transactions(
                 name=txn["name"],
                 merchant_name=txn.get("merchant_name"),
                 pending=txn.get("pending", False),
-                category_id=_resolve_category_id(txn, category_map),
+                category_id=_resolve_category_id(txn, category_map, detailed_overrides),
             ))
             total_added += 1
 
@@ -216,7 +264,7 @@ async def sync_transactions(
                 existing_txn.name = txn["name"]
                 existing_txn.merchant_name = txn.get("merchant_name")
                 existing_txn.pending = txn.get("pending", False)
-                existing_txn.category_id = _resolve_category_id(txn, category_map)
+                existing_txn.category_id = _resolve_category_id(txn, category_map, detailed_overrides)
                 total_modified += 1
 
         # Process removed transactions

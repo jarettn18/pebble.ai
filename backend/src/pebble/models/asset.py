@@ -27,7 +27,7 @@ class Asset(Base, TimestampMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(255))
     asset_type: Mapped[AssetType] = mapped_column(Enum(AssetType))
-    estimated_value: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    estimated_value: Mapped[Decimal] = mapped_column(Numeric(16, 2))
     address: Mapped[str | None] = mapped_column(String(500))
     notes: Mapped[str | None] = mapped_column(Text)
 

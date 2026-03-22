@@ -19,7 +19,7 @@ export const colors = {
 
   // Surfaces
   background: "#ffffff",
-  surface: "#f5efef",
+  surface: "#e4e8e3",
   surfaceContainer: "#eeeeee",
   surfaceContainerLow: "#f3f3f3",
   surfaceContainerHigh: "#e8e8e8",

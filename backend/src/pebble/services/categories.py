@@ -16,6 +16,15 @@ async def get_plaid_category_map(db: AsyncSession) -> dict[str, uuid.UUID]:
     return {row.plaid_primary: row.id for row in result.all()}
 
 
+async def get_category_id_by_name(db: AsyncSession, name: str) -> uuid.UUID | None:
+    """Return the UUID for a category by its name, or None."""
+    result = await db.execute(
+        select(Category.id).where(Category.name == name)
+    )
+    row = result.first()
+    return row.id if row else None
+
+
 async def get_all_categories(db: AsyncSession) -> dict:
     """Return all categories ordered by name."""
     result = await db.execute(select(Category).order_by(Category.name))

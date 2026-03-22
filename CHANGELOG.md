@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-03-22 — Dashboard Accounts Widget & Styling Polish
+
+### Dashboard — Accounts Widget
+- Replaced individual account row cards with a unified "My Accounts" widget card
+- Widget styled with dark teal-green background (`#2d5a56`), white text, and `shadow-xl` depth
+- Decorative wallet icon overlay at 20% opacity in top-right corner
+- Account rows separated by subtle `rgba(255,255,255,0.1)` dividers
+- Account names truncate with ellipsis at 75% row width to prevent overlap with balance
+- Debt balances (credit/loan) displayed in teal (`#adeef0`) for distinction
+- Balances aligned to bottom of account name row via `alignItems: flex-end`
+- Removed old `AccountRow` component and unused account icon/color constants
+
+### Dashboard — Budget Pill
+- Overall budget pill background changed from translucent primary-fixed to `colors.surface` for visual consistency
+- Budget progress bar track changed to near-white (`rgba(255,255,255,0.95)`) for better contrast against surface
+
+### Dashboard — Carousel Fix
+- Replaced `snapToInterval` with explicit `snapToOffsets` and `disableIntervalMomentum` to fix carousel cards getting stuck between positions
+
+---
+
 ## 2026-03-21 — UI Overhaul: Charts, Design System & Dashboard UX
 
 ### Theme & Design System

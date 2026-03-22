@@ -13,7 +13,7 @@ class Budget(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=gen_uuid)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     category_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("categories.id"))
-    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    amount: Mapped[Decimal] = mapped_column(Numeric(16, 2))
     month: Mapped[int] = mapped_column(Integer)  # YYYYMM format, e.g. 202603
     year: Mapped[int] = mapped_column(Integer)
 

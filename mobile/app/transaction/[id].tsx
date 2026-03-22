@@ -13,6 +13,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiRequest } from "../../src/api/client";
 import { useTransactionsStore } from "../../src/stores/transactions";
+import { useDashboardStore } from "../../src/stores/dashboard";
 import { colors, borderRadius, shadows } from "../../src/theme";
 
 type TransactionDetail = {
@@ -46,6 +47,7 @@ export default function TransactionDetailScreen() {
     (s) => s.updateTransactionCategory
   );
   const removeTransaction = useTransactionsStore((s) => s.removeTransaction);
+  const refreshDashboard = useDashboardStore((s) => s.refresh);
 
   const [txn, setTxn] = useState<TransactionDetail | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -90,6 +92,7 @@ export default function TransactionDetailScreen() {
         method: "PATCH",
         body: { category_id: category.id },
       });
+      refreshDashboard();
     } catch {
       // Revert on failure
       setTxn({ ...txn, category_id: prevCategoryId, category_name: prevCategoryName });
@@ -111,6 +114,7 @@ export default function TransactionDetailScreen() {
         method: "PATCH",
         body: { category_id: null },
       });
+      refreshDashboard();
     } catch {
       setTxn({ ...txn, category_id: prevCategoryId, category_name: prevCategoryName });
       updateTransactionCategory(txn.id, prevCategoryName);
