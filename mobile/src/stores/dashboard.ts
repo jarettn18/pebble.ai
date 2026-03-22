@@ -26,6 +26,13 @@ export type IncomeByCategory = {
   amount: string;
 };
 
+export type AssetSummary = {
+  id: string;
+  name: string;
+  asset_type: string;
+  estimated_value: string;
+};
+
 export type MonthlySpendingPoint = {
   month: number;
   year: number;
@@ -38,6 +45,7 @@ type DashboardResponse = {
   monthly_spending: string;
   monthly_income: string;
   accounts: AccountSummary[];
+  assets: AssetSummary[];
   budget_summaries: BudgetSummary[];
   spending_by_category: SpendingByCategory[];
   income_by_category: IncomeByCategory[];
@@ -50,6 +58,7 @@ type DashboardState = {
   monthlySpending: number;
   monthlyIncome: number;
   accounts: AccountSummary[];
+  assets: AssetSummary[];
   budgetSummaries: BudgetSummary[];
   spendingByCategory: SpendingByCategory[];
   incomeByCategory: IncomeByCategory[];
@@ -72,6 +81,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   monthlySpending: 0,
   monthlyIncome: 0,
   accounts: [],
+  assets: [],
   budgetSummaries: [],
   spendingByCategory: [],
   incomeByCategory: [],
@@ -98,6 +108,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         monthlySpending: parseFloat(data.monthly_spending),
         monthlyIncome: parseFloat(data.monthly_income),
         accounts: data.accounts,
+        assets: data.assets ?? [],
         budgetSummaries: data.budget_summaries,
         spendingByCategory: data.spending_by_category,
         incomeByCategory: data.income_by_category,

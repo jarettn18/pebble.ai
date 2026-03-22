@@ -30,3 +30,4 @@ class User(Base, TimestampMixin):
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")  # noqa: F821
     budgets: Mapped[list["Budget"]] = relationship(back_populates="user")  # noqa: F821
     conversations: Mapped[list["ChatConversation"]] = relationship(back_populates="user")  # noqa: F821
+    assets: Mapped[list["Asset"]] = relationship(back_populates="user")  # noqa: F821

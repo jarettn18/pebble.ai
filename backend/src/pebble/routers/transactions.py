@@ -30,6 +30,7 @@ async def list_transactions(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     type: str | None = Query(default=None, pattern="^(expense|income)$"),
+    account_id: str | None = Query(default=None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -43,6 +44,7 @@ async def list_transactions(
         date_from=date_from,
         date_to=date_to,
         txn_type=type,
+        account_id=account_id,
     )
 
 

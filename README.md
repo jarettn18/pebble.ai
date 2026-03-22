@@ -40,19 +40,22 @@ pebble/
 │       │   ├── transaction.py       # Transaction (indexed on user_id+date)
 │       │   ├── category.py          # Category
 │       │   ├── budget.py            # Budget (per category per month)
+│       │   ├── asset.py             # Asset (properties + vehicles, net worth)
 │       │   ├── chat.py              # ChatConversation + ChatMessage
 │       │   └── api_usage.py         # API usage metering
 │       ├── schemas/                 # Pydantic request/response
 │       │   ├── auth.py              # Register, Login, Token, User schemas
 │       │   ├── account.py           # AccountOut, AccountListResponse
+│       │   ├── asset.py             # AssetOut, Create/Update, ListResponse
 │       │   ├── budget.py            # BudgetOut, Create/Update, ListResponse
 │       │   ├── category.py          # CategoryOut, CategoryListResponse
-│       │   ├── dashboard.py         # DashboardResponse, NetWorthHistory, SpendingByCategory
+│       │   ├── dashboard.py         # DashboardResponse, NetWorthHistory, SpendingByCategory, AssetSummary
 │       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
 │       │   └── transaction.py       # TransactionOut, Detail, Create, Update, List schemas
 │       ├── routers/
 │       │   ├── auth.py              # /v1/auth/* (register, login, refresh, me)
 │       │   ├── accounts.py          # /v1/accounts (list user accounts)
+│       │   ├── assets.py            # /v1/assets (CRUD for properties + vehicles)
 │       │   ├── budgets.py           # /v1/budgets (CRUD)
 │       │   ├── categories.py        # /v1/categories (list all)
 │       │   ├── dashboard.py         # /v1/dashboard (aggregated overview + net worth history)
@@ -61,6 +64,7 @@ pebble/
 │       ├── services/
 │       │   ├── auth.py              # Auth business logic
 │       │   ├── accounts.py          # Account queries with institution join
+│       │   ├── assets.py            # Asset CRUD (properties + vehicles)
 │       │   ├── budgets.py           # Budget CRUD + spending calculation
 │       │   ├── categories.py        # Category queries, Plaid category map
 │       │   ├── dashboard.py         # Aggregated dashboard + net worth history
@@ -94,14 +98,17 @@ pebble/
 │   │   │   ├── create.tsx           # Create transaction (expense/income toggle)
 │   │   │   └── [id].tsx             # Transaction detail, edit & delete screen
 │   │   ├── spending.tsx             # Spending summary (trend chart, category bars)
-│   │   └── income.tsx              # Income summary (trend chart, category bars)
+│   │   ├── income.tsx              # Income summary (trend chart, category bars)
+│   │   ├── add-asset.tsx           # Add asset form (properties + vehicles)
+│   │   └── asset/
+│   │       └── [id].tsx            # Asset detail, edit & delete screen
 │   └── src/
 │       ├── api/
 │       │   └── client.ts            # API client with auto JWT refresh
 │       ├── components/
-│       │   ├── LineChart.tsx         # SVG line chart with gradient, y-axis labels, x-axis labels
+│       │   ├── LineChart.tsx         # SVG line chart with bezier curves, gradient fill, axis labels
 │       │   ├── NetWorthChart.tsx     # Net worth history chart with period tabs (1M/3M/1Y/5Y)
-│       │   └── PieChart.tsx          # SVG pie chart with legend
+│       │   └── PieChart.tsx          # SVG donut chart with interactive segments + legend
 │       ├── hooks/
 │       │   └── usePlaidLink.ts      # Plaid Link hook (fetch token, open modal)
 │       ├── utils/
@@ -109,6 +116,7 @@ pebble/
 │       └── stores/
 │           ├── auth.ts              # Zustand auth store
 │           ├── accounts.ts          # Zustand accounts store (24h cache)
+│           ├── assets.ts            # Zustand assets store (CRUD)
 │           ├── budgets.ts           # Zustand budgets store
 │           ├── dashboard.ts         # Zustand dashboard store (server-side aggregation)
 │           └── transactions.ts      # Zustand transactions store (24h cache)
@@ -118,7 +126,7 @@ pebble/
 
 ## Database Schema
 
-9 tables, all with UUID primary keys:
+10 tables, all with UUID primary keys:
 
 | Table | Purpose |
 |-------|---------|
@@ -128,6 +136,7 @@ pebble/
 | `categories` | Spending categories (name, icon, color, Plaid mapping) |
 | `transactions` | Financial transactions, indexed on `(user_id, date DESC)` |
 | `budgets` | Monthly budget per category |
+| `assets` | Properties & vehicles with estimated values (contributes to net worth) |
 | `chat_conversations` | AI chat conversation threads |
 | `chat_messages` | Individual messages (user/assistant roles) |
 | `api_usage` | Token + request counts per user per billing period |
@@ -256,6 +265,13 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Downsampling for long chart periods (3-day for 1Y, 7-day for 5Y) with guaranteed latest point
 - [x] Dashboard returns monthly income, income by category, and income over time (6 months)
 
+### Backend
+- [x] Asset CRUD service + router (`POST/GET/PUT/DELETE /v1/assets`) — properties + vehicles
+- [x] Asset model with 9 types (primary_residence, rental, investment_property, vacation, land, car, motorcycle, boat, other)
+- [x] Net worth includes asset estimated values (dashboard + history chart)
+- [x] Transaction filtering by account_id, multi-select category_ids, multi-select types
+- [x] Account name included in transaction responses (eager-loaded via joinedload)
+
 ### Mobile
 - [x] Budget creation/edit screens with category picker
 - [x] Budget progress bars in dashboard and budgets tab
@@ -266,12 +282,25 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Net worth chart with period tabs (1M/3M/1Y/5Y), y-axis dollar labels, x-axis date labels
 - [x] Dashboard auto-refreshes balances on tab focus (15-min TTL, cost-efficient)
 - [x] SVG chart re-rendering fix (keyed on path data to bust react-native-svg cache)
-- [x] Pie chart for spending by category on dashboard
-- [x] Income summary card on dashboard with pie chart (green color scheme)
+- [x] Extended 8-color category palette (Sage, Coral, Ochre, Lavender, Terracotta, Teal, Forest Green, Ocean Blue)
+- [x] Smooth bezier curves on line charts with enhanced gradient fill
+- [x] Centralized theme with Plus Jakarta Sans + Inter font families
+- [x] MaterialCommunityIcons for iOS-safe icon rendering
+- [x] Carousel snap alignment fix using `snapToInterval`
+- [x] Interactive donut chart for spending by category on dashboard (tap segments for amounts)
+- [x] Income summary card on dashboard with donut chart
 - [x] Income detail page (`app/income.tsx`) with monthly total, 6-month trend chart, category breakdown
 - [x] Spending/Income cards in horizontal paging carousel with dot indicators
 - [x] Dashboard silent reload on focus (no scroll-to-top snap)
 - [x] API client handles Pydantic array validation errors and 204 No Content responses
+- [x] Add asset screen with type chip picker, name, value, conditional address, notes
+- [x] Asset detail/edit screen with save changes + delete with confirmation
+- [x] Assets card on dashboard with type labels and estimated values
+- [x] Header "+" button with dropdown menu for adding accounts and assets
+- [x] Account-filtered transactions (tap account → transactions filtered by that account)
+- [x] Multi-select filters (multiple types + categories simultaneously)
+- [x] Account name displayed in transaction rows
+- [x] Net worth chart renders when user has assets but no bank accounts
 
 ---
 
@@ -289,11 +318,13 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] MFA phone authentication
 
 ### Known Bugs
-- [ ] Link session ended under 'Add Another Account' when plaid linking is cancelled
+- [ ] 'Link session ended' error under 'Add Another Account' when plaid linking is cancelled
 - [ ] Budgets get a hanging loading icon if the back tab is pressed while making a budget
 - [ ] Positive values that are categorized do not update the progress bar on the budget (design choice?)
 - [ ] Handle budgets of the same category
 - [x] Net Worth number does not reflect real-time changes made to transactions, add focus refresh to dashboard tab
+- [ ] Fix the way net worth is plotted on the chart. Maybe just plot each individual day regardless of calculation time and zustand store the data.
+- [ ] Income summary not refreshing when transactions are categorized. Will need to update based on refresh.
 
 ### Phase 2 — Plaid + Transactions
 - [x] Plaid service: create link token, exchange public token, encrypt/store access token
@@ -322,10 +353,12 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Mobile: Add/Delete a transaction (with expense/income toggle)
 - [ ] Mobile: Loading states, error handling, empty states across all screens
 - [x] Mobile: Income/Earning summary charts
-- [ ] Mobile: Transaction details by account when tapping on an account in dashboard
-- [ ] Router: Add a property end point `POST/GET/PUT/DELETE /v1/Property`
-- [ ] Mobile: Add a property frontend
-- [ ] Mobile: Dropdown menu for adding accounts and property
+- [x] Mobile: Transaction details by account when tapping on an account in dashboard
+- [x] Router: Add asset endpoints `POST/GET/PUT/DELETE /v1/assets` (properties + vehicles)
+- [x] Mobile: Add asset frontend (add, detail/edit, delete screens)
+- [x] Mobile: Header "+" dropdown menu for adding accounts and property
+- [x] Mobile: Attach the account to the transactions details
+- [x] Mobile: Refactor filtering (multi-select types + categories, account filter)
 
 ### Phase 4 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id

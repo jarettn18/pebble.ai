@@ -12,6 +12,7 @@ import { useRouter } from "expo-router";
 import { useAccountsStore, Account } from "../../src/stores/accounts";
 import { useTransactionsStore } from "../../src/stores/transactions";
 import { apiRequest } from "../../src/api/client";
+import { colors, borderRadius } from "../../src/theme";
 
 type Category = {
   id: string;
@@ -171,7 +172,7 @@ export default function CreateTransactionScreen() {
           value={amount}
           onChangeText={setAmount}
           placeholder="e.g. 42.50"
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textMuted}
           keyboardType="decimal-pad"
         />
 
@@ -182,7 +183,7 @@ export default function CreateTransactionScreen() {
           value={date}
           onChangeText={setDate}
           placeholder="YYYY-MM-DD"
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textMuted}
         />
 
         {/* Name */}
@@ -192,7 +193,7 @@ export default function CreateTransactionScreen() {
           value={name}
           onChangeText={setName}
           placeholder="Transaction name"
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textMuted}
         />
 
         {/* Merchant */}
@@ -202,7 +203,7 @@ export default function CreateTransactionScreen() {
           value={merchantName}
           onChangeText={setMerchantName}
           placeholder="Merchant name"
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textMuted}
         />
 
         {/* Category */}
@@ -250,7 +251,7 @@ export default function CreateTransactionScreen() {
           value={notes}
           onChangeText={setNotes}
           placeholder="Add a note..."
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textMuted}
           multiline
           textAlignVertical="top"
         />
@@ -262,7 +263,7 @@ export default function CreateTransactionScreen() {
           disabled={isSaving}
         >
           {isSaving ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={colors.textOnPrimary} />
           ) : (
             <Text style={styles.saveBtnText}>Add Transaction</Text>
           )}
@@ -275,28 +276,28 @@ export default function CreateTransactionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     paddingTop: 60,
     paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: colors.border,
   },
   backArrow: {
     fontSize: 24,
-    color: "#1a1a2e",
+    color: colors.primary,
     fontWeight: "600",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   body: {
     flex: 1,
@@ -308,16 +309,16 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
+    color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 16,
   },
   input: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
     padding: 14,
     fontSize: 14,
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   notesInput: {
     minHeight: 80,
@@ -331,19 +332,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#fff",
+    borderRadius: borderRadius.xl,
+    backgroundColor: colors.surface,
     marginRight: 8,
   },
   chipSelected: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.primary,
   },
   chipText: {
     fontSize: 13,
-    color: "#666",
+    color: colors.textSecondary,
   },
   chipTextSelected: {
-    color: "#fff",
+    color: colors.textOnPrimary,
   },
   chipDot: {
     width: 8,
@@ -358,41 +359,41 @@ const styles = StyleSheet.create({
   toggleBtn: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "#fff",
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.surface,
     alignItems: "center",
   },
   toggleBtnActive: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.primary,
   },
   toggleBtnIncome: {
-    backgroundColor: "#2e7d32",
+    backgroundColor: colors.income,
   },
   toggleBtnText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
+    color: colors.textSecondary,
   },
   toggleBtnTextActive: {
-    color: "#fff",
+    color: colors.textOnPrimary,
   },
   errorText: {
-    color: "#d32f2f",
+    color: colors.error,
     fontSize: 14,
     textAlign: "center",
     padding: 12,
-    backgroundColor: "#fdecea",
+    backgroundColor: colors.errorBackground,
     borderRadius: 8,
   },
   saveBtn: {
-    backgroundColor: "#1a1a2e",
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.pill,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 24,
   },
   saveBtnText: {
-    color: "#fff",
+    color: colors.textOnPrimary,
     fontSize: 16,
     fontWeight: "600",
   },

@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from "react-native";
 import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
+import { colors, fonts } from "../theme";
 
 type Point = {
   value: number;
@@ -41,7 +42,7 @@ export default function LineChart({
   data,
   width,
   height = 160,
-  color = "#1a1a2e",
+  color = colors.primary,
   showGradient = true,
   totalSlots,
   showYAxis = false,
@@ -70,10 +71,15 @@ export default function LineChart({
     return padding.top + chartH - ((val - minVal) / range) * chartH;
   }
 
-  // Build SVG path
+  // Build smooth SVG path using cubic bezier curves
   let linePath = `M ${x(0)} ${y(values[0])}`;
   for (let i = 1; i < values.length; i++) {
-    linePath += ` L ${x(i)} ${y(values[i])}`;
+    const x0 = x(i - 1);
+    const y0 = y(values[i - 1]);
+    const x1 = x(i);
+    const y1 = y(values[i]);
+    const cpx = (x0 + x1) / 2;
+    linePath += ` C ${cpx} ${y0}, ${cpx} ${y1}, ${x1} ${y1}`;
   }
 
   // Fill path (closed polygon for gradient)
@@ -117,8 +123,8 @@ export default function LineChart({
         <Svg key={svgKey} width={chartW} height={height}>
           <Defs>
             <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={color} stopOpacity="0.15" />
-              <Stop offset="1" stopColor={color} stopOpacity="0" />
+              <Stop offset="0" stopColor={color} stopOpacity="0.25" />
+              <Stop offset="1" stopColor={colors.background} stopOpacity="0" />
             </LinearGradient>
           </Defs>
           {showGradient && (
@@ -128,7 +134,7 @@ export default function LineChart({
             d={linePath}
             fill="none"
             stroke={color}
-            strokeWidth={2}
+            strokeWidth={3}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -167,7 +173,8 @@ const styles = StyleSheet.create({
   },
   yLabel: {
     fontSize: 10,
-    color: "#999",
+    fontFamily: fonts.labelMedium,
+    color: colors.textMuted,
     textAlign: "right",
     paddingRight: 6,
   },
@@ -176,7 +183,8 @@ const styles = StyleSheet.create({
   },
   xLabel: {
     fontSize: 10,
-    color: "#999",
+    fontFamily: fonts.labelMedium,
+    color: colors.textMuted,
     textAlign: "center",
   },
 });

@@ -13,6 +13,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiRequest } from "../../src/api/client";
 import { useTransactionsStore } from "../../src/stores/transactions";
+import { colors, borderRadius, shadows } from "../../src/theme";
 
 type TransactionDetail = {
   id: string;
@@ -160,7 +161,7 @@ export default function TransactionDetailScreen() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a1a2e" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -263,7 +264,7 @@ export default function TransactionDetailScreen() {
             value={notes}
             onChangeText={setNotes}
             placeholder="Add a note..."
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textMuted}
             multiline
             textAlignVertical="top"
           />
@@ -274,7 +275,7 @@ export default function TransactionDetailScreen() {
               disabled={isSaving}
             >
               {isSaving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={colors.textOnPrimary} />
               ) : (
                 <Text style={styles.saveBtnText}>Save Notes</Text>
               )}
@@ -304,11 +305,11 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
   },
   centered: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -317,22 +318,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     paddingTop: 60,
     paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: colors.border,
   },
   backArrow: {
     fontSize: 24,
-    color: "#1a1a2e",
+    color: colors.primary,
     fontWeight: "600",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   body: {
     flex: 1,
@@ -348,14 +349,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   debit: {
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   credit: {
-    color: "#2e7d32",
+    color: colors.income,
   },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
     padding: 16,
     marginBottom: 16,
   },
@@ -367,11 +368,11 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 14,
-    color: "#999",
+    color: colors.textMuted,
   },
   infoValue: {
     fontSize: 14,
-    color: "#1a1a2e",
+    color: colors.textPrimary,
     fontWeight: "500",
     flex: 1,
     textAlign: "right",
@@ -380,7 +381,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
+    color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 4,
   },
@@ -393,16 +394,16 @@ const styles = StyleSheet.create({
   currentCategoryText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   clearBtn: {
     fontSize: 16,
-    color: "#999",
+    color: colors.textMuted,
     padding: 4,
   },
   noCategoryText: {
     fontSize: 14,
-    color: "#999",
+    color: colors.textMuted,
     marginBottom: 12,
   },
   chipList: {
@@ -413,11 +414,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#f5f5f5",
+    borderRadius: borderRadius.xl,
+    backgroundColor: colors.background,
   },
   chipSelected: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.primary,
   },
   chipDot: {
     width: 8,
@@ -427,31 +428,31 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 13,
-    color: "#666",
+    color: colors.textSecondary,
   },
   chipTextSelected: {
-    color: "#fff",
+    color: colors.textOnPrimary,
   },
   notesInput: {
     fontSize: 14,
-    color: "#1a1a2e",
+    color: colors.textPrimary,
     minHeight: 80,
     textAlignVertical: "top",
   },
   saveBtn: {
-    backgroundColor: "#1a1a2e",
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.pill,
     paddingVertical: 10,
     alignItems: "center",
     marginTop: 12,
   },
   saveBtnText: {
-    color: "#fff",
+    color: colors.textOnPrimary,
     fontSize: 14,
     fontWeight: "600",
   },
   errorText: {
-    color: "#d32f2f",
+    color: colors.error,
     fontSize: 16,
     textAlign: "center",
     marginBottom: 16,
@@ -459,24 +460,24 @@ const styles = StyleSheet.create({
   backBtn: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: "#1a1a2e",
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
   },
   backBtnText: {
-    color: "#fff",
+    color: colors.textOnPrimary,
     fontSize: 14,
     fontWeight: "600",
   },
   deleteBtn: {
     borderWidth: 1,
-    borderColor: "#d32f2f",
-    borderRadius: 8,
+    borderColor: colors.error,
+    borderRadius: borderRadius.lg,
     paddingVertical: 12,
     alignItems: "center",
     marginTop: 8,
   },
   deleteBtnText: {
-    color: "#d32f2f",
+    color: colors.error,
     fontSize: 14,
     fontWeight: "600",
   },

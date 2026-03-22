@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet } from "react-native";
+import { colors } from "../../src/theme";
 
 export default function AiChatScreen() {
   return (
@@ -12,7 +13,7 @@ export default function AiChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -20,11 +21,11 @@ const styles = StyleSheet.create({
   empty: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   hint: {
     fontSize: 14,
-    color: "#666",
+    color: colors.textSecondary,
     marginTop: 8,
     textAlign: "center",
   },

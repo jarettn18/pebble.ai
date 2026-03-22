@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-nati
 import { apiRequest } from "../api/client";
 import LineChart from "./LineChart";
 import { formatCurrency } from "../utils/dashboard";
+import { colors, fonts } from "../theme";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const CHART_WIDTH = SCREEN_WIDTH - 80; // card padding + container padding
@@ -56,7 +57,7 @@ export default function NetWorthChart({ refreshKey }: NetWorthChartProps) {
   const changePct = data?.change_pct ? parseFloat(data.change_pct) : null;
   const isPositive = change !== null && change >= 0;
 
-  const chartColor = isPositive ? "#2e7d32" : "#d32f2f";
+  const chartColor = isPositive ? colors.primary : colors.negative;
 
   const MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -161,7 +162,7 @@ const styles = StyleSheet.create({
   },
   changeText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   chartContainer: {
     alignItems: "center",
@@ -177,17 +178,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
   },
   periodTabActive: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.primary,
   },
   periodLabel: {
     fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
+    fontFamily: fonts.semiBold,
+    color: colors.textSecondary,
   },
   periodLabelActive: {
-    color: "#fff",
+    color: colors.textOnPrimary,
   },
 });

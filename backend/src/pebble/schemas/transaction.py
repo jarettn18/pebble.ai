@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class TransactionOut(BaseModel):
     id: str
     account_id: str
+    account_name: str | None = None
     amount: str
     date: str
     name: str

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from pebble.models.account import Account
+from pebble.models.asset import Asset
 from pebble.models.budget import Budget
 from pebble.models.category import Category
 from pebble.models.transaction import Transaction
@@ -53,6 +54,16 @@ async def get_net_worth_history(
                 current_nw -= row.balance_current
             else:
                 current_nw += row.balance_current
+
+    # Add asset values (properties, vehicles, etc.)
+    asset_result = await db.execute(
+        select(func.coalesce(func.sum(Asset.estimated_value), 0))
+        .where(Asset.user_id == user_id)
+    )
+    asset_total = asset_result.scalar() or Decimal("0")
+    if asset_total > 0:
+        has_accounts = True
+        current_nw += asset_total
 
     if not has_accounts:
         return {"period": period, "points": [], "current": None, "change": None, "change_pct": None}
@@ -205,6 +216,27 @@ async def get_dashboard(
         )
         manual_total = manual_sum_result.scalar() or Decimal("0")
         net_worth -= manual_total
+
+    # --- Assets (properties, vehicles, etc.) ---
+    asset_result = await db.execute(
+        select(Asset)
+        .where(Asset.user_id == user_id)
+        .order_by(Asset.created_at.desc())
+    )
+    assets = asset_result.scalars().all()
+
+    asset_list = []
+    for a in assets:
+        if a.estimated_value is not None:
+            if net_worth is None:
+                net_worth = Decimal("0")
+            net_worth += a.estimated_value
+        asset_list.append({
+            "id": str(a.id),
+            "name": a.name,
+            "asset_type": a.asset_type.value,
+            "estimated_value": str(a.estimated_value),
+        })
 
     # --- Monthly spending (sum of positive, non-pending transactions) ---
     first_day = date(year, month, 1)
@@ -390,6 +422,7 @@ async def get_dashboard(
         "monthly_spending": str(monthly_spending),
         "monthly_income": str(monthly_income),
         "accounts": account_list,
+        "assets": asset_list,
         "budget_summaries": budget_summaries,
         "spending_by_category": spending_by_category,
         "income_by_category": income_by_category,

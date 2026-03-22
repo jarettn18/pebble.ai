@@ -10,12 +10,13 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import {
   useTransactionsStore,
   TransactionFilters,
 } from "../../src/stores/transactions";
 import { apiRequest } from "../../src/api/client";
+import { colors, borderRadius } from "../../src/theme";
 
 type Category = {
   id: string;
@@ -25,6 +26,7 @@ type Category = {
 
 export default function TransactionsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ account_id?: string; account_name?: string }>();
   const {
     transactions,
     totalCount,
@@ -45,10 +47,18 @@ export default function TransactionsScreen() {
 
   const hasActiveFilters =
     !!filters.search ||
-    !!filters.category_id ||
+    (filters.category_ids && filters.category_ids.length > 0) ||
     !!filters.date_from ||
     !!filters.date_to ||
-    !!filters.type;
+    (filters.types && filters.types.length > 0) ||
+    !!filters.account_id;
+
+  // Apply account_id filter from navigation params
+  useEffect(() => {
+    if (params.account_id) {
+      setFilters({ ...filters, account_id: params.account_id });
+    }
+  }, [params.account_id]);
 
   useEffect(() => {
     load();
@@ -69,35 +79,47 @@ export default function TransactionsScreen() {
   );
 
   function handleTypeToggle(type: "expense" | "income") {
+    const current = filters.types ?? [];
+    const updated = current.includes(type)
+      ? current.filter((t) => t !== type)
+      : [...current, type];
     setFilters({
       ...filters,
-      type: filters.type === type ? undefined : type,
+      types: updated.length > 0 ? updated : undefined,
     });
   }
 
   function handleCategoryToggle(categoryId: string) {
+    const current = filters.category_ids ?? [];
+    const updated = current.includes(categoryId)
+      ? current.filter((id) => id !== categoryId)
+      : [...current, categoryId];
     setFilters({
       ...filters,
-      category_id: filters.category_id === categoryId ? undefined : categoryId,
+      category_ids: updated.length > 0 ? updated : undefined,
     });
   }
 
   function handleClearFilters() {
     setSearchText("");
     clearFilters();
+    // Clear route params so account filter doesn't re-apply
+    if (params.account_id) {
+      router.setParams({ account_id: "", account_name: "" });
+    }
   }
 
   if (!showFilters && !hasActiveFilters && isSyncing && transactions.length === 0) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a1a2e" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
-  const selectedCategoryName = categories.find(
-    (c) => c.id === filters.category_id
-  )?.name;
+  const selectedCategoryNames = categories
+    .filter((c) => filters.category_ids?.includes(c.id))
+    .map((c) => c.name);
 
   return (
     <View style={styles.container}>
@@ -111,7 +133,7 @@ export default function TransactionsScreen() {
             value={searchText}
             onChangeText={handleSearchChange}
             placeholder="Search transactions..."
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textMuted}
             returnKeyType="search"
           />
           {searchText.length > 0 && (
@@ -148,14 +170,14 @@ export default function TransactionsScreen() {
             <TouchableOpacity
               style={[
                 styles.filterChip,
-                filters.type === "expense" && styles.filterChipActive,
+                filters.types?.includes("expense") && styles.filterChipActive,
               ]}
               onPress={() => handleTypeToggle("expense")}
             >
               <Text
                 style={[
                   styles.filterChipText,
-                  filters.type === "expense" && styles.filterChipTextActive,
+                  filters.types?.includes("expense") && styles.filterChipTextActive,
                 ]}
               >
                 Expense
@@ -164,14 +186,14 @@ export default function TransactionsScreen() {
             <TouchableOpacity
               style={[
                 styles.filterChip,
-                filters.type === "income" && styles.filterChipIncome,
+                filters.types?.includes("income") && styles.filterChipIncome,
               ]}
               onPress={() => handleTypeToggle("income")}
             >
               <Text
                 style={[
                   styles.filterChipText,
-                  filters.type === "income" && styles.filterChipTextActive,
+                  filters.types?.includes("income") && styles.filterChipTextActive,
                 ]}
               >
                 Income
@@ -191,7 +213,7 @@ export default function TransactionsScreen() {
                 key={cat.id}
                 style={[
                   styles.filterChip,
-                  filters.category_id === cat.id && styles.filterChipActive,
+                  filters.category_ids?.includes(cat.id) && styles.filterChipActive,
                 ]}
                 onPress={() => handleCategoryToggle(cat.id)}
               >
@@ -204,7 +226,7 @@ export default function TransactionsScreen() {
                 <Text
                   style={[
                     styles.filterChipText,
-                    filters.category_id === cat.id &&
+                    filters.category_ids?.includes(cat.id) &&
                       styles.filterChipTextActive,
                   ]}
                 >
@@ -230,8 +252,9 @@ export default function TransactionsScreen() {
         <View style={styles.activeFiltersBar}>
           <Text style={styles.activeFiltersText} numberOfLines={1}>
             Filtered: {totalCount} result{totalCount !== 1 ? "s" : ""}
-            {filters.type ? ` · ${filters.type}` : ""}
-            {selectedCategoryName ? ` · ${selectedCategoryName}` : ""}
+            {filters.account_id && params.account_name ? ` · ${params.account_name}` : ""}
+            {filters.types?.length ? ` · ${filters.types.join(", ")}` : ""}
+            {selectedCategoryNames.length > 0 ? ` · ${selectedCategoryNames.join(", ")}` : ""}
           </Text>
           <TouchableOpacity onPress={handleClearFilters}>
             <Text style={styles.clearAllText}>Clear</Text>
@@ -241,7 +264,7 @@ export default function TransactionsScreen() {
 
       {isLoading && transactions.length === 0 ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#1a1a2e" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : transactions.length === 0 ? (
         <View style={styles.centered}>
@@ -262,7 +285,7 @@ export default function TransactionsScreen() {
             <RefreshControl
               refreshing={isSyncing}
               onRefresh={syncAndRefresh}
-              tintColor="#1a1a2e"
+              tintColor={colors.primary}
             />
           }
           renderItem={({ item }) => (
@@ -288,6 +311,7 @@ export default function TransactionsScreen() {
 
 type Transaction = {
   id: string;
+  account_name: string | null;
   amount: string;
   date: string;
   name: string;
@@ -311,6 +335,7 @@ function TransactionRow({ txn }: { txn: Transaction }) {
         </Text>
         <Text style={styles.txnDetail}>
           {txn.date}
+          {txn.account_name ? ` · ${txn.account_name}` : ""}
           {txn.category_name ? ` · ${txn.category_name}` : ""}
           {txn.pending ? " · Pending" : ""}
         </Text>
@@ -329,11 +354,11 @@ function Separator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
   },
   centered: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -341,20 +366,20 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   emptyHint: {
     fontSize: 14,
-    color: "#666",
+    color: colors.textSecondary,
     marginTop: 8,
     textAlign: "center",
   },
   errorText: {
-    color: "#d32f2f",
+    color: colors.error,
     fontSize: 14,
     textAlign: "center",
     padding: 12,
-    backgroundColor: "#fdecea",
+    backgroundColor: colors.errorBackground,
   },
   // Search
   searchRow: {
@@ -369,19 +394,19 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.sm,
     paddingHorizontal: 14,
     height: 42,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   clearSearch: {
     fontSize: 14,
-    color: "#999",
+    color: colors.textMuted,
     padding: 4,
   },
   filterToggle: {
@@ -389,39 +414,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 14,
     height: 42,
-    borderRadius: 10,
-    backgroundColor: "#fff",
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.surface,
   },
   filterToggleActive: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.primary,
   },
   filterToggleText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
+    color: colors.textSecondary,
   },
   filterToggleTextActive: {
-    color: "#fff",
+    color: colors.textOnPrimary,
   },
   filterDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#d32f2f",
+    backgroundColor: colors.error,
     marginLeft: 6,
   },
   // Filter Panel
   filterPanel: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     marginHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: borderRadius.md,
     padding: 16,
     marginBottom: 8,
   },
   filterLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#666",
+    color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 4,
   },
@@ -439,22 +464,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#f5f5f5",
+    borderRadius: borderRadius.xl,
+    backgroundColor: colors.background,
     marginRight: 8,
   },
   filterChipActive: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.primary,
   },
   filterChipIncome: {
-    backgroundColor: "#2e7d32",
+    backgroundColor: colors.income,
   },
   filterChipText: {
     fontSize: 13,
-    color: "#666",
+    color: colors.textSecondary,
   },
   filterChipTextActive: {
-    color: "#fff",
+    color: colors.textOnPrimary,
   },
   chipDot: {
     width: 8,
@@ -469,7 +494,7 @@ const styles = StyleSheet.create({
   },
   clearFiltersBtnText: {
     fontSize: 13,
-    color: "#d32f2f",
+    color: colors.error,
     fontWeight: "600",
   },
   // Active filters bar
@@ -479,16 +504,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 8,
-    backgroundColor: "#e8eaf6",
+    backgroundColor: colors.surfaceGreen,
   },
   activeFiltersText: {
     fontSize: 13,
-    color: "#1a1a2e",
+    color: colors.textPrimary,
     flex: 1,
   },
   clearAllText: {
     fontSize: 13,
-    color: "#d32f2f",
+    color: colors.error,
     fontWeight: "600",
     marginLeft: 12,
   },
@@ -500,7 +525,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
@@ -511,11 +536,11 @@ const styles = StyleSheet.create({
   txnName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   txnDetail: {
     fontSize: 13,
-    color: "#999",
+    color: colors.textMuted,
     marginTop: 2,
   },
   txnAmount: {
@@ -523,14 +548,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   debit: {
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   credit: {
-    color: "#2e7d32",
+    color: colors.income,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "#e0e0e0",
+    backgroundColor: colors.border,
     marginLeft: 20,
   },
   fab: {
@@ -540,7 +565,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -550,7 +575,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   fabText: {
-    color: "#fff",
+    color: colors.textOnPrimary,
     fontSize: 28,
     fontWeight: "600",
     marginTop: -2,

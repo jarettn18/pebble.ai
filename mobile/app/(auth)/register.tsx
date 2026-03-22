@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Link } from "expo-router";
 import { useAuthStore } from "../../src/stores/auth";
+import { colors, borderRadius } from "../../src/theme";
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState("");
@@ -99,7 +100,7 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
   },
   inner: {
     flex: 1,
@@ -109,28 +110,28 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: "700",
-    color: "#1a1a2e",
+    color: colors.primary,
     textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: colors.textSecondary,
     textAlign: "center",
     marginBottom: 32,
     marginTop: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
     padding: 16,
     fontSize: 16,
     marginBottom: 12,
-    backgroundColor: "#f9f9f9",
+    backgroundColor: colors.background,
   },
   button: {
-    backgroundColor: "#1a1a2e",
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.pill,
     padding: 16,
     alignItems: "center",
     marginTop: 8,
@@ -139,7 +140,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: "#fff",
+    color: colors.textOnPrimary,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -148,16 +149,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   linkText: {
-    color: "#666",
+    color: colors.textSecondary,
     fontSize: 14,
     textAlign: "center",
   },
   linkBold: {
-    color: "#1a1a2e",
+    color: colors.primary,
     fontWeight: "600",
   },
   error: {
-    color: "#d32f2f",
+    color: colors.error,
     fontSize: 14,
     textAlign: "center",
     marginBottom: 12,

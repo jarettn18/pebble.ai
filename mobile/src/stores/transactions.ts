@@ -6,6 +6,7 @@ const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 day
 type Transaction = {
   id: string;
   account_id: string;
+  account_name: string | null;
   amount: string;
   date: string;
   name: string;
@@ -31,10 +32,11 @@ type CreateTransactionInput = {
 
 export type TransactionFilters = {
   search?: string;
-  category_id?: string;
+  category_ids?: string[];
   date_from?: string;
   date_to?: string;
-  type?: "expense" | "income";
+  types?: ("expense" | "income")[];
+  account_id?: string;
 };
 
 type TransactionsState = {
@@ -67,10 +69,12 @@ type TransactionsState = {
 function buildQueryString(filters: TransactionFilters): string {
   const params = new URLSearchParams({ limit: "200" });
   if (filters.search) params.set("search", filters.search);
-  if (filters.category_id) params.set("category_id", filters.category_id);
+  if (filters.category_ids?.length)
+    params.set("category_id", filters.category_ids.join(","));
   if (filters.date_from) params.set("date_from", filters.date_from);
   if (filters.date_to) params.set("date_to", filters.date_to);
-  if (filters.type) params.set("type", filters.type);
+  if (filters.types?.length === 1) params.set("type", filters.types[0]);
+  if (filters.account_id) params.set("account_id", filters.account_id);
   return params.toString();
 }
 

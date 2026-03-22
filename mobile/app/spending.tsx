@@ -10,23 +10,13 @@ import {
 import { useFocusEffect } from "expo-router";
 import { useDashboardStore } from "../src/stores/dashboard";
 import { formatCurrency } from "../src/utils/dashboard";
+import { colors, borderRadius, shadows, fonts } from "../src/theme";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const CHART_PADDING = 20;
 const BAR_CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING * 2 - 40; // 40 for card padding
 
-const CATEGORY_COLORS = [
-  "#1a1a2e",
-  "#16213e",
-  "#0f3460",
-  "#533483",
-  "#e94560",
-  "#f38181",
-  "#fce38a",
-  "#95e1d3",
-  "#aa96da",
-  "#c4edde",
-];
+const CATEGORY_COLORS = colors.spendingPalette;
 
 export default function SpendingScreen() {
   const {
@@ -68,7 +58,7 @@ export default function SpendingScreen() {
         <RefreshControl
           refreshing={isLoading}
           onRefresh={refresh}
-          tintColor="#1a1a2e"
+          tintColor={colors.primary}
         />
       }
     >
@@ -99,7 +89,7 @@ export default function SpendingScreen() {
                         styles.bar,
                         {
                           height: `${Math.max(heightPct, 2)}%`,
-                          backgroundColor: isCurrentMonth ? "#e94560" : "#1a1a2e",
+                          backgroundColor: isCurrentMonth ? colors.primaryLight : colors.primaryDark,
                         },
                       ]}
                     />
@@ -200,32 +190,31 @@ export default function SpendingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
   },
   content: {
     padding: 20,
     paddingBottom: 40,
   },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
     padding: 20,
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}1A`,
+    ...shadows.card,
   },
   cardTitle: {
     fontSize: 14,
-    color: "#666",
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
     marginBottom: 12,
   },
   totalAmount: {
     fontSize: 32,
-    fontWeight: "700",
-    color: "#1a1a2e",
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
   },
 
   // --- Bar Chart (vertical) ---
@@ -244,7 +233,8 @@ const styles = StyleSheet.create({
   },
   barValue: {
     fontSize: 10,
-    color: "#666",
+    fontFamily: fonts.labelMedium,
+    color: colors.textSecondary,
     marginBottom: 4,
     textAlign: "center",
   },
@@ -255,18 +245,21 @@ const styles = StyleSheet.create({
   },
   bar: {
     width: "100%",
-    borderRadius: 4,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     minHeight: 2,
   },
   barLabel: {
     fontSize: 12,
-    color: "#999",
+    fontFamily: fonts.medium,
+    color: colors.textMuted,
     marginTop: 6,
-    fontWeight: "500",
   },
   barLabelActive: {
-    color: "#e94560",
-    fontWeight: "700",
+    color: colors.primary,
+    fontFamily: fonts.bold,
   },
 
   // --- Stacked bar ---
@@ -312,41 +305,41 @@ const styles = StyleSheet.create({
   },
   categoryName: {
     fontSize: 14,
-    fontWeight: "500",
-    color: "#1a1a2e",
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
     flex: 1,
   },
   categoryAmount: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#1a1a2e",
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
   },
   horizontalBarTrack: {
-    height: 6,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 3,
+    height: 10,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: 9999,
     overflow: "hidden",
   },
   horizontalBar: {
     height: "100%",
-    borderRadius: 3,
+    borderRadius: 9999,
   },
 
   // --- Empty ---
   emptyCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
     padding: 40,
     alignItems: "center",
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: "600",
-    color: "#1a1a2e",
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
   },
   emptyHint: {
     fontSize: 14,
-    color: "#666",
+    color: colors.textSecondary,
     marginTop: 8,
   },
 });

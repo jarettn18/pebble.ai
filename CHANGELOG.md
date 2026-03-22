@@ -1,5 +1,102 @@
 # Changelog
 
+## 2026-03-21 — UI Overhaul: Charts, Design System & Dashboard UX
+
+### Theme & Design System
+- Updated `spendingPalette` and `incomePalette` from monochrome green gradients to 8 distinct category colors: Sage, Soft Coral, Ochre, Dusty Lavender, Terracotta, Teal, Forest Green, Ocean Blue
+- Added `categoryPalette` as canonical 8-color source in theme.ts
+- Updated primary text color to forest green (`#1b3d2f`)
+- Darkened secondary text color to `#2a3230`
+- Surface color changed to `#f5efef` for card contrast against white background
+
+### PieChart — Donut Redesign
+- Rewrote PieChart from filled pie wedges to donut chart using SVG `<Circle>` strokes (18px stroke width)
+- Added curved divider lines at segment boundaries with subtle bezier curves
+- Added interactive tap-to-select: tapping a donut segment shows category name and formatted amount in center bubble
+- Press-and-hold on donut segments shows bubble only while pressing
+- Tapping legend dots toggles between percentage and dollar amount display, with center bubble
+- Reduced default donut size from 140 to 110 to fix scaling issues
+
+### LineChart — Smooth Curves & Gradient
+- Replaced straight line segments with smooth cubic bezier curves
+- Increased stroke width from 2px to 3px
+- Enhanced gradient fill (25% opacity fade to background color)
+- Added Inter font family to axis labels
+
+### NetWorthChart
+- Added Plus Jakarta Sans font families to change text and period tab labels
+
+### Spending & Income Screens
+- Added font families throughout (card titles, bar values/labels, category names/amounts, empty state)
+- Vertical bars now have rounded tops only (flat bottom)
+- Both screens use the new 8-color category palette
+
+### Dashboard — Add Button & Dropdown
+- Replaced bottom "Add Another Account" and "Add Property or Vehicle" buttons with a `+` button in the header next to "Dashboard"
+- `+` button styled as a circle with a subtle border (textPrimary at 15% opacity)
+- Dropdown menu appears on tap with "Add Account" and "Add Property or Vehicle" options, anchored to top right
+- Dropdown takes up ~1/3 of screen width with transparent overlay for dismissal
+- Removed "Spending by Category" card (now redundant with pie chart legend)
+
+### Dashboard — Carousel Fix
+- Swapped income and spending cards (income first)
+- Fixed second carousel card misalignment by replacing `pagingEnabled` with `snapToInterval` accounting for card margin
+- Income card text color changed to secondary text
+
+### Dashboard — Budget Pill
+- Updated Overall Budget pill text colors to use `textPrimary` instead of `onPrimaryFixedVariant`
+- Net worth label changed to "YOUR NETWORTH"
+
+---
+
+## 2026-03-21 — Phase 3: Assets, Account Filtering & Multi-Select Filters
+
+### Backend — Asset CRUD
+- Created `Asset` SQLAlchemy model (`models/asset.py`) with `AssetType` enum: primary_residence, rental, investment_property, vacation, land, car, motorcycle, boat, other
+- Fields: UUID PK, user FK, name, asset_type, estimated_value (Numeric 14,2), address (nullable), notes (nullable)
+- Created asset schemas (`schemas/asset.py`): `AssetOut`, `AssetCreateRequest`, `AssetUpdateRequest`, `AssetListResponse`
+- Created asset service (`services/assets.py`): full CRUD with `get_assets`, `get_asset`, `create_asset`, `update_asset`, `delete_asset`
+- Created asset router (`routers/assets.py`): `GET /v1/assets`, `GET /v1/assets/{id}`, `POST /v1/assets` (201), `PUT /v1/assets/{id}`, `DELETE /v1/assets/{id}` (204)
+- Alembic migration creates `assets` table with `assettype` PostgreSQL enum
+- Registered Asset model in `models/__init__.py`, added `assets` relationship to User model
+
+### Backend — Net Worth Integration
+- Dashboard endpoint (`get_dashboard`) sums asset estimated values into net worth and returns `assets` list
+- Net worth history endpoint (`get_net_worth_history`) includes asset values in current net worth calculation
+- Added `AssetSummary` schema to `schemas/dashboard.py`, added `assets` field to `DashboardResponse`
+
+### Backend — Transaction Filtering Enhancements
+- Added `account_id` query parameter to `GET /v1/transactions` — filters by specific bank account
+- Changed `category_id` to support comma-separated values for multi-category filtering (uses `in_()`)
+- Added `joinedload(Transaction.account)` for eager-loading account data
+- Added `account_name` field to `TransactionOut` schema
+
+### Mobile — Asset Screens
+- Created `app/add-asset.tsx` — form with asset type chip picker, name, estimated value, conditional address field (property types only), notes
+- Created `app/asset/[id].tsx` — asset detail/edit screen with editable fields, "Save Changes" button (appears on change), "Delete Asset" with confirmation alert
+- Registered both screens in `app/_layout.tsx`
+
+### Mobile — Dashboard Assets
+- Added Assets card to dashboard showing asset rows with type label, name, and estimated value
+- Asset rows are tappable, navigating to detail/edit screen
+- Added "+ Add Property or Vehicle" button below "Connect Bank Account"
+- Net worth chart now renders when user has assets but no bank accounts (`hasAccounts` checks both)
+- Created `assets` Zustand store (`stores/assets.ts`) with load, create, update, remove methods
+- Dashboard store updated with `AssetSummary` type and `assets` array
+
+### Mobile — Account-Filtered Transactions
+- Dashboard account rows are tappable — navigates to transactions tab filtered by that account
+- Transaction screen reads `account_id` and `account_name` from route params and applies filter on mount
+- Account name displayed in each transaction row
+
+### Mobile — Multi-Select Filters
+- Transaction type filter changed from single-toggle to multi-select (both expense + income can be selected)
+- Category filter changed from single-select to multi-select (multiple categories simultaneously)
+- Filter summary updates to show count when multiple selections active
+- Clearing filters also clears route params (account filter)
+
+---
+
 ## 2026-03-20 — Phase 3: Income Summary & Dashboard Polish
 
 ### Backend — Income Data

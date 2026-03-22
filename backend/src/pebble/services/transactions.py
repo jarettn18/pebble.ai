@@ -20,8 +20,15 @@ async def get_transactions(
     date_from: str | None = None,
     date_to: str | None = None,
     txn_type: str | None = None,
+    account_id: str | None = None,
 ) -> dict:
     filters = [Transaction.user_id == user_id]
+
+    if account_id:
+        try:
+            filters.append(Transaction.account_id == uuid.UUID(account_id))
+        except ValueError:
+            pass
 
     if search:
         pattern = f"%{search}%"
@@ -30,10 +37,17 @@ async def get_transactions(
         )
 
     if category_id:
-        try:
-            filters.append(Transaction.category_id == uuid.UUID(category_id))
-        except ValueError:
-            pass
+        cat_ids = [c.strip() for c in category_id.split(",") if c.strip()]
+        valid_uuids = []
+        for cid in cat_ids:
+            try:
+                valid_uuids.append(uuid.UUID(cid))
+            except ValueError:
+                pass
+        if len(valid_uuids) == 1:
+            filters.append(Transaction.category_id == valid_uuids[0])
+        elif valid_uuids:
+            filters.append(Transaction.category_id.in_(valid_uuids))
 
     if date_from:
         try:
@@ -55,7 +69,7 @@ async def get_transactions(
     query = (
         select(Transaction)
         .where(*filters)
-        .options(joinedload(Transaction.category))
+        .options(joinedload(Transaction.category), joinedload(Transaction.account))
         .order_by(Transaction.date.desc(), Transaction.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -72,6 +86,7 @@ async def get_transactions(
         {
             "id": str(t.id),
             "account_id": str(t.account_id),
+            "account_name": t.account.name if t.account else None,
             "amount": str(t.amount),
             "date": t.date.isoformat(),
             "name": t.name,
