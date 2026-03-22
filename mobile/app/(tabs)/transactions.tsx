@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,65 +7,311 @@ import {
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
+  TextInput,
+  ScrollView,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { useTransactionsStore } from "../../src/stores/transactions";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import {
+  useTransactionsStore,
+  TransactionFilters,
+} from "../../src/stores/transactions";
+import { apiRequest } from "../../src/api/client";
+import { colors, borderRadius } from "../../src/theme";
+
+type Category = {
+  id: string;
+  name: string;
+  color: string | null;
+};
 
 export default function TransactionsScreen() {
   const router = useRouter();
-  const { transactions, isLoading, isSyncing, error, load, syncAndRefresh } =
-    useTransactionsStore();
+  const params = useLocalSearchParams<{ account_id?: string; account_name?: string }>();
+  const {
+    transactions,
+    totalCount,
+    isLoading,
+    isSyncing,
+    error,
+    filters,
+    load,
+    syncAndRefresh,
+    setFilters,
+    clearFilters,
+  } = useTransactionsStore();
+
+  const [searchText, setSearchText] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const hasActiveFilters =
+    !!filters.search ||
+    (filters.category_ids && filters.category_ids.length > 0) ||
+    !!filters.date_from ||
+    !!filters.date_to ||
+    (filters.types && filters.types.length > 0) ||
+    !!filters.account_id;
+
+  // Apply account_id filter from navigation params
+  useEffect(() => {
+    if (params.account_id) {
+      setFilters({ ...filters, account_id: params.account_id });
+    }
+  }, [params.account_id]);
 
   useEffect(() => {
     load();
+    apiRequest<{ categories: Category[] }>("/v1/categories").then((data) =>
+      setCategories(data.categories)
+    );
   }, [load]);
 
-  if (isLoading || (isSyncing && transactions.length === 0)) {
+  const handleSearchChange = useCallback(
+    (text: string) => {
+      setSearchText(text);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      searchTimer.current = setTimeout(() => {
+        setFilters({ ...filters, search: text || undefined });
+      }, 400);
+    },
+    [filters, setFilters]
+  );
+
+  function handleTypeToggle(type: "expense" | "income") {
+    const current = filters.types ?? [];
+    const updated = current.includes(type)
+      ? current.filter((t) => t !== type)
+      : [...current, type];
+    setFilters({
+      ...filters,
+      types: updated.length > 0 ? updated : undefined,
+    });
+  }
+
+  function handleCategoryToggle(categoryId: string) {
+    const current = filters.category_ids ?? [];
+    const updated = current.includes(categoryId)
+      ? current.filter((id) => id !== categoryId)
+      : [...current, categoryId];
+    setFilters({
+      ...filters,
+      category_ids: updated.length > 0 ? updated : undefined,
+    });
+  }
+
+  function handleClearFilters() {
+    setSearchText("");
+    clearFilters();
+    // Clear route params so account filter doesn't re-apply
+    if (params.account_id) {
+      router.setParams({ account_id: "", account_name: "" });
+    }
+  }
+
+  if (!showFilters && !hasActiveFilters && isSyncing && transactions.length === 0) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a1a2e" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
-  if (transactions.length === 0 && !error) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyTitle}>No transactions yet</Text>
-        <Text style={styles.emptyHint}>
-          Connect a bank account and pull down to sync
-        </Text>
-      </View>
-    );
-  }
+  const selectedCategoryNames = categories
+    .filter((c) => filters.category_ids?.includes(c.id))
+    .map((c) => c.name);
 
   return (
     <View style={styles.container}>
       {error && <Text style={styles.errorText}>{error}</Text>}
-      <FlatList
-        data={transactions}
-        keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl
-            refreshing={isSyncing}
-            onRefresh={syncAndRefresh}
-            tintColor="#1a1a2e"
+
+      {/* Search Bar */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchInputWrap}>
+          <TextInput
+            style={styles.searchInput}
+            value={searchText}
+            onChangeText={handleSearchChange}
+            placeholder="Search transactions..."
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="search"
           />
-        }
-        renderItem={({ item }) => (
-          <TouchableOpacity onPress={() => router.push(`/transaction/${item.id}`)}>
-            <TransactionRow txn={item} />
+          {searchText.length > 0 && (
+            <TouchableOpacity
+              onPress={() => handleSearchChange("")}
+              hitSlop={8}
+            >
+              <Text style={styles.clearSearch}>{"\u2715"}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[styles.filterToggle, showFilters && styles.filterToggleActive]}
+          onPress={() => setShowFilters(!showFilters)}
+        >
+          <Text
+            style={[
+              styles.filterToggleText,
+              showFilters && styles.filterToggleTextActive,
+            ]}
+          >
+            Filters
+          </Text>
+          {hasActiveFilters && <View style={styles.filterDot} />}
+        </TouchableOpacity>
+      </View>
+
+      {/* Filter Panel */}
+      {showFilters && (
+        <View style={styles.filterPanel}>
+          {/* Type Filter */}
+          <Text style={styles.filterLabel}>Type</Text>
+          <View style={styles.filterChipRow}>
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                filters.types?.includes("expense") && styles.filterChipActive,
+              ]}
+              onPress={() => handleTypeToggle("expense")}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  filters.types?.includes("expense") && styles.filterChipTextActive,
+                ]}
+              >
+                Expense
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                filters.types?.includes("income") && styles.filterChipIncome,
+              ]}
+              onPress={() => handleTypeToggle("income")}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  filters.types?.includes("income") && styles.filterChipTextActive,
+                ]}
+              >
+                Income
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Category Filter */}
+          <Text style={styles.filterLabel}>Category</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
+          >
+            {categories.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  styles.filterChip,
+                  filters.category_ids?.includes(cat.id) && styles.filterChipActive,
+                ]}
+                onPress={() => handleCategoryToggle(cat.id)}
+              >
+                <View
+                  style={[
+                    styles.chipDot,
+                    { backgroundColor: cat.color || "#999" },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    filters.category_ids?.includes(cat.id) &&
+                      styles.filterChipTextActive,
+                  ]}
+                >
+                  {cat.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {hasActiveFilters && (
+            <TouchableOpacity
+              style={styles.clearFiltersBtn}
+              onPress={handleClearFilters}
+            >
+              <Text style={styles.clearFiltersBtnText}>Clear All Filters</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* Active filter summary */}
+      {hasActiveFilters && !showFilters && (
+        <View style={styles.activeFiltersBar}>
+          <Text style={styles.activeFiltersText} numberOfLines={1}>
+            Filtered: {totalCount} result{totalCount !== 1 ? "s" : ""}
+            {filters.account_id && params.account_name ? ` · ${params.account_name}` : ""}
+            {filters.types?.length ? ` · ${filters.types.join(", ")}` : ""}
+            {selectedCategoryNames.length > 0 ? ` · ${selectedCategoryNames.join(", ")}` : ""}
+          </Text>
+          <TouchableOpacity onPress={handleClearFilters}>
+            <Text style={styles.clearAllText}>Clear</Text>
           </TouchableOpacity>
-        )}
-        ItemSeparatorComponent={Separator}
-        contentContainerStyle={styles.listContent}
-      />
+        </View>
+      )}
+
+      {isLoading && transactions.length === 0 ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : transactions.length === 0 ? (
+        <View style={styles.centered}>
+          <Text style={styles.emptyTitle}>
+            {hasActiveFilters ? "No matching transactions" : "No transactions yet"}
+          </Text>
+          <Text style={styles.emptyHint}>
+            {hasActiveFilters
+              ? "Try adjusting your filters"
+              : "Connect a bank account and pull down to sync"}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={transactions}
+          keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={isSyncing}
+              onRefresh={syncAndRefresh}
+              tintColor={colors.primary}
+            />
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              onPress={() => router.push(`/transaction/${item.id}`)}
+            >
+              <TransactionRow txn={item} />
+            </TouchableOpacity>
+          )}
+          ItemSeparatorComponent={Separator}
+          contentContainerStyle={styles.listContent}
+        />
+      )}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push("/transaction/create")}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 type Transaction = {
   id: string;
+  account_name: string | null;
   amount: string;
   date: string;
   name: string;
@@ -89,6 +335,7 @@ function TransactionRow({ txn }: { txn: Transaction }) {
         </Text>
         <Text style={styles.txnDetail}>
           {txn.date}
+          {txn.account_name ? ` · ${txn.account_name}` : ""}
           {txn.category_name ? ` · ${txn.category_name}` : ""}
           {txn.pending ? " · Pending" : ""}
         </Text>
@@ -107,11 +354,11 @@ function Separator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
   },
   centered: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -119,21 +366,158 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   emptyHint: {
     fontSize: 14,
-    color: "#666",
+    color: colors.textSecondary,
     marginTop: 8,
     textAlign: "center",
   },
   errorText: {
-    color: "#d32f2f",
+    color: colors.error,
     fontSize: 14,
     textAlign: "center",
     padding: 12,
-    backgroundColor: "#fdecea",
+    backgroundColor: colors.errorBackground,
   },
+  // Search
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 10,
+  },
+  searchInputWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: 14,
+    height: 42,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  clearSearch: {
+    fontSize: 14,
+    color: colors.textMuted,
+    padding: 4,
+  },
+  filterToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    height: 42,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.surface,
+  },
+  filterToggleActive: {
+    backgroundColor: colors.primary,
+  },
+  filterToggleText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textSecondary,
+  },
+  filterToggleTextActive: {
+    color: colors.textOnPrimary,
+  },
+  filterDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.error,
+    marginLeft: 6,
+  },
+  // Filter Panel
+  filterPanel: {
+    backgroundColor: colors.surface,
+    marginHorizontal: 16,
+    borderRadius: borderRadius.md,
+    padding: 16,
+    marginBottom: 8,
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  filterChipRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  chipScroll: {
+    flexGrow: 0,
+    marginBottom: 12,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: borderRadius.xl,
+    backgroundColor: colors.background,
+    marginRight: 8,
+  },
+  filterChipActive: {
+    backgroundColor: colors.primary,
+  },
+  filterChipIncome: {
+    backgroundColor: colors.income,
+  },
+  filterChipText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  filterChipTextActive: {
+    color: colors.textOnPrimary,
+  },
+  chipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  clearFiltersBtn: {
+    alignItems: "center",
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  clearFiltersBtnText: {
+    fontSize: 13,
+    color: colors.error,
+    fontWeight: "600",
+  },
+  // Active filters bar
+  activeFiltersBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: colors.surfaceGreen,
+  },
+  activeFiltersText: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  clearAllText: {
+    fontSize: 13,
+    color: colors.error,
+    fontWeight: "600",
+    marginLeft: 12,
+  },
+  // List
   listContent: {
     paddingVertical: 8,
   },
@@ -141,7 +525,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
@@ -152,11 +536,11 @@ const styles = StyleSheet.create({
   txnName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   txnDetail: {
     fontSize: 13,
-    color: "#999",
+    color: colors.textMuted,
     marginTop: 2,
   },
   txnAmount: {
@@ -164,14 +548,36 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   debit: {
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   credit: {
-    color: "#2e7d32",
+    color: colors.income,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "#e0e0e0",
+    backgroundColor: colors.border,
     marginLeft: 20,
+  },
+  fab: {
+    position: "absolute",
+    right: 20,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  fabText: {
+    color: colors.textOnPrimary,
+    fontSize: 28,
+    fontWeight: "600",
+    marginTop: -2,
   },
 });

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class TransactionOut(BaseModel):
     id: str
     account_id: str
+    account_name: str | None = None
     amount: str
     date: str
     name: str
@@ -15,6 +16,16 @@ class TransactionOut(BaseModel):
 
 
 class TransactionDetailOut(TransactionOut):
+    category_id: str | None = None
+    notes: str | None = None
+
+
+class TransactionCreateRequest(BaseModel):
+    account_id: str
+    amount: str
+    date: str
+    name: str
+    merchant_name: str | None = None
     category_id: str | None = None
     notes: str | None = None
 

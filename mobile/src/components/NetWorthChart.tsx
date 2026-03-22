@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-nati
 import { apiRequest } from "../api/client";
 import LineChart from "./LineChart";
 import { formatCurrency } from "../utils/dashboard";
+import { colors, fonts } from "../theme";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const CHART_WIDTH = SCREEN_WIDTH - 80; // card padding + container padding
@@ -23,7 +24,12 @@ type NetWorthHistoryResponse = {
 const PERIODS = ["1M", "3M", "1Y", "5Y"] as const;
 type Period = (typeof PERIODS)[number];
 
-export default function NetWorthChart() {
+type NetWorthChartProps = {
+  /** Change this value to trigger a re-fetch of chart data. */
+  refreshKey?: number;
+};
+
+export default function NetWorthChart({ refreshKey }: NetWorthChartProps) {
   const [period, setPeriod] = useState<Period>("1Y");
   const [data, setData] = useState<NetWorthHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -44,14 +50,49 @@ export default function NetWorthChart() {
 
   useEffect(() => {
     fetchData(period);
-  }, [period, fetchData]);
+  }, [period, fetchData, refreshKey]);
 
   const points = data?.points ?? [];
   const change = data?.change ? parseFloat(data.change) : null;
   const changePct = data?.change_pct ? parseFloat(data.change_pct) : null;
   const isPositive = change !== null && change >= 0;
 
-  const chartColor = isPositive ? "#2e7d32" : "#d32f2f";
+  const chartColor = isPositive ? colors.primary : colors.negative;
+
+  const MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  // Build x-axis labels from point dates based on period
+  const xLabels: { index: number; label: string }[] = [];
+  if (points.length > 0) {
+    const seen = new Set<string>();
+    const maxLabels = period === "1M" ? 5 : period === "3M" ? 4 : period === "1Y" ? 6 : 5;
+    const step = Math.max(1, Math.floor(points.length / maxLabels));
+
+    for (let i = 0; i < points.length; i += step) {
+      const d = new Date(points[i].date + "T00:00:00");
+      let label: string;
+      let key: string;
+
+      if (period === "1M") {
+        // Show day: "Mar 5"
+        label = `${MONTH_ABBR[d.getMonth() + 1]} ${d.getDate()}`;
+        key = label;
+      } else if (period === "3M" || period === "1Y") {
+        // Show month: "Mar"
+        label = MONTH_ABBR[d.getMonth() + 1];
+        key = `${d.getFullYear()}-${d.getMonth()}`;
+      } else {
+        // 5Y — show year: "2024"
+        label = String(d.getFullYear());
+        key = label;
+      }
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        xLabels.push({ index: i, label });
+      }
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -76,6 +117,8 @@ export default function NetWorthChart() {
             width={CHART_WIDTH}
             height={140}
             color={chartColor}
+            showYAxis
+            xLabels={xLabels}
           />
         </View>
       )}
@@ -119,7 +162,7 @@ const styles = StyleSheet.create({
   },
   changeText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   chartContainer: {
     alignItems: "center",
@@ -135,17 +178,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
   },
   periodTabActive: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.primary,
   },
   periodLabel: {
     fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
+    fontFamily: fonts.semiBold,
+    color: colors.textSecondary,
   },
   periodLabelActive: {
-    color: "#fff",
+    color: colors.textOnPrimary,
   },
 });

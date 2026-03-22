@@ -41,10 +41,26 @@ class NetWorthHistoryResponse(BaseModel):
     change_pct: str | None = None
 
 
+class IncomeByCategory(BaseModel):
+    category_name: str
+    amount: str
+
+
+class AssetSummary(BaseModel):
+    id: str
+    name: str
+    asset_type: str
+    estimated_value: str
+
+
 class DashboardResponse(BaseModel):
     net_worth: str | None = None
     monthly_spending: str
+    monthly_income: str
     accounts: list[AccountSummary]
+    assets: list[AssetSummary] = []
     budget_summaries: list[BudgetSummary]
     spending_by_category: list[SpendingByCategory]
+    income_by_category: list[IncomeByCategory]
     spending_over_time: list[MonthlySpendingPoint]
+    income_over_time: list[MonthlySpendingPoint]

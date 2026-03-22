@@ -13,6 +13,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiRequest } from "../../src/api/client";
 import { useBudgetsStore, type Budget } from "../../src/stores/budgets";
+import { colors, borderRadius, shadows } from "../../src/theme";
 
 type Category = {
   id: string;
@@ -136,7 +137,7 @@ export default function BudgetDetailScreen() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a1a2e" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -165,7 +166,7 @@ export default function BudgetDetailScreen() {
               value={amount}
               onChangeText={setAmount}
               placeholder="0.00"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textMuted}
               keyboardType="decimal-pad"
               returnKeyType="done"
             />
@@ -241,7 +242,7 @@ export default function BudgetDetailScreen() {
           activeOpacity={0.8}
         >
           {isSaving ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.textOnPrimary} />
           ) : (
             <Text style={styles.saveBtnText}>
               {isNew ? "Create Budget" : "Save Changes"}
@@ -267,11 +268,11 @@ export default function BudgetDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
   },
   centered: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -279,22 +280,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     paddingTop: 60,
     paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: colors.border,
   },
   backArrow: {
     fontSize: 24,
-    color: "#1a1a2e",
+    color: colors.primary,
     fontWeight: "600",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   body: {
     flex: 1,
@@ -306,13 +307,13 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
+    color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 4,
   },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
     padding: 16,
     marginBottom: 16,
   },
@@ -323,14 +324,14 @@ const styles = StyleSheet.create({
   amountPrefix: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
     marginRight: 4,
   },
   amountInput: {
     flex: 1,
     fontSize: 28,
     fontWeight: "700",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   currentCategory: {
     flexDirection: "row",
@@ -351,16 +352,16 @@ const styles = StyleSheet.create({
   currentCategoryText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   clearBtn: {
     fontSize: 16,
-    color: "#999",
+    color: colors.textMuted,
     padding: 4,
   },
   placeholderText: {
     fontSize: 14,
-    color: "#999",
+    color: colors.textMuted,
     marginBottom: 12,
   },
   chipList: {
@@ -371,11 +372,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#f5f5f5",
+    borderRadius: borderRadius.xl,
+    backgroundColor: colors.background,
   },
   chipSelected: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.primary,
   },
   chipDot: {
     width: 8,
@@ -385,25 +386,25 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 13,
-    color: "#666",
+    color: colors.textSecondary,
   },
   chipTextSelected: {
-    color: "#fff",
+    color: colors.textOnPrimary,
   },
   periodText: {
     fontSize: 16,
     fontWeight: "500",
-    color: "#1a1a2e",
+    color: colors.textPrimary,
   },
   errorText: {
-    color: "#d32f2f",
+    color: colors.error,
     fontSize: 14,
     textAlign: "center",
     marginBottom: 12,
   },
   saveBtn: {
-    backgroundColor: "#1a1a2e",
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.pill,
     padding: 16,
     alignItems: "center",
     marginTop: 4,
@@ -412,20 +413,20 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   saveBtnText: {
-    color: "#fff",
+    color: colors.textOnPrimary,
     fontSize: 16,
     fontWeight: "600",
   },
   deleteBtn: {
-    borderRadius: 12,
+    borderRadius: borderRadius.lg,
     padding: 16,
     alignItems: "center",
     marginTop: 12,
     borderWidth: 1,
-    borderColor: "#d32f2f",
+    borderColor: colors.error,
   },
   deleteBtnText: {
-    color: "#d32f2f",
+    color: colors.error,
     fontSize: 16,
     fontWeight: "600",
   },

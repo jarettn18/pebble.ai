@@ -5,24 +5,19 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  Dimensions,
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useDashboardStore } from "../src/stores/dashboard";
 import { formatCurrency } from "../src/utils/dashboard";
 import { colors, borderRadius, shadows, fonts } from "../src/theme";
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const CHART_PADDING = 20;
-const BAR_CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING * 2 - 40; // 40 for card padding
+const CATEGORY_COLORS = colors.incomePalette;
 
-const CATEGORY_COLORS = colors.spendingPalette;
-
-export default function SpendingScreen() {
+export default function IncomeScreen() {
   const {
-    monthlySpending,
-    spendingByCategory,
-    spendingOverTime,
+    monthlyIncome,
+    incomeByCategory,
+    incomeOverTime,
     isLoading,
     load,
     refresh,
@@ -35,17 +30,16 @@ export default function SpendingScreen() {
   );
 
   const maxCategoryAmount = Math.max(
-    ...spendingByCategory.map((c) => parseFloat(c.amount)),
+    ...incomeByCategory.map((c) => parseFloat(c.amount)),
     1
   );
 
   const maxMonthAmount = Math.max(
-    ...spendingOverTime.map((p) => parseFloat(p.amount)),
+    ...incomeOverTime.map((p) => parseFloat(p.amount)),
     1
   );
 
-  // Donut-style breakdown as stacked horizontal bar
-  const totalCatSpending = spendingByCategory.reduce(
+  const totalCatIncome = incomeByCategory.reduce(
     (sum, c) => sum + parseFloat(c.amount),
     0
   );
@@ -64,20 +58,19 @@ export default function SpendingScreen() {
     >
       {/* Monthly Total */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>This Month's Spending</Text>
-        <Text style={styles.totalAmount}>{formatCurrency(monthlySpending)}</Text>
+        <Text style={styles.cardTitle}>This Month's Income</Text>
+        <Text style={styles.totalAmount}>{formatCurrency(monthlyIncome)}</Text>
       </View>
 
       {/* Monthly Trend Bar Chart */}
-      {spendingOverTime.length > 0 && (
+      {incomeOverTime.length > 0 && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Monthly Trend</Text>
           <View style={styles.barChart}>
-            {spendingOverTime.map((point, i) => {
+            {incomeOverTime.map((point, i) => {
               const amount = parseFloat(point.amount);
               const heightPct = maxMonthAmount > 0 ? (amount / maxMonthAmount) * 100 : 0;
-              const isCurrentMonth =
-                i === spendingOverTime.length - 1;
+              const isCurrentMonth = i === incomeOverTime.length - 1;
               return (
                 <View key={`${point.year}-${point.month}`} style={styles.barColumn}>
                   <Text style={styles.barValue}>
@@ -110,16 +103,16 @@ export default function SpendingScreen() {
       )}
 
       {/* Category Breakdown — Horizontal Bars */}
-      {spendingByCategory.length > 0 && (
+      {incomeByCategory.length > 0 && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>By Category</Text>
 
           {/* Stacked summary bar */}
           <View style={styles.stackedBar}>
-            {spendingByCategory.map((cat, i) => {
+            {incomeByCategory.map((cat, i) => {
               const pct =
-                totalCatSpending > 0
-                  ? (parseFloat(cat.amount) / totalCatSpending) * 100
+                totalCatIncome > 0
+                  ? (parseFloat(cat.amount) / totalCatIncome) * 100
                   : 0;
               if (pct < 1) return null;
               return (
@@ -133,7 +126,7 @@ export default function SpendingScreen() {
                         CATEGORY_COLORS[i % CATEGORY_COLORS.length],
                     },
                     i === 0 && styles.stackedFirst,
-                    i === spendingByCategory.length - 1 && styles.stackedLast,
+                    i === incomeByCategory.length - 1 && styles.stackedLast,
                   ]}
                 />
               );
@@ -141,7 +134,7 @@ export default function SpendingScreen() {
           </View>
 
           {/* Individual category bars */}
-          {spendingByCategory.map((cat, i) => {
+          {incomeByCategory.map((cat, i) => {
             const amount = parseFloat(cat.amount);
             const pct = (amount / maxCategoryAmount) * 100;
             const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
@@ -175,11 +168,11 @@ export default function SpendingScreen() {
         </View>
       )}
 
-      {spendingByCategory.length === 0 && !isLoading && (
+      {incomeByCategory.length === 0 && !isLoading && (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No spending data yet</Text>
+          <Text style={styles.emptyText}>No income data yet</Text>
           <Text style={styles.emptyHint}>
-            Transactions will appear here once synced
+            Income transactions will appear here once synced
           </Text>
         </View>
       )}
@@ -214,10 +207,8 @@ const styles = StyleSheet.create({
   totalAmount: {
     fontSize: 32,
     fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    color: colors.income,
   },
-
-  // --- Bar Chart (vertical) ---
   barChart: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -261,8 +252,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontFamily: fonts.bold,
   },
-
-  // --- Stacked bar ---
   stackedBar: {
     flexDirection: "row",
     height: 12,
@@ -281,8 +270,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 6,
     borderBottomRightRadius: 6,
   },
-
-  // --- Category rows ---
   categoryRow: {
     marginBottom: 14,
   },
@@ -324,8 +311,6 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 9999,
   },
-
-  // --- Empty ---
   emptyCard: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,

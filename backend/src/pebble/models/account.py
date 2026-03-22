@@ -35,8 +35,8 @@ class Account(Base, TimestampMixin):
     official_name: Mapped[str | None] = mapped_column(String(255))
     type: Mapped[str] = mapped_column(String(50))
     subtype: Mapped[str | None] = mapped_column(String(50))
-    balance_current: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
-    balance_available: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    balance_current: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
+    balance_available: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
     iso_currency_code: Mapped[str | None] = mapped_column(String(3))
 
     user: Mapped["User"] = relationship(back_populates="accounts")  # noqa: F821

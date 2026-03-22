@@ -108,9 +108,15 @@ export async function apiRequest<T = unknown>(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(error.detail || `HTTP ${res.status}`);
+    const detail = error.detail;
+    const message =
+      Array.isArray(detail)
+        ? detail.map((e: { msg?: string }) => e.msg).join(", ")
+        : detail || `HTTP ${res.status}`;
+    throw new Error(message);
   }
 
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 

@@ -5,6 +5,7 @@ from pebble.models.category import Category
 from pebble.models.budget import Budget
 from pebble.models.chat import ChatConversation, ChatMessage
 from pebble.models.api_usage import ApiUsage
+from pebble.models.asset import Asset
 from pebble.models.base import Base
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "ChatConversation",
     "ChatMessage",
     "ApiUsage",
+    "Asset",
 ]

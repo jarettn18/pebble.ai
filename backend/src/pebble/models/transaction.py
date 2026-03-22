@@ -18,7 +18,7 @@ class Transaction(Base, TimestampMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id"), index=True)
     plaid_transaction_id: Mapped[str | None] = mapped_column(String(255), unique=True)
-    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    amount: Mapped[Decimal] = mapped_column(Numeric(16, 2))
     date: Mapped[date] = mapped_column(Date)
     name: Mapped[str] = mapped_column(String(255))
     merchant_name: Mapped[str | None] = mapped_column(String(255))

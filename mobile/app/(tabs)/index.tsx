@@ -8,9 +8,13 @@ import {
   Alert,
   ScrollView,
   RefreshControl,
+  Dimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  Pressable,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
-import type { AccountSummary } from "../../src/stores/dashboard";
+import { useFocusEffect, useRouter, useNavigation } from "expo-router";
+import type { AssetSummary } from "../../src/stores/dashboard";
 import { useAuthStore } from "../../src/stores/auth";
 import { useDashboardStore } from "../../src/stores/dashboard";
 import { useAccountsStore } from "../../src/stores/accounts";
@@ -20,19 +24,11 @@ import { apiRequest } from "../../src/api/client";
 import { formatCurrency } from "../../src/utils/dashboard";
 import PieChart from "../../src/components/PieChart";
 import NetWorthChart from "../../src/components/NetWorthChart";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { colors, borderRadius, shadows, fonts } from "../../src/theme";
 
-const PIE_COLORS = [
-  "#1a1a2e",
-  "#16213e",
-  "#0f3460",
-  "#533483",
-  "#e94560",
-  "#f38181",
-  "#fce38a",
-  "#95e1d3",
-  "#aa96da",
-  "#c4edde",
-];
+const PIE_COLORS = colors.spendingPalette;
+const INCOME_COLORS = colors.incomePalette;
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   depository: "Bank",
@@ -41,40 +37,76 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   investment: "Investment",
 };
 
-function AccountRow({ account, isLast }: { account: AccountSummary; isLast: boolean }) {
-  const bal = account.balance_current ? parseFloat(account.balance_current) : null;
-  const isDebt = account.type === "credit" || account.type === "loan";
-  const typeLabel = ACCOUNT_TYPE_LABELS[account.type] ?? account.type;
-  const label = account.institution_name
-    ? `${account.institution_name} — ${account.name}`
-    : account.name;
+
+const ASSET_TYPE_LABELS: Record<string, string> = {
+  primary_residence: "Primary Residence",
+  rental: "Rental",
+  investment_property: "Investment Property",
+  vacation: "Vacation",
+  land: "Land",
+  car: "Car",
+  motorcycle: "Motorcycle",
+  boat: "Boat",
+  other: "Other",
+};
+
+const ASSET_TYPE_ICONS: Record<string, string> = {
+  primary_residence: "home-outline",
+  rental: "home-city-outline",
+  investment_property: "office-building-outline",
+  vacation: "palm-tree",
+  land: "terrain",
+  car: "car-outline",
+  motorcycle: "motorbike",
+  boat: "sail-boat",
+  other: "package-variant-closed",
+};
+
+
+function AssetRow({ asset, onPress }: { asset: AssetSummary; onPress: () => void }) {
+  const value = parseFloat(asset.estimated_value);
+  const typeLabel = ASSET_TYPE_LABELS[asset.asset_type] ?? asset.asset_type;
+  const iconName = ASSET_TYPE_ICONS[asset.asset_type] ?? "package-variant-closed";
 
   return (
-    <View style={[styles.accountRow, !isLast && styles.accountRowBorder]}>
-      <View style={styles.accountInfo}>
-        <Text style={styles.accountName} numberOfLines={1}>{label}</Text>
-        <Text style={styles.accountType}>{typeLabel}{account.subtype ? ` · ${account.subtype}` : ""}</Text>
+    <TouchableOpacity style={styles.itemCard} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.itemCardRow}>
+        <View style={styles.itemCardLeft}>
+          <View style={[styles.iconCircle, { backgroundColor: `${colors.secondaryContainer}80` }]}>
+            <MaterialCommunityIcons name={iconName as any} size={22} color={colors.secondary} />
+          </View>
+          <View style={styles.itemCardInfo}>
+            <Text style={styles.itemCardName} numberOfLines={1}>{asset.name}</Text>
+            <Text style={styles.itemCardSub}>{typeLabel}</Text>
+          </View>
+        </View>
+        <View style={styles.itemCardRight}>
+          <Text style={styles.itemCardAmount}>{formatCurrency(value)}</Text>
+          <Text style={styles.itemCardLabel}>VALUE</Text>
+        </View>
       </View>
-      {bal !== null && Number.isFinite(bal) && (
-        <Text style={[styles.accountBalance, isDebt && styles.negative]}>
-          {isDebt ? "-" : ""}{formatCurrency(bal)}
-        </Text>
-      )}
-    </View>
+    </TouchableOpacity>
   );
 }
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const user = useAuthStore((s) => s.user);
   const [exchanging, setExchanging] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
 
   const {
     netWorth,
     monthlySpending,
+    monthlyIncome,
+    refreshCount,
     accounts,
+    assets,
     budgetSummaries,
     spendingByCategory,
+    incomeByCategory,
     isLoading: dashLoading,
     load: loadDashboard,
     refresh: refreshDashboard,
@@ -83,15 +115,38 @@ export default function DashboardScreen() {
   const refreshAccounts = useAccountsStore((s) => s.refresh);
   const syncTransactions = useTransactionsStore((s) => s.syncAndRefresh);
 
-  const { isLoading, error, linkResult, openLink, clearResult } =
+  const { error, linkResult, openLink, clearResult } =
     usePlaidLink();
 
-  // Refresh dashboard on tab focus
+  // Refresh balances (if stale) and reload dashboard on tab focus
   useFocusEffect(
     useCallback(() => {
-      loadDashboard();
+      async function refreshAndLoad() {
+        try {
+          await apiRequest("/v1/plaid/refresh-balances", { method: "POST" });
+        } catch {
+          // may fail if no items linked
+        }
+        await loadDashboard(undefined, undefined, true);
+      }
+      refreshAndLoad();
     }, [])
   );
+
+  // Set header right button
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          style={styles.headerAddButton}
+          onPress={() => setShowAddMenu((v) => !v)}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="plus" size={22} color={colors.primary} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   // Plaid exchange flow
   useEffect(() => {
@@ -121,9 +176,11 @@ export default function DashboardScreen() {
             `Linked ${result.accounts_linked} account${result.accounts_linked === 1 ? "" : "s"} from ${metadata.institution?.name ?? "your institution"}`
           );
           // Refresh all data after linking
-          refreshAccounts();
-          syncTransactions();
-          refreshDashboard();
+          await Promise.all([
+            refreshAccounts(),
+            syncTransactions(),
+            refreshDashboard(),
+          ]);
         }
       } catch (err) {
         if (!cancelled) {
@@ -149,185 +206,377 @@ export default function DashboardScreen() {
     };
   }, [linkResult, clearResult]);
 
-  const hasAccounts = accounts.length > 0;
-  const busy = isLoading || exchanging;
+  const totalBudgeted = budgetSummaries.reduce((sum, b) => sum + parseFloat(b.amount || "0"), 0);
+  const totalSpent = budgetSummaries.reduce((sum, b) => sum + parseFloat(b.spent || "0"), 0);
+  const budgetRemaining = totalBudgeted - totalSpent;
+  const budgetPct = totalBudgeted > 0 ? Math.round((totalSpent / totalBudgeted) * 100) : 0;
+  const isOverBudget = totalSpent > totalBudgeted;
+
+  const hasAccounts = accounts.length > 0 || assets.length > 0;
+  const [carouselPage, setCarouselPage] = useState(0);
+  const cardWidth = Dimensions.get("window").width - 40;
+
+  const onCarouselScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const page = Math.round(e.nativeEvent.contentOffset.x / (cardWidth + 12));
+    setCarouselPage(page);
+  };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={dashLoading}
-          onRefresh={refreshDashboard}
-          tintColor="#1a1a2e"
-        />
-      }
-    >
-      <Text style={styles.greeting}>
-        Hello, {user?.full_name?.split(" ")[0] ?? "there"}
-      </Text>
-      <Text style={styles.subtitle}>Your financial overview</Text>
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={dashLoading}
+            onRefresh={refreshDashboard}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        <Text style={styles.greeting}>
+          Hello, {user?.full_name?.split(" ")[0] ?? "there"}
+        </Text>
+        <Text style={styles.subtitle}>Your financial overview</Text>
+
+        {/* Onboarding popup — shown when no accounts or assets */}
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Net Worth</Text>
+        <Text style={styles.netWorthLabel}>YOUR NETWORTH</Text>
         {dashLoading && !hasAccounts ? (
-          <ActivityIndicator size="small" color="#1a1a2e" style={styles.cardLoader} />
+          <ActivityIndicator size="small" color={colors.primary} style={styles.cardLoader} />
         ) : (
           <Text style={[styles.cardValue, netWorth !== null && netWorth < 0 && styles.negative]}>
             {netWorth !== null ? formatCurrency(netWorth) : "--"}
           </Text>
         )}
-        {hasAccounts && <NetWorthChart />}
+        {hasAccounts && <NetWorthChart refreshKey={refreshCount} />}
         {!hasAccounts && !dashLoading && (
           <Text style={styles.cardHint}>Connect a bank account to get started</Text>
         )}
       </View>
 
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() => router.push("/spending")}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.cardTitle}>This Month's Spending</Text>
-        {dashLoading && !hasAccounts ? (
-          <ActivityIndicator size="small" color="#1a1a2e" style={styles.cardLoader} />
-        ) : (
-          <Text style={styles.cardValue}>
-            {hasAccounts ? formatCurrency(monthlySpending) : "--"}
-          </Text>
-        )}
-        {spendingByCategory.length > 0 && (
-          <PieChart
-            slices={spendingByCategory.map((cat, i) => ({
-              label: cat.category_name,
-              value: parseFloat(cat.amount),
-              color: PIE_COLORS[i % PIE_COLORS.length],
-            }))}
-          />
-        )}
-        {hasAccounts && (
-          <Text style={styles.cardLink}>View details →</Text>
-        )}
-      </TouchableOpacity>
+      <View style={styles.carouselWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToOffsets={[0, cardWidth + 12]}
+          snapToEnd={false}
+          decelerationRate="fast"
+          disableIntervalMomentum
+          onMomentumScrollEnd={onCarouselScroll}
+          contentContainerStyle={styles.carouselContent}
+        >
+          <TouchableOpacity
+            style={[styles.card, styles.carouselCard, { width: cardWidth }]}
+            onPress={() => router.push("/income")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cardTitle}>This Month's Income</Text>
+            {dashLoading && !hasAccounts ? (
+              <ActivityIndicator size="small" color={colors.primary} style={styles.cardLoader} />
+            ) : (
+              <Text style={[styles.cardValue, styles.incomeValue]}>
+                {hasAccounts ? formatCurrency(monthlyIncome) : "--"}
+              </Text>
+            )}
+            {incomeByCategory.length > 0 && (
+              <PieChart
+                slices={incomeByCategory.map((cat, i) => ({
+                  label: cat.category_name,
+                  value: parseFloat(cat.amount),
+                  color: INCOME_COLORS[i % INCOME_COLORS.length],
+                }))}
+              />
+            )}
+            {hasAccounts && (
+              <Text style={styles.cardLink}>View details →</Text>
+            )}
+          </TouchableOpacity>
 
-      {/* Top spending categories */}
-      {spendingByCategory.length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Spending by Category</Text>
-          {spendingByCategory.slice(0, 5).map((cat, i) => (
+          <TouchableOpacity
+            style={[styles.card, styles.carouselCard, { width: cardWidth }]}
+            onPress={() => router.push("/spending")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cardTitle}>This Month's Spending</Text>
+            {dashLoading && !hasAccounts ? (
+              <ActivityIndicator size="small" color={colors.primary} style={styles.cardLoader} />
+            ) : (
+              <Text style={styles.cardValue}>
+                {hasAccounts ? formatCurrency(monthlySpending) : "--"}
+              </Text>
+            )}
+            {spendingByCategory.length > 0 && (
+              <PieChart
+                slices={spendingByCategory.map((cat, i) => ({
+                  label: cat.category_name,
+                  value: parseFloat(cat.amount),
+                  color: PIE_COLORS[i % PIE_COLORS.length],
+                }))}
+              />
+            )}
+            {hasAccounts && (
+              <Text style={styles.cardLink}>View details →</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+
+        <View style={styles.dots}>
+          {[0, 1].map((i) => (
             <View
-              key={cat.category_name}
-              style={[styles.catRow, i < Math.min(spendingByCategory.length, 5) - 1 && styles.catRowBorder]}
-            >
-              <Text style={styles.catName}>{cat.category_name}</Text>
-              <Text style={styles.catAmount}>{formatCurrency(parseFloat(cat.amount))}</Text>
-            </View>
+              key={i}
+              style={[styles.dot, carouselPage === i && styles.dotActive]}
+            />
           ))}
         </View>
-      )}
+      </View>
 
-      {/* Budget overview */}
+
+
+      {/* Budget Summary — Overall Budget Pill */}
       {budgetSummaries.length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Budget Overview</Text>
-          {budgetSummaries.map((b, i) => {
-            const budgeted = parseFloat(b.amount || "0");
-            const spent = parseFloat(b.spent || "0");
-            const progress = budgeted > 0 ? Math.min(spent / budgeted, 1) : 0;
-            const overBudget = spent > budgeted;
-            return (
-              <View key={i} style={[styles.budgetRow, i < budgetSummaries.length - 1 && styles.budgetRowBorder]}>
-                <View style={styles.budgetInfo}>
-                  <Text style={styles.budgetName}>{b.category_name || "Uncategorized"}</Text>
-                  <Text style={[styles.budgetSpent, overBudget && styles.negative]}>
-                    {formatCurrency(spent)} / {formatCurrency(budgeted)}
+        <View style={styles.budgetPill}>
+          <View style={styles.budgetPillTop}>
+            <View>
+              <Text style={styles.budgetPillLabel}>Overall Budget</Text>
+              <Text style={styles.budgetPillValue}>
+                {budgetPct}%{" "}
+                <Text style={styles.budgetPillValueSub}>
+                  of {formatCurrency(totalBudgeted)}
+                </Text>
+              </Text>
+            </View>
+            <Text style={[styles.budgetPillRemaining, isOverBudget && styles.negative]}>
+              {isOverBudget ? "Over by " : ""}{formatCurrency(Math.abs(budgetRemaining))}{isOverBudget ? "" : " left"}
+            </Text>
+          </View>
+          <View style={styles.budgetProgressTrack}>
+            <View
+              style={[
+                styles.budgetProgressFill,
+                { width: `${Math.min(budgetPct, 100)}%` },
+                isOverBudget && { backgroundColor: colors.error },
+              ]}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Accounts */}
+      {accounts.length > 0 && (
+        <View style={styles.accountsWidget}>
+          {/* Decorative background icon */}
+          <View style={styles.accountsWidgetDecor}>
+            <MaterialCommunityIcons name="wallet-outline" size={140} color="#ffffff" />
+          </View>
+          <Text style={styles.accountsWidgetTitle}>My Accounts</Text>
+          <View style={styles.accountsWidgetList}>
+            {accounts.map((acct, index) => (
+              <TouchableOpacity
+                key={acct.id}
+                style={[
+                  styles.accountsWidgetRow,
+                  index < accounts.length - 1 && styles.accountsWidgetRowBorder,
+                ]}
+                onPress={() => router.push(`/(tabs)/transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}`)}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 0.75, marginRight: 12 }}>
+                  <Text style={styles.accountsWidgetSub}>
+                    {acct.institution_name ?? ACCOUNT_TYPE_LABELS[acct.type] ?? acct.type}
                   </Text>
+                  <Text style={styles.accountsWidgetName} numberOfLines={1} ellipsizeMode="tail">{acct.name}</Text>
                 </View>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${progress * 100}%` },
-                      overBudget && styles.progressOverBudget,
-                    ]}
-                  />
-                </View>
-              </View>
-            );
-          })}
+                {acct.balance_current && (
+                  <Text style={[
+                    styles.accountsWidgetBalance,
+                    (acct.type === "credit" || acct.type === "loan") && styles.accountsWidgetBalanceDebt,
+                  ]}>
+                    {(acct.type === "credit" || acct.type === "loan") ? "-" : ""}
+                    {formatCurrency(parseFloat(acct.balance_current))}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       )}
 
-      {hasAccounts && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Accounts</Text>
-          {accounts.map((acct, i) => (
-            <AccountRow key={acct.id} account={acct} isLast={i === accounts.length - 1} />
+      {/* Assets */}
+      {assets.length > 0 && (
+        <>
+          <Text style={styles.sectionTitle}>Assets</Text>
+          {assets.map((asset) => (
+            <AssetRow
+              key={asset.id}
+              asset={asset}
+              onPress={() => router.push(`/asset/${asset.id}`)}
+            />
           ))}
-        </View>
+        </>
       )}
-
-      <TouchableOpacity
-        style={[styles.connectButton, busy && styles.connectButtonDisabled]}
-        onPress={openLink}
-        disabled={busy}
-        activeOpacity={0.8}
-      >
-        {busy ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.connectButtonText}>
-            {hasAccounts ? "+ Add Another Account" : "Connect Bank Account"}
-          </Text>
-        )}
-      </TouchableOpacity>
 
       {error && <Text style={styles.errorText}>{error}</Text>}
     </ScrollView>
+
+      {/* Dropdown menu */}
+      {/* Onboarding popup */}
+      {!hasAccounts && !dashLoading && showOnboarding && (
+        <>
+          <Pressable style={styles.onboardingOverlay} onPress={() => setShowOnboarding(false)} />
+          <View style={styles.onboardingPopup}>
+            <View style={styles.onboardingTail} />
+            <TouchableOpacity
+              style={styles.onboardingClose}
+              onPress={() => setShowOnboarding(false)}
+              hitSlop={12}
+            >
+              <MaterialCommunityIcons name="close" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+            <Text style={styles.onboardingTitle}>Get Started</Text>
+            <Text style={styles.onboardingText}>
+              Tap the <Text style={styles.onboardingBold}>+</Text> button to add an account
+            </Text>
+          </View>
+        </>
+      )}
+
+      {showAddMenu && (
+        <>
+          <Pressable style={styles.addMenuOverlay} onPress={() => setShowAddMenu(false)} />
+          <View style={styles.addMenu}>
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              onPress={() => {
+                setShowAddMenu(false);
+                openLink();
+              }}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="bank-outline" size={20} color={colors.primary} />
+              <Text style={styles.addMenuText}>Add Account</Text>
+            </TouchableOpacity>
+            <View style={styles.addMenuDivider} />
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              onPress={() => {
+                setShowAddMenu(false);
+                router.push("/add-asset");
+              }}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="home-outline" size={20} color={colors.primary} />
+              <Text style={styles.addMenuText}>Add Property or Vehicle</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.background,
+  },
+  scrollView: {
+    flex: 1,
   },
   content: {
     padding: 20,
   },
   greeting: {
     fontSize: 28,
-    fontWeight: "700",
-    color: "#1a1a2e",
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
     marginTop: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: "#666",
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
     marginBottom: 24,
     marginTop: 4,
   },
+  headerAddButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: `${colors.textPrimary}26`, // 15% opacity
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  addMenuOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 11,
+  },
+  addMenu: {
+    position: "absolute",
+    top: 0,
+    right: 12,
+    width: Dimensions.get("window").width / 3 + 40,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}33`,
+    zIndex: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  addMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+  },
+  addMenuText: {
+    fontSize: 15,
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
+    marginLeft: 12,
+  },
+  addMenuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginHorizontal: 16,
+  },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
     padding: 20,
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}1A`,
+    ...shadows.card,
+  },
+  netWorthLabel: {
+    fontSize: 12,
+    fontFamily: fonts.labelMedium,
+    color: colors.textSecondary,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    marginBottom: 8,
   },
   cardTitle: {
     fontSize: 14,
-    color: "#666",
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   cardValue: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#1a1a2e",
+    fontSize: 36,
+    fontFamily: fonts.extraBold,
+    color: colors.textPrimary,
   },
   cardLoader: {
     alignSelf: "flex-start",
@@ -335,124 +584,282 @@ const styles = StyleSheet.create({
   },
   cardHint: {
     fontSize: 12,
-    color: "#999",
+    color: colors.textMuted,
     marginTop: 8,
   },
   cardLink: {
     fontSize: 13,
-    color: "#0f3460",
+    color: colors.primary,
     fontWeight: "600",
     marginTop: 8,
   },
-  negative: {
-    color: "#d32f2f",
+  incomeValue: {
+    color: colors.textSecondary,
   },
-  catRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 10,
+  carouselWrapper: {
+    marginBottom: 16,
   },
-  catRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e0e0e0",
+  carouselContent: {
+    paddingRight: 20,
   },
-  catName: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#1a1a2e",
-    flex: 1,
-  },
-  catAmount: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1a1a2e",
-  },
-  budgetRow: {
-    paddingVertical: 10,
-  },
-  budgetRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e0e0e0",
-  },
-  budgetInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  budgetName: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#1a1a2e",
-    flex: 1,
-  },
-  budgetSpent: {
-    fontSize: 13,
-    color: "#666",
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 2,
-    overflow: "hidden" as const,
-  },
-  progressFill: {
-    height: "100%" as unknown as number,
-    backgroundColor: "#1a1a2e",
-    borderRadius: 2,
-  },
-  progressOverBudget: {
-    backgroundColor: "#d32f2f",
-  },
-  connectButton: {
-    backgroundColor: "#1a1a2e",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  connectButtonDisabled: {
-    opacity: 0.7,
-  },
-  connectButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  accountRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  accountRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e0e0e0",
-  },
-  accountInfo: {
-    flex: 1,
+  carouselCard: {
+    marginBottom: 0,
     marginRight: 12,
   },
-  accountName: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#1a1a2e",
+  dots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 10,
   },
-  accountType: {
-    fontSize: 12,
-    color: "#999",
-    marginTop: 2,
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.dotInactive,
+    marginHorizontal: 4,
   },
-  accountBalance: {
+  dotActive: {
+    backgroundColor: colors.primary,
+  },
+  negative: {
+    color: colors.negative,
+  },
+  budgetPill: {
+    padding: 20,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    marginBottom: 16,
+  },
+  budgetPillTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginBottom: 12,
+  },
+  budgetPillLabel: {
+    fontSize: 11,
+    fontFamily: fonts.labelMedium,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: colors.textPrimary,
+    opacity: 0.7,
+    marginBottom: 4,
+  },
+  budgetPillValue: {
+    fontSize: 22,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+  },
+  budgetPillValueSub: {
+    fontSize: 13,
+    fontWeight: "400",
+    opacity: 0.7,
+  },
+  budgetPillRemaining: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+  },
+  budgetProgressTrack: {
+    height: 16,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 9999,
+  },
+  budgetProgressFill: {
+    height: "100%" as unknown as number,
+    backgroundColor: colors.primary,
+    borderRadius: 9999,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  itemCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}1A`,
+    ...shadows.card,
+  },
+  itemCardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  itemCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  itemCardInfo: {
+    flex: 1,
+  },
+  itemCardName: {
     fontSize: 15,
-    fontWeight: "600",
-    color: "#1a1a2e",
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  itemCardSub: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
+  },
+  itemCardRight: {
+    alignItems: "flex-end",
+    marginLeft: 8,
+  },
+  itemCardAmount: {
+    fontSize: 14,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+  },
+  itemCardLabel: {
+    fontSize: 9,
+    fontFamily: fonts.labelMedium,
+    color: `${colors.textSecondary}99`,
+    letterSpacing: -0.3,
+    textTransform: "uppercase",
+    marginTop: 1,
   },
   errorText: {
-    color: "#d32f2f",
+    color: colors.error,
     fontSize: 14,
     textAlign: "center",
     marginTop: 12,
+  },
+  onboardingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    zIndex: 20,
+  },
+  onboardingPopup: {
+    position: "absolute",
+    top: 10,
+    right: 7,
+    width: 160,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    padding: 14,
+    alignItems: "center",
+    zIndex: 21,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  onboardingTail: {
+    position: "absolute",
+    top: -8,
+    right: 16,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: colors.surface,
+  },
+  onboardingClose: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+  },
+  onboardingTitle: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+    marginBottom: 6,
+  },
+  onboardingText: {
+    fontSize: 14,
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  onboardingBold: {
+    fontFamily: fonts.bold,
+    color: colors.primary,
+  },
+  accountsWidget: {
+    backgroundColor: "#2d5a56",
+    borderRadius: borderRadius.lg,
+    padding: 24,
+    marginBottom: 16,
+    overflow: "hidden",
+    position: "relative",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 6,
+  },
+  accountsWidgetDecor: {
+    position: "absolute",
+    top: -10,
+    right: -10,
+    opacity: 0.2,
+  },
+  accountsWidgetTitle: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: "#ffffff",
+    opacity: 0.9,
+    marginBottom: 20,
+  },
+  accountsWidgetList: {
+    position: "relative",
+    zIndex: 1,
+  },
+  accountsWidgetRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    paddingVertical: 12,
+  },
+  accountsWidgetRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+  accountsWidgetSub: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    color: "#ffffff",
+    opacity: 0.7,
+    marginBottom: 2,
+  },
+  accountsWidgetName: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: "#ffffff",
+  },
+  accountsWidgetBalance: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: "#ffffff",
+    flexShrink: 0,
+    textAlign: "right",
+  },
+  accountsWidgetBalanceDebt: {
+    color: "#adeef0",
   },
 });

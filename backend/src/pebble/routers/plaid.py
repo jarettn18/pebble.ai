@@ -11,7 +11,7 @@ from pebble.schemas.plaid import (
     SyncRequest,
     SyncResponse,
 )
-from pebble.services.plaid import create_link_token, exchange_public_token, sync_all_items, sync_transactions
+from pebble.services.plaid import create_link_token, exchange_public_token, refresh_balances_if_stale, sync_all_items, sync_transactions
 
 router = APIRouter(prefix="/v1/plaid", tags=["plaid"])
 
@@ -58,3 +58,12 @@ async def sync_all(
         user_id=str(user.id),
         db=db,
     )
+
+
+@router.post("/refresh-balances")
+async def refresh_balances(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    refreshed = await refresh_balances_if_stale(str(user.id), db)
+    return {"refreshed": refreshed}
