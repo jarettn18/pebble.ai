@@ -17,6 +17,7 @@ def _budget_to_dict(b: Budget, spent: Decimal = Decimal("0")) -> dict:
         "id": str(b.id),
         "category_id": str(b.category_id),
         "category_name": b.category.name if b.category else None,
+        "category_color": b.category.color if b.category else None,
         "amount": str(b.amount),
         "spent": str(spent),
         "month": b.month,

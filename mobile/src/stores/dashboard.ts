@@ -13,17 +13,20 @@ export type AccountSummary = {
 export type BudgetSummary = {
   category_id: string;
   category_name: string | null;
+  category_color: string | null;
   amount: string;
   spent: string;
 };
 
 export type SpendingByCategory = {
   category_name: string;
+  category_color: string | null;
   amount: string;
 };
 
 export type IncomeByCategory = {
   category_name: string;
+  category_color: string | null;
   amount: string;
 };
 

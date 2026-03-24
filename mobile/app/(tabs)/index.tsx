@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -30,6 +30,8 @@ import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../../s
 
 const PIE_COLORS = colors.spendingPalette;
 const INCOME_COLORS = colors.incomePalette;
+
+const HIT_SLOP_8 = { top: 8, bottom: 8, left: 8, right: 8 };
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   depository: "Bank",
@@ -122,15 +124,10 @@ export default function DashboardScreen() {
   // Refresh balances (if stale) and reload dashboard on tab focus
   useFocusEffect(
     useCallback(() => {
-      async function refreshAndLoad() {
-        try {
-          await apiRequest("/v1/plaid/refresh-balances", { method: "POST" });
-        } catch {
-          // may fail if no items linked
-        }
-        await loadDashboard(undefined, undefined, true);
-      }
-      refreshAndLoad();
+      // Refresh dashboard data (picks up color changes, new transactions, etc.)
+      loadDashboard(undefined, undefined, true);
+      // Refresh Plaid balances in background (doesn't block render)
+      apiRequest("/v1/plaid/refresh-balances", { method: "POST" }).catch(() => {});
     }, [])
   );
 
@@ -207,21 +204,32 @@ export default function DashboardScreen() {
     };
   }, [linkResult, clearResult]);
 
-  const totalBudgeted = budgetSummaries.reduce((sum, b) => sum + parseFloat(b.amount || "0"), 0);
-  const totalSpent = budgetSummaries.reduce((sum, b) => sum + parseFloat(b.spent || "0"), 0);
-  const budgetRemaining = totalBudgeted - totalSpent;
-  const budgetPct = totalBudgeted > 0 ? Math.round((totalSpent / totalBudgeted) * 100) : 0;
-  const isOverBudget = totalSpent > totalBudgeted;
+  const { totalBudgeted, totalSpent, budgetRemaining, budgetPct, isOverBudget } = useMemo(() => {
+    const { budgeted, spent } = budgetSummaries.reduce(
+      (acc, b) => ({
+        budgeted: acc.budgeted + parseFloat(b.amount || "0"),
+        spent: acc.spent + parseFloat(b.spent || "0"),
+      }),
+      { budgeted: 0, spent: 0 }
+    );
+    return {
+      totalBudgeted: budgeted,
+      totalSpent: spent,
+      budgetRemaining: budgeted - spent,
+      budgetPct: budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0,
+      isOverBudget: spent > budgeted,
+    };
+  }, [budgetSummaries]);
 
   const hasAccounts = accounts.length > 0 || assets.length > 0;
   const [carouselPage, setCarouselPage] = useState(0);
   const [budgetExpanded, setBudgetExpanded] = useState(false);
   const cardWidth = Dimensions.get("window").width - 40;
 
-  const onCarouselScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const onCarouselScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / (cardWidth + 12));
     setCarouselPage(page);
-  };
+  }, [cardWidth]);
 
   return (
     <View style={styles.container}>
@@ -263,7 +271,7 @@ export default function DashboardScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           snapToOffsets={[0, cardWidth + 12]}
-          snapToEnd={false}
+          snapToEnd={true}
           decelerationRate="fast"
           disableIntervalMomentum
           onMomentumScrollEnd={onCarouselScroll}
@@ -287,7 +295,7 @@ export default function DashboardScreen() {
                 slices={incomeByCategory.map((cat, i) => ({
                   label: cat.category_name,
                   value: parseFloat(cat.amount),
-                  color: INCOME_COLORS[i % INCOME_COLORS.length],
+                  color: cat.category_color || INCOME_COLORS[i % INCOME_COLORS.length],
                 }))}
               />
             )}
@@ -297,7 +305,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.card, styles.carouselCard, { width: cardWidth }]}
+            style={[styles.card, styles.carouselCard, styles.carouselCardLast, { width: cardWidth }]}
             onPress={() => router.push("/spending")}
             activeOpacity={0.7}
           >
@@ -314,7 +322,7 @@ export default function DashboardScreen() {
                 slices={spendingByCategory.map((cat, i) => ({
                   label: cat.category_name,
                   value: parseFloat(cat.amount),
-                  color: PIE_COLORS[i % PIE_COLORS.length],
+                  color: cat.category_color || PIE_COLORS[i % PIE_COLORS.length],
                 }))}
               />
             )}
@@ -406,7 +414,7 @@ export default function DashboardScreen() {
                   </View>
                   <TouchableOpacity
                     style={styles.viewTxnBtn}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    hitSlop={HIT_SLOP_8}
                     onPress={(e) => {
                       e.stopPropagation();
                       router.push(
@@ -426,6 +434,7 @@ export default function DashboardScreen() {
                     style={[
                       progressBarStyles.fill,
                       { width: `${Math.min(catPct, 100)}%` },
+                      b.category_color ? { backgroundColor: b.category_color } : undefined,
                       catOver && { backgroundColor: colors.error },
                     ]}
                   />
@@ -464,7 +473,7 @@ export default function DashboardScreen() {
             <TouchableOpacity
               onPress={() => router.push("/(tabs)/transactions")}
               activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              hitSlop={HIT_SLOP_8}
             >
               <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
@@ -480,7 +489,7 @@ export default function DashboardScreen() {
                 onPress={() => router.push(`/account-transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}&balance_current=${acct.balance_current || ""}&account_type=${acct.type}&institution_name=${encodeURIComponent(acct.institution_name || "")}`)}
                 activeOpacity={0.7}
               >
-                <View style={{ flex: 0.75, marginRight: 12 }}>
+                <View style={styles.accountsWidgetLeft}>
                   <Text style={styles.accountsWidgetSub}>
                     {acct.institution_name ?? ACCOUNT_TYPE_LABELS[acct.type] ?? acct.type}
                   </Text>
@@ -697,12 +706,13 @@ const styles = StyleSheet.create({
   carouselWrapper: {
     marginBottom: 16,
   },
-  carouselContent: {
-    paddingRight: 20,
-  },
+  carouselContent: {},
   carouselCard: {
     marginBottom: 0,
     marginRight: 12,
+  },
+  carouselCardLast: {
+    marginRight: 0,
   },
   dots: {
     flexDirection: "row",
@@ -922,6 +932,10 @@ const styles = StyleSheet.create({
   accountsWidgetRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+  accountsWidgetLeft: {
+    flex: 0.75,
+    marginRight: 12,
   },
   accountsWidgetSub: {
     fontSize: 13,

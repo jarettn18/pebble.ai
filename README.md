@@ -57,7 +57,7 @@ pebble/
 │       │   ├── accounts.py          # /v1/accounts (list user accounts)
 │       │   ├── assets.py            # /v1/assets (CRUD for properties + vehicles)
 │       │   ├── budgets.py           # /v1/budgets (CRUD)
-│       │   ├── categories.py        # /v1/categories (list all)
+│       │   ├── categories.py        # /v1/categories (list all, update color)
 │       │   ├── dashboard.py         # /v1/dashboard (aggregated overview + net worth history)
 │       │   ├── plaid.py             # /v1/plaid/* (link-token, exchange, sync, sync-all)
 │       │   └── transactions.py      # /v1/transactions (list, detail, create, update, delete)
@@ -72,7 +72,7 @@ pebble/
 │       │   └── transactions.py      # Transaction queries, detail, create, update, delete
 │       ├── middleware/
 │       │   └── auth.py              # JWT + API key auth dependencies
-│       ├── ai/                      # AI module (Phase 4)
+│       ├── ai/                      # AI module (Phase 5)
 │       └── utils/
 │           └── security.py          # bcrypt, JWT, Fernet, API key utils
 │
@@ -108,6 +108,7 @@ pebble/
 │       ├── api/
 │       │   └── client.ts            # API client with auto JWT refresh
 │       ├── components/
+│       │   ├── ColorPickerModal.tsx   # Bottom-sheet color picker with 16 preset swatches
 │       │   ├── LineChart.tsx         # SVG line chart with bezier curves, gradient fill, axis labels
 │       │   ├── NetWorthChart.tsx     # Net worth history chart with period tabs (1M/3M/1Y/5Y)
 │       │   ├── PieChart.tsx          # SVG donut chart with interactive segments + legend
@@ -116,6 +117,7 @@ pebble/
 │       ├── hooks/
 │       │   └── usePlaidLink.ts      # Plaid Link hook (fetch token, open modal)
 │       ├── utils/
+│       │   ├── color.ts             # withOpacity, contrastForeground color utilities
 │       │   └── dashboard.ts         # Net worth, spending calc, currency formatting
 │       └── stores/
 │           ├── auth.ts              # Zustand auth store
@@ -154,11 +156,11 @@ pebble/
 - **Mobile storage**: expo-secure-store
 - **API client**: auto-refreshes expired access tokens transparently
 - **Auth gate**: Expo Router layout redirects unauthenticated users to login
-- **External API auth** (Phase 5): API key (SHA-256 hashed in DB), `X-API-Key` header
+- **External API auth** (Phase 6): API key (SHA-256 hashed in DB), `X-API-Key` header
 
 ---
 
-## AI Assistant Architecture (Phase 4)
+## AI Assistant Architecture (Phase 5)
 
 Claude tool-use (function-calling) — not RAG, not direct SQL.
 
@@ -194,8 +196,10 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 | 1 | Foundation — Docker, FastAPI, models, auth, Expo scaffold | **Done** |
 | 2 | Plaid + Transactions — bank linking, sync, transaction list | **Done** |
 | 3 | Budgets + Polish — CRUD, charts, search, error states | **In progress** |
-| 4 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
-| 5 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
+| 4 | Budget Overhaul — unified budget plans, multi-month, recurring | Not started |
+| 5 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
+| 6 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
+| 7 | Iteration — dark mode, data import/export, social auth | Not started |
 
 ---
 
@@ -321,6 +325,14 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Transactions screen restyled with always-visible filter card (search + type/category chips) and card-based transaction list
 - [x] Dashboard budget categories show "$X left of $Y" with tappable rows and list icon buttons
 - [x] `formatCurrency` drops `.00` decimals for whole numbers
+- [x] Category color picker — tap icon circle on budget card to choose from 16 preset colors via bottom-sheet modal
+- [x] `PATCH /v1/categories/{id}` endpoint for updating category colors with hex validation
+- [x] `category_color` field propagated through budget, dashboard spending/income, and budget summary API responses
+- [x] Category colors reflected across all screens: budget progress bars, dashboard pie charts, budget pill breakdown, spending/income category bars and dots
+- [x] Color utility functions: `withOpacity` (hex alpha append) and `contrastForeground` (luminance-based icon color)
+- [x] React performance: `useMemo` for derived state, `useCallback` for handlers, `Promise.all` for parallel fetches, hoisted constants
+- [x] Tappable monthly trend bars on spending/income screens — tap a bar to view that month's category breakdown and transactions
+- [x] Carousel snap fix — `snapToOffsets` + `snapToEnd` replacing broken `snapToInterval`, removed last-card padding
 
 ---
 
@@ -383,7 +395,57 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Mobile: Overall budget - down chevron that has cascading dropdown that gives an breakdown of progress toward each budget
 - [ ] Add more transaction filters
 
-### Phase 4 — AI Assistant
+
+### Phase 4 — Budget Overhaul
+
+Redesign the budgeting system from individual per-category budgets to unified budget plans with multi-month and recurring support.
+
+#### New Budget Creation Flow
+When the user taps "+ Create New" on the budgets tab, they are taken to a new multi-step budget creation screen:
+
+1. **Set Total Budget** — Enter the total monthly budget amount (e.g. $3,000/month)
+2. **Allocate by Category** — Distribute the total across spending categories (e.g. $800 Rent, $400 Groceries, $200 Dining, etc.)
+   - Show a running total of allocated vs. remaining unallocated amount
+   - User picks from existing categories; unallocated remainder is allowed (not every dollar must be assigned)
+   - Each category row has an amount input field
+3. **Select Duration** — Choose which months this budget applies to:
+   - Multi-select month picker (e.g. "April 2026", "May 2026", "June 2026")
+   - **"Until I turn off"** toggle — applies the budget to the current month and automatically generates it for each future month until the user disables it
+
+#### Recurring Budget Behavior
+- When "Until I turn off" is enabled, the system creates the budget for the current month and flags it as recurring
+- A background job or on-demand generation creates the next month's budget entries automatically
+- User can disable recurrence from a budget plan settings/edit screen, which stops future generation but keeps existing months intact
+
+#### Backend Changes
+- [ ] New `budget_plans` table — groups category allocations under a single plan with metadata:
+  - `id` (UUID), `user_id`, `name` (optional), `total_amount` (Decimal)
+  - `is_recurring` (bool), `recurring_start_month`, `recurring_start_year`
+  - `recurring_active` (bool — false means stopped)
+  - `created_at`, `updated_at`
+- [ ] New `budget_plan_allocations` table — individual category allocations within a plan:
+  - `id`, `budget_plan_id` (FK), `category_id` (FK), `amount` (Decimal)
+- [ ] Update `budgets` table to reference `budget_plan_id` (nullable FK) — links generated monthly budgets back to their parent plan
+- [ ] Alembic migration for new tables + FK column
+- [ ] `POST /v1/budget-plans` — create a plan (total + allocations + month list or recurring flag)
+  - Generates individual `budgets` rows for each selected month × category allocation
+- [ ] `GET /v1/budget-plans` — list user's plans with recurrence status
+- [ ] `PUT /v1/budget-plans/{id}` — update plan (change allocations, toggle recurrence)
+- [ ] `DELETE /v1/budget-plans/{id}` — delete plan and optionally its generated budgets
+- [ ] Recurring budget generation logic — on dashboard load or via scheduled task, generate next month's budgets from active recurring plans
+
+#### Mobile Changes
+- [ ] New multi-step budget creation screen (`mobile/app/budget/create.tsx`) replacing current `budget/[id].tsx` for new budgets
+  - Step 1: Total amount input
+  - Step 2: Category allocation list with amount fields, running total tracker
+  - Step 3: Month picker (multi-select grid) + "Until I turn off" toggle
+  - Review summary before saving
+- [ ] Month picker component — grid of upcoming months with multi-select + "Until I turn off" switch
+- [ ] Category allocation component — list of categories with inline amount inputs, shows remaining unallocated
+- [ ] Budget plan management screen — view/edit/disable existing plans
+- [ ] Update budgets tab to show plan-based grouping (optional, could keep flat category view)
+
+### Phase 5 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id
 - [ ] AI tool definitions (`ai/tools.py`) — 8 tools for Claude function-calling
 - [ ] AI system prompts (`ai/prompts.py`)
@@ -395,7 +457,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Mobile: Chat UI with message bubbles, input, streaming display
 - [ ] Mobile: Conversation list/history
 
-### Phase 5 — Monetization + External API
+### Phase 6 — Monetization + External API
 - [ ] Subscription tier enforcement (free vs. pro feature gating)
 - [ ] API key generation endpoint (`POST /v1/settings/api-key`)
 - [ ] External AI endpoint: `POST /api/v1/financial-ai/chat` (API key auth, context in payload)
@@ -407,7 +469,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] AI: Bill negotiation, Credit optimization
 
 
-### Phase 6 — Iteration
+### Phase 7 — Iteration
 - [ ] AI System: Allow asset optimization/Balance Transfers
 - [ ] AI System: Debt Restructuring/Credit Optimization
 - [ ] API: Rate limiting on API calls

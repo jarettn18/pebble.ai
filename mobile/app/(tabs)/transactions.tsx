@@ -237,7 +237,7 @@ export default function TransactionsScreen() {
           <ActivityIndicator
             size="large"
             color={colors.primary}
-            style={{ marginTop: 32 }}
+            style={styles.loader}
           />
         ) : (
           <TransactionListCard
@@ -375,6 +375,9 @@ const styles = StyleSheet.create({
     color: colors.error,
   },
   // FAB
+  loader: {
+    marginTop: 32,
+  },
   fab: {
     position: "absolute",
     right: 20,

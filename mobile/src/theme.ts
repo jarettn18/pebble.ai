@@ -71,6 +71,14 @@ export const colors = {
     "#5488A8",
   ],
 
+  // Color picker palette (16 options)
+  colorPickerPalette: [
+    "#45655A", "#E67E66", "#D99E33", "#8B7EBF",
+    "#C26D4D", "#23686A", "#5B8D80", "#5488A8",
+    "#4CAF50", "#FF5722", "#9C27B0", "#3F51B5",
+    "#FF9800", "#00BCD4", "#795548", "#607D8B",
+  ],
+
   // Progress bars
   progressBar: "#45655a",
 

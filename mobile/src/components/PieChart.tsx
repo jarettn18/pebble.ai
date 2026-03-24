@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { colors, fonts } from "../theme";
@@ -29,18 +29,21 @@ export default function PieChart({ slices, size = 110 }: Props) {
   const innerR = r - strokeWidth / 2;
   const outerR = r + strokeWidth / 2;
 
-  let cumulativeOffset = 0;
-
-  // Compute boundary angles between segments
-  const boundaries: number[] = [];
-  let angleSoFar = 0;
-  for (let i = 0; i < slices.length; i++) {
-    const sliceDeg = (slices[i].value / total) * 360;
-    angleSoFar += sliceDeg;
-    if (i < slices.length - 1) {
-      boundaries.push(angleSoFar);
+  // Compute boundary angles between segments (memoized)
+  const boundaries = useMemo(() => {
+    const result: number[] = [];
+    let angleSoFar = 0;
+    for (let i = 0; i < slices.length; i++) {
+      const sliceDeg = (slices[i].value / total) * 360;
+      angleSoFar += sliceDeg;
+      if (i < slices.length - 1) {
+        result.push(angleSoFar);
+      }
     }
-  }
+    return result;
+  }, [slices, total]);
+
+  let cumulativeOffset = 0;
 
   // Build invisible hit areas for each segment (filled wedges)
   function wedgePath(startDeg: number, endDeg: number): string {

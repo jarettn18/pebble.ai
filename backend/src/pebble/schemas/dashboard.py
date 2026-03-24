@@ -13,12 +13,14 @@ class AccountSummary(BaseModel):
 class BudgetSummary(BaseModel):
     category_id: str
     category_name: str | None = None
+    category_color: str | None = None
     amount: str
     spent: str
 
 
 class SpendingByCategory(BaseModel):
     category_name: str
+    category_color: str | None = None
     amount: str
 
 
@@ -44,6 +46,7 @@ class NetWorthHistoryResponse(BaseModel):
 
 class IncomeByCategory(BaseModel):
     category_name: str
+    category_color: str | None = None
     amount: str
 
 

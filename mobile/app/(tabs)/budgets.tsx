@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,19 +11,16 @@ import {
 import { useRouter, useFocusEffect } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useBudgetsStore } from "../../src/stores/budgets";
+import { useDashboardStore } from "../../src/stores/dashboard";
 import { formatCurrency } from "../../src/utils/dashboard";
+import { withOpacity, contrastForeground } from "../../src/utils/color";
+import { apiRequest } from "../../src/api/client";
 import { colors, fonts, progressBarStyles } from "../../src/theme";
+import ColorPickerModal from "../../src/components/ColorPickerModal";
 
-const ICON_BG_COLORS = [
-  colors.secondaryContainer,
-  colors.primaryFixed,
-  colors.tertiaryFixed,
-  `${colors.secondaryContainer}80`,
-  `${colors.primaryFixed}99`,
-  `${colors.tertiaryFixed}66`,
-];
+const HIT_SLOP_8 = { top: 8, bottom: 8, left: 8, right: 8 };
 
-const ICON_FG_COLORS = [
+const FALLBACK_COLORS = [
   colors.secondary,
   colors.primary,
   colors.tertiary,
@@ -74,10 +71,20 @@ function monthLabel(month: number, year: number) {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
+function BudgetSeparator() {
+  return <View style={styles.separator} />;
+}
+
 export default function BudgetsScreen() {
   const router = useRouter();
   const { budgets, isLoading, error, load } = useBudgetsStore();
+  const refreshDashboard = useDashboardStore((s) => s.refresh);
   const [period, setPeriod] = useState(getCurrentMonth);
+
+  // Color picker state
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerCategoryId, setPickerCategoryId] = useState<string | null>(null);
+  const [pickerCurrentColor, setPickerCurrentColor] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -100,20 +107,49 @@ export default function BudgetsScreen() {
     });
   }
 
-  const totalBudgeted = budgets.reduce(
-    (sum, b) => sum + parseFloat(b.amount || "0"),
-    0
-  );
-  const totalSpent = budgets.reduce(
-    (sum, b) => sum + parseFloat(b.spent || "0"),
-    0
-  );
-  const budgetRemaining = totalBudgeted - totalSpent;
-  const budgetPct =
-    totalBudgeted > 0 ? Math.round((totalSpent / totalBudgeted) * 100) : 0;
-  const isOverBudget = totalSpent > totalBudgeted;
+  const { totalBudgeted, totalSpent, budgetRemaining, budgetPct, isOverBudget } = useMemo(() => {
+    const { budgeted, spent } = budgets.reduce(
+      (acc, b) => ({
+        budgeted: acc.budgeted + parseFloat(b.amount || "0"),
+        spent: acc.spent + parseFloat(b.spent || "0"),
+      }),
+      { budgeted: 0, spent: 0 }
+    );
+    return {
+      totalBudgeted: budgeted,
+      totalSpent: spent,
+      budgetRemaining: budgeted - spent,
+      budgetPct: budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0,
+      isOverBudget: spent > budgeted,
+    };
+  }, [budgets]);
 
-  const renderHeader = () => (
+  function openColorPicker(categoryId: string, currentColor: string | null) {
+    setPickerCategoryId(categoryId);
+    setPickerCurrentColor(currentColor);
+    setPickerVisible(true);
+  }
+
+  async function handleColorSelect(color: string) {
+    setPickerVisible(false);
+    if (!pickerCategoryId) return;
+
+    try {
+      await apiRequest(`/v1/categories/${pickerCategoryId}`, {
+        method: "PATCH",
+        body: { color },
+      });
+      // Refresh both stores so colors update everywhere
+      await Promise.all([
+        load(period.month, period.year),
+        refreshDashboard(),
+      ]);
+    } catch {
+      // Silently fail — the old color remains
+    }
+  }
+
+  const renderHeader = useCallback(() => (
     <>
       {/* Month Selector */}
       <View style={styles.monthSelector}>
@@ -186,7 +222,7 @@ export default function BudgetsScreen() {
         </TouchableOpacity>
       </View>
     </>
-  );
+  ), [period, budgets, totalSpent, totalBudgeted, budgetPct, budgetRemaining, isOverBudget, router]);
 
   return (
     <View style={styles.container}>
@@ -227,8 +263,9 @@ export default function BudgetsScreen() {
             const clampedPct = Math.min(pct, 100);
             const overBudget = spent > budgeted;
             const categoryName = item.category_name || "Uncategorized";
-            const iconBg = ICON_BG_COLORS[index % ICON_BG_COLORS.length];
-            const iconFg = ICON_FG_COLORS[index % ICON_FG_COLORS.length];
+            const catColor = item.category_color || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+            const iconBg = withOpacity(catColor, 0.2);
+            const iconFg = catColor;
 
             return (
               <TouchableOpacity
@@ -242,13 +279,20 @@ export default function BudgetsScreen() {
               >
                 <View style={progressBarStyles.header}>
                   <View style={styles.labelRow}>
-                    <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
+                    <TouchableOpacity
+                      style={[styles.iconCircle, { backgroundColor: iconBg }]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        openColorPicker(item.category_id, item.category_color);
+                      }}
+                      activeOpacity={0.6}
+                    >
                       <MaterialCommunityIcons
                         name={getCategoryIcon(categoryName) as any}
                         size={22}
                         color={iconFg}
                       />
-                    </View>
+                    </TouchableOpacity>
                     <View>
                       <Text style={progressBarStyles.label}>{categoryName}</Text>
                       <Text style={[progressBarStyles.value, overBudget && styles.errorText]}>
@@ -265,7 +309,7 @@ export default function BudgetsScreen() {
                   <View style={styles.rightActions}>
                     <TouchableOpacity
                       style={styles.viewTxnBtn}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      hitSlop={HIT_SLOP_8}
                       onPress={(e) => {
                         e.stopPropagation();
                         router.push(
@@ -285,7 +329,7 @@ export default function BudgetsScreen() {
                   <View
                     style={[
                       progressBarStyles.fill,
-                      { width: `${clampedPct}%`, backgroundColor: iconFg },
+                      { width: `${clampedPct}%`, backgroundColor: catColor },
                       overBudget && { backgroundColor: colors.error },
                     ]}
                   />
@@ -293,13 +337,20 @@ export default function BudgetsScreen() {
               </TouchableOpacity>
             );
           }}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={BudgetSeparator}
           contentContainerStyle={styles.listContent}
           ListFooterComponent={
             error ? <Text style={styles.errorText}>{error}</Text> : null
           }
         />
       )}
+
+      <ColorPickerModal
+        visible={pickerVisible}
+        currentColor={pickerCurrentColor}
+        onSelect={handleColorSelect}
+        onClose={() => setPickerVisible(false)}
+      />
     </View>
   );
 }

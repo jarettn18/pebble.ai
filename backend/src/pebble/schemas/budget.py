@@ -5,6 +5,7 @@ class BudgetOut(BaseModel):
     id: str
     category_id: str
     category_name: str | None = None
+    category_color: str | None = None
     amount: str
     spent: str
     month: int

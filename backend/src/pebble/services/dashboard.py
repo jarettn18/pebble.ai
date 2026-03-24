@@ -273,6 +273,7 @@ async def get_dashboard(
         select(
             Category.name,
             func.coalesce(func.sum(Transaction.amount), 0),
+            Category.color,
         )
         .join(Category, Transaction.category_id == Category.id)
         .where(
@@ -282,11 +283,11 @@ async def get_dashboard(
             Transaction.pending.is_(False),
             Transaction.amount > 0,
         )
-        .group_by(Category.name)
+        .group_by(Category.name, Category.color)
         .order_by(func.sum(Transaction.amount).desc())
     )
     spending_by_category = [
-        {"category_name": row[0], "amount": str(row[1])}
+        {"category_name": row[0], "amount": str(row[1]), "category_color": row[2]}
         for row in cat_spend_result.all()
     ]
 
@@ -295,6 +296,7 @@ async def get_dashboard(
         select(
             Category.name,
             func.coalesce(func.sum(func.abs(Transaction.amount)), 0),
+            Category.color,
         )
         .join(Category, Transaction.category_id == Category.id)
         .where(
@@ -304,11 +306,11 @@ async def get_dashboard(
             Transaction.pending.is_(False),
             Transaction.amount < 0,
         )
-        .group_by(Category.name)
+        .group_by(Category.name, Category.color)
         .order_by(func.sum(func.abs(Transaction.amount)).desc())
     )
     income_by_category = [
-        {"category_name": row[0], "amount": str(row[1])}
+        {"category_name": row[0], "amount": str(row[1]), "category_color": row[2]}
         for row in cat_income_result.all()
     ]
 
@@ -342,6 +344,7 @@ async def get_dashboard(
         {
             "category_id": str(b.category_id),
             "category_name": b.category.name if b.category else None,
+            "category_color": b.category.color if b.category else None,
             "amount": str(b.amount),
             "spent": str(cat_spending_map.get(b.category_id, Decimal("0"))),
         }

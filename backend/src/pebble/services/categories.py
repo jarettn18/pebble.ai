@@ -1,5 +1,6 @@
 import uuid
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,4 +40,30 @@ async def get_all_categories(db: AsyncSession) -> dict:
             }
             for c in rows
         ]
+    }
+
+
+async def update_category_color(
+    db: AsyncSession, category_id: str, color: str
+) -> dict:
+    """Update a category's color and return the updated category."""
+    try:
+        cat_uuid = uuid.UUID(category_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid category ID")
+
+    result = await db.execute(select(Category).where(Category.id == cat_uuid))
+    category = result.scalar_one_or_none()
+    if not category:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+
+    category.color = color
+    await db.commit()
+    await db.refresh(category)
+
+    return {
+        "id": str(category.id),
+        "name": category.name,
+        "icon": category.icon,
+        "color": category.color,
     }

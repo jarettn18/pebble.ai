@@ -9,12 +9,14 @@ import {
 
 type Props = {
   transactions: Transaction[];
+  title?: string;
   emptyMessage?: string;
   emptyHint?: string;
 };
 
 export function TransactionListCard({
   transactions,
+  title,
   emptyMessage = "No transactions",
   emptyHint = "No transactions found",
 }: Props) {
@@ -32,7 +34,7 @@ export function TransactionListCard({
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>
-        Transactions ({transactions.length})
+        {title ?? `Transactions (${transactions.length})`}
       </Text>
       {transactions.map((txn, i) => (
         <View key={txn.id}>

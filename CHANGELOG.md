@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-03-24 — Category Colors, React Performance & UX Improvements
+
+### Backend — Category Color Picker
+- Added `PATCH /v1/categories/{category_id}` endpoint to update a category's color
+- Added `CategoryUpdateRequest` schema with hex color validation (`^#[0-9A-Fa-f]{6}$`)
+- Added `update_category_color()` service function in `services/categories.py`
+- Added `category_color` field to `BudgetOut` schema (`schemas/budget.py`)
+- Added `category_color` field to `SpendingByCategory`, `IncomeByCategory`, and `BudgetSummary` schemas (`schemas/dashboard.py`)
+- Updated `_budget_to_dict()` in `services/budgets.py` to include `category_color` from the category relationship
+- Updated dashboard service `spending_by_category` and `income_by_category` queries to SELECT and GROUP BY `Category.color`, returning `category_color` in response
+- Updated dashboard `budget_summaries` to include `category_color`
+
+### Mobile — Category Color Picker Feature
+- Created `ColorPickerModal` component (`src/components/ColorPickerModal.tsx`) — bottom sheet modal with 16 color swatches in a grid, checkmark on current selection
+- Created color utility (`src/utils/color.ts`) with `withOpacity(hex, opacity)` and `contrastForeground(hex)` (luminance-based contrast for icon foreground)
+- Added `colorPickerPalette` (16 colors) to `theme.ts`
+- Updated `Budget` type in `stores/budgets.ts` and `BudgetSummary`, `SpendingByCategory`, `IncomeByCategory` types in `stores/dashboard.ts` with `category_color: string | null`
+
+### Mobile — Color Propagation Across All Screens
+- **Budgets tab** (`budgets.tsx`): Icon circles are now tappable `TouchableOpacity` that open the color picker; on select, calls `PATCH /v1/categories/{id}` then refreshes budgets + dashboard stores; budget cards use `item.category_color` for progress bar fill and icon background (with `withOpacity`), fallback to palette colors when null
+- **Dashboard** (`index.tsx`): Spending and income pie chart slices use `cat.category_color || PIE_COLORS[i]`; budget pill expanded category rows use `b.category_color` for progress bar fill
+- **Spending screen** (`spending.tsx`): Stacked bar segments, category dots, and individual progress bars use `cat.category_color || CATEGORY_COLORS[i]`
+- **Income screen** (`income.tsx`): Same color propagation as spending screen
+
+### Mobile — React Performance Optimizations
+- **Dashboard** (`index.tsx`): Wrapped budget calculations in `useMemo` (single-pass reduce); memoized `onCarouselScroll` with `useCallback`; hoisted inline `hitSlop` to module-level `HIT_SLOP_8` constant; moved inline style object to `styles.accountsWidgetLeft`; dashboard no longer blocks on Plaid balance refresh before loading data
+- **Budgets tab** (`budgets.tsx`): Wrapped budget totals in `useMemo`; memoized `renderHeader` with `useCallback`
+- **Budget edit** (`budget/[id].tsx`): Parallelized categories + budget fetch with `Promise.all()`
+- **PieChart** (`PieChart.tsx`): Wrapped boundary angle computation in `useMemo`
+- **Asset detail** (`asset/[id].tsx`): Wrapped `hasChanges` in `useMemo`
+- **Transactions tab** (`transactions.tsx`): Moved inline loader style to `styles.loader`
+
+### Mobile — Tappable Monthly Trend Bars
+- **Spending screen** (`spending.tsx`): Tapping a bar in the 6-month trend chart fetches that month's category breakdown and transactions via parallel `Promise.all` API calls; selected month highlighted; tapping current month or re-tapping resets to default view; dynamic titles show selected month name
+- **Income screen** (`income.tsx`): Same tappable bar behavior as spending screen
+- **TransactionListCard** (`TransactionListCard.tsx`): Added optional `title` prop to customize card header (e.g. "Transactions — January 2026")
+
+### Mobile — Carousel Snap Fix
+- Fixed carousel cards getting stuck when swiping past the last card — replaced `snapToInterval` with `snapToOffsets` + `snapToEnd={true}`; removed `paddingRight` from carousel content and added `carouselCardLast` style with `marginRight: 0` to prevent rubber-banding on the last card
+
+---
+
 ## 2026-03-22 — Drill-Down Screens, Shared Components & Transactions Restyle
 
 ### Backend — Dashboard Budget Summary

@@ -6,6 +6,7 @@ export type Budget = {
   id: string;
   category_id: string;
   category_name: string | null;
+  category_color: string | null;
   amount: string;
   spent: string;
   month: number;
