@@ -234,7 +234,7 @@ export default function SpendingScreen() {
               if (pct < 1) return null;
               return (
                 <View
-                  key={cat.category_name}
+                  key={`${cat.category_name}-${i}`}
                   style={[
                     styles.stackedSegment,
                     {
@@ -256,7 +256,7 @@ export default function SpendingScreen() {
             const pct = (amount / maxCategoryAmount) * 100;
             const color = cat.category_color || CATEGORY_COLORS[i % CATEGORY_COLORS.length];
             return (
-              <View key={cat.category_name} style={styles.categoryRow}>
+              <View key={`${cat.category_name}-${i}`} style={styles.categoryRow}>
                 <View style={styles.categoryHeader}>
                   <View style={styles.categoryLabelRow}>
                     <View

@@ -367,19 +367,31 @@ export default function DashboardScreen() {
               {isOverBudget ? "Over by " : ""}{formatCurrency(Math.abs(budgetRemaining))}{isOverBudget ? "" : " left"}
             </Text>
           </View>
-          <View style={progressBarStyles.track}>
-            <View
-              style={[
-                progressBarStyles.fill,
-                { width: `${Math.min(budgetPct, 100)}%` },
-                isOverBudget && { backgroundColor: colors.error },
-              ]}
-            />
+          <View style={[progressBarStyles.track, { flexDirection: "row", overflow: "hidden" }]}>
+            {budgetSummaries.map((item, idx) => {
+              const spent = parseFloat(item.spent || "0");
+              if (spent <= 0) return null;
+              const scale = isOverBudget ? totalBudgeted / totalSpent : 1;
+              const widthPct = (spent / totalBudgeted) * 100 * scale;
+              const catColor = isOverBudget
+                ? colors.error
+                : item.category_color || PIE_COLORS[idx % PIE_COLORS.length];
+              return (
+                <View
+                  key={`${item.category_id}-${idx}`}
+                  style={{
+                    width: `${widthPct}%`,
+                    height: "100%" as unknown as number,
+                    backgroundColor: catColor,
+                  }}
+                />
+              );
+            })}
           </View>
           </Pressable>
 
           {/* Expanded category breakdown */}
-          {budgetExpanded && budgetSummaries.map((b) => {
+          {budgetExpanded && budgetSummaries.map((b, bIdx) => {
             const catBudgeted = parseFloat(b.amount || "0");
             const catSpent = parseFloat(b.spent || "0");
             const catRemaining = catBudgeted - catSpent;
@@ -388,7 +400,7 @@ export default function DashboardScreen() {
             const now = new Date();
             return (
               <TouchableOpacity
-                key={b.category_name}
+                key={`${b.category_id}-${bIdx}`}
                 style={styles.budgetCategoryRow}
                 activeOpacity={0.7}
                 onPress={() =>

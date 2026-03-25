@@ -39,7 +39,8 @@ pebble/
 │       │   ├── account.py           # PlaidItem + Account
 │       │   ├── transaction.py       # Transaction (indexed on user_id+date)
 │       │   ├── category.py          # Category
-│       │   ├── budget.py            # Budget (per category per month)
+│       │   ├── budget.py            # Budget (per category per month, optional plan FK)
+│       │   ├── budget_plan.py       # BudgetPlan + BudgetPlanAllocation (unified plans)
 │       │   ├── asset.py             # Asset (properties + vehicles, net worth)
 │       │   ├── chat.py              # ChatConversation + ChatMessage
 │       │   └── api_usage.py         # API usage metering
@@ -48,6 +49,7 @@ pebble/
 │       │   ├── account.py           # AccountOut, AccountListResponse
 │       │   ├── asset.py             # AssetOut, Create/Update, ListResponse
 │       │   ├── budget.py            # BudgetOut, Create/Update, ListResponse
+│       │   ├── budget_plan.py       # BudgetPlanOut, Create/Update, Allocation schemas
 │       │   ├── category.py          # CategoryOut, CategoryListResponse
 │       │   ├── dashboard.py         # DashboardResponse, NetWorthHistory, SpendingByCategory, AssetSummary
 │       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
@@ -57,6 +59,7 @@ pebble/
 │       │   ├── accounts.py          # /v1/accounts (list user accounts)
 │       │   ├── assets.py            # /v1/assets (CRUD for properties + vehicles)
 │       │   ├── budgets.py           # /v1/budgets (CRUD)
+│       │   ├── budget_plans.py      # /v1/budget-plans (CRUD, recurring generation)
 │       │   ├── categories.py        # /v1/categories (list all, update color)
 │       │   ├── dashboard.py         # /v1/dashboard (aggregated overview + net worth history)
 │       │   ├── plaid.py             # /v1/plaid/* (link-token, exchange, sync, sync-all)
@@ -66,6 +69,7 @@ pebble/
 │       │   ├── accounts.py          # Account queries with institution join
 │       │   ├── assets.py            # Asset CRUD (properties + vehicles)
 │       │   ├── budgets.py           # Budget CRUD + spending calculation
+│       │   ├── budget_plans.py      # Budget plan CRUD, allocation management, recurring generation
 │       │   ├── categories.py        # Category queries, Plaid category map
 │       │   ├── dashboard.py         # Aggregated dashboard + net worth history
 │       │   ├── plaid.py             # Plaid API integration (link, exchange, sync, balance refresh)
@@ -89,11 +93,14 @@ pebble/
 │   │   │   ├── _layout.tsx          # Tab navigator (5 tabs)
 │   │   │   ├── index.tsx            # Dashboard (net worth chart, pie chart, budgets)
 │   │   │   ├── transactions.tsx     # Transaction list with search, filters & FAB
-│   │   │   ├── budgets.tsx          # Budget list with progress bars
+│   │   │   ├── budgets.tsx          # Budget list with progress bars, expandable plans, swipe-to-delete
 │   │   │   ├── ai-chat.tsx          # AI chat (placeholder)
 │   │   │   └── settings.tsx         # Settings + logout
 │   │   ├── budget/
-│   │   │   └── [id].tsx             # Budget create/edit screen
+│   │   │   ├── create.tsx           # Multi-step budget plan creation wizard
+│   │   │   ├── [id].tsx             # Budget create/edit screen
+│   │   │   └── plan/
+│   │   │       └── [id].tsx         # Budget plan detail with inline editing
 │   │   ├── transaction/
 │   │   │   ├── create.tsx           # Create transaction (expense/income toggle)
 │   │   │   └── [id].tsx             # Transaction detail, edit & delete screen
@@ -108,7 +115,9 @@ pebble/
 │       ├── api/
 │       │   └── client.ts            # API client with auto JWT refresh
 │       ├── components/
+│       │   ├── CategoryAllocation.tsx # Category allocation list with inline amount inputs
 │       │   ├── ColorPickerModal.tsx   # Bottom-sheet color picker with 16 preset swatches
+│       │   ├── MonthPicker.tsx       # Multi-select month grid with recurring toggle
 │       │   ├── LineChart.tsx         # SVG line chart with bezier curves, gradient fill, axis labels
 │       │   ├── NetWorthChart.tsx     # Net worth history chart with period tabs (1M/3M/1Y/5Y)
 │       │   ├── PieChart.tsx          # SVG donut chart with interactive segments + legend
@@ -124,6 +133,7 @@ pebble/
 │           ├── accounts.ts          # Zustand accounts store (24h cache)
 │           ├── assets.ts            # Zustand assets store (CRUD)
 │           ├── budgets.ts           # Zustand budgets store
+│           ├── budgetPlans.ts       # Zustand budget plans store
 │           ├── dashboard.ts         # Zustand dashboard store (server-side aggregation)
 │           └── transactions.ts      # Zustand transactions store (24h cache)
 ```
@@ -132,7 +142,7 @@ pebble/
 
 ## Database Schema
 
-10 tables, all with UUID primary keys:
+12 tables, all with UUID primary keys:
 
 | Table | Purpose |
 |-------|---------|
@@ -141,7 +151,9 @@ pebble/
 | `accounts` | Bank accounts linked via Plaid |
 | `categories` | Spending categories (name, icon, color, Plaid mapping) |
 | `transactions` | Financial transactions, indexed on `(user_id, date DESC)` |
-| `budgets` | Monthly budget per category |
+| `budgets` | Monthly budget per category (optional FK to budget_plans) |
+| `budget_plans` | Unified budget plans with total amount, recurrence settings |
+| `budget_plan_allocations` | Per-category allocations within a budget plan |
 | `assets` | Properties & vehicles with estimated values (contributes to net worth) |
 | `chat_conversations` | AI chat conversation threads |
 | `chat_messages` | Individual messages (user/assistant roles) |
@@ -195,8 +207,8 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 |-------|-------|--------|
 | 1 | Foundation — Docker, FastAPI, models, auth, Expo scaffold | **Done** |
 | 2 | Plaid + Transactions — bank linking, sync, transaction list | **Done** |
-| 3 | Budgets + Polish — CRUD, charts, search, error states | **In progress** |
-| 4 | Budget Overhaul — unified budget plans, multi-month, recurring | Not started |
+| 3 | Budgets + Polish — CRUD, charts, search, error states | **Done** |
+| 4 | Budget Overhaul — unified budget plans, multi-month, recurring | **In progress** |
 | 5 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
 | 6 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
 | 7 | Iteration — dark mode, data import/export, social auth | Not started |
@@ -260,7 +272,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Transaction detail/edit screen (recategorize, view details)
 - [x] Dashboard wired to real account balances + spending data
 
-## Completed (Phase 3 — In Progress)
+## Completed (Phase 3)
 
 ### Backend
 - [x] Budget CRUD service + router (`POST/GET/PUT/DELETE /v1/budgets`)
@@ -353,7 +365,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] 'Link session ended' error under 'Add Another Account' when plaid linking is cancelled
 - [ ] Budgets get a hanging loading icon if the back tab is pressed while making a budget
 - [ ] Positive values that are categorized do not update the progress bar on the budget (design choice?)
-- [ ] Handle budgets of the same category
+- [x] Handle budgets of the same category (aggregated by category_id on budgets tab)
 - [x] Net Worth number does not reflect real-time changes made to transactions, add focus refresh to dashboard tab
 - [ ] Fix the way net worth is plotted on the chart. Maybe just plot each individual day regardless of calculation time and zustand store the data.
 - [ ] Income summary not refreshing when transactions are categorized. Will need to update based on refresh.
@@ -400,50 +412,31 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 
 Redesign the budgeting system from individual per-category budgets to unified budget plans with multi-month and recurring support.
 
-#### New Budget Creation Flow
-When the user taps "+ Create New" on the budgets tab, they are taken to a new multi-step budget creation screen:
-
-1. **Set Total Budget** — Enter the total monthly budget amount (e.g. $3,000/month)
-2. **Allocate by Category** — Distribute the total across spending categories (e.g. $800 Rent, $400 Groceries, $200 Dining, etc.)
-   - Show a running total of allocated vs. remaining unallocated amount
-   - User picks from existing categories; unallocated remainder is allowed (not every dollar must be assigned)
-   - Each category row has an amount input field
-3. **Select Duration** — Choose which months this budget applies to:
-   - Multi-select month picker (e.g. "April 2026", "May 2026", "June 2026")
-   - **"Until I turn off"** toggle — applies the budget to the current month and automatically generates it for each future month until the user disables it
-
-#### Recurring Budget Behavior
-- When "Until I turn off" is enabled, the system creates the budget for the current month and flags it as recurring
-- A background job or on-demand generation creates the next month's budget entries automatically
-- User can disable recurrence from a budget plan settings/edit screen, which stops future generation but keeps existing months intact
-
 #### Backend Changes
-- [ ] New `budget_plans` table — groups category allocations under a single plan with metadata:
-  - `id` (UUID), `user_id`, `name` (optional), `total_amount` (Decimal)
-  - `is_recurring` (bool), `recurring_start_month`, `recurring_start_year`
-  - `recurring_active` (bool — false means stopped)
-  - `created_at`, `updated_at`
-- [ ] New `budget_plan_allocations` table — individual category allocations within a plan:
-  - `id`, `budget_plan_id` (FK), `category_id` (FK), `amount` (Decimal)
-- [ ] Update `budgets` table to reference `budget_plan_id` (nullable FK) — links generated monthly budgets back to their parent plan
-- [ ] Alembic migration for new tables + FK column
-- [ ] `POST /v1/budget-plans` — create a plan (total + allocations + month list or recurring flag)
-  - Generates individual `budgets` rows for each selected month × category allocation
-- [ ] `GET /v1/budget-plans` — list user's plans with recurrence status
-- [ ] `PUT /v1/budget-plans/{id}` — update plan (change allocations, toggle recurrence)
-- [ ] `DELETE /v1/budget-plans/{id}` — delete plan and optionally its generated budgets
-- [ ] Recurring budget generation logic — on dashboard load or via scheduled task, generate next month's budgets from active recurring plans
+- [x] New `budget_plans` table with `budget_plan_allocations` — Alembic migration `e6f7a8b9c0d1`
+- [x] `budgets` table updated with nullable `budget_plan_id` FK (SET NULL on delete)
+- [x] `POST /v1/budget-plans` — create plan with allocations + month list or recurring flag, generates budget rows
+- [x] `GET /v1/budget-plans` — list plans with allocations (joinedload)
+- [x] `PUT /v1/budget-plans/{id}` — update name, total, allocations, toggle recurrence
+- [x] `DELETE /v1/budget-plans/{id}?delete_budgets=` — delete plan, optionally delete generated budgets
+- [x] `POST /v1/budget-plans/generate-recurring` — idempotent recurring budget generation
+- [x] Budget plan service with full CRUD + recurring generation logic
 
 #### Mobile Changes
-- [ ] New multi-step budget creation screen (`mobile/app/budget/create.tsx`) replacing current `budget/[id].tsx` for new budgets
-  - Step 1: Total amount input
-  - Step 2: Category allocation list with amount fields, running total tracker
-  - Step 3: Month picker (multi-select grid) + "Until I turn off" toggle
-  - Review summary before saving
-- [ ] Month picker component — grid of upcoming months with multi-select + "Until I turn off" switch
-- [ ] Category allocation component — list of categories with inline amount inputs, shows remaining unallocated
-- [ ] Budget plan management screen — view/edit/disable existing plans
-- [ ] Update budgets tab to show plan-based grouping (optional, could keep flat category view)
+- [x] Multi-step budget creation wizard (`budget/create.tsx`) — Set Total → Allocate → Duration → Review
+- [x] `MonthPicker` component — grid of 12 upcoming months with "Until I turn off" recurring toggle
+- [x] `CategoryAllocation` component — category list with inline amount inputs, running total tracker
+- [x] Budget plan detail screen (`budget/plan/[id].tsx`) — inline editing for name, total amount, and allocation amounts
+- [x] Budget plan detail: recurrence toggle, allocation list with category icons, delete with 3-option alert
+- [x] Budgets tab: aggregated budgets by category (merges multiple plans), stable sort order on edits
+- [x] Budgets tab: expandable plan cards with chevron toggle, allocation rows with inline amount editing
+- [x] Budgets tab: swipe-to-delete on plan cards with animated gesture (PanResponder + Animated)
+- [x] Budgets tab: long-press plan card for quick-edit modal (name + total amount)
+- [x] Budgets tab: category cards navigate to budget-transactions on tap, hamburger icon for list view
+- [x] Multi-colored overall budget progress bar — segments per category proportional to spending
+- [x] Dashboard: multi-colored budget progress bar matching budgets tab
+- [x] Zustand `budgetPlans` store with load/refresh/removePlan
+- [x] Fixed duplicate React key errors across dashboard, spending, and income screens
 
 ### Phase 5 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id

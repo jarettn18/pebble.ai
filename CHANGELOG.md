@@ -1,5 +1,68 @@
 # Changelog
 
+## 2026-03-25 — Phase 4: Budget Plans, Multi-Colored Progress Bars & UX Refinements
+
+### Backend — Budget Plans System
+- Created `budget_plans` and `budget_plan_allocations` tables (Alembic migration `e6f7a8b9c0d1`)
+- Added nullable `budget_plan_id` FK to `budgets` table (SET NULL on delete)
+- Created `BudgetPlan` and `BudgetPlanAllocation` SQLAlchemy models with cascade relationships
+- Created budget plan schemas: `BudgetPlanCreateRequest`, `BudgetPlanUpdateRequest`, `BudgetPlanOut`, `AllocationIn/Out`, `MonthYear`
+- Created budget plan service (`services/budget_plans.py`): full CRUD, allocation replacement on update, idempotent recurring budget generation
+- Created budget plan router (`routers/budget_plans.py`): `GET/POST /v1/budget-plans`, `GET/PUT/DELETE /v1/budget-plans/{plan_id}`, `POST /v1/budget-plans/generate-recurring`
+- `DELETE` accepts `delete_budgets` query param to optionally remove generated budgets or just unlink them
+
+### Mobile — Multi-Step Budget Creation Wizard
+- Created `app/budget/create.tsx` — 4-step wizard: Set Total → Allocate by Category → Select Duration → Review
+- Step indicators with completed/active states and navigation
+- Review summary shows plan name, total, allocations breakdown, and duration
+- POSTs to `/v1/budget-plans` then refreshes both stores
+
+### Mobile — Budget Plan Components
+- Created `MonthPicker` component (`src/components/MonthPicker.tsx`) — grid of 12 upcoming months with multi-select and "Until I turn off" recurring toggle
+- Created `CategoryAllocation` component (`src/components/CategoryAllocation.tsx`) — category list with inline amount TextInputs, running total with progress bar
+- Created Zustand `budgetPlans` store (`src/stores/budgetPlans.ts`) with load/refresh/removePlan
+
+### Mobile — Budget Plan Detail Screen
+- Created `app/budget/plan/[id].tsx` — plan detail with inline editing:
+  - Tap plan name → inline TextInput edit with save button
+  - Tap total amount → inline decimal-pad edit with save button
+  - Tap allocation amount → inline edit with save button
+  - All edits save via `PUT /v1/budget-plans/{id}` and refresh stores
+- Recurrence toggle (Switch) to enable/disable recurring budget generation
+- Delete button with 3-option alert: Cancel / Keep Budgets / Delete Everything
+
+### Mobile — Budgets Tab Overhaul
+- Budget categories aggregated by `category_id` — multiple plans' allocations merge into one row (amounts summed, spent kept from first to avoid double-counting)
+- Stable sort order: categories sort by amount on focus/refresh only, preserved during inline edits
+- Expandable plan cards: chevron toggles expand/collapse with `LayoutAnimation`
+  - Tap plan card → navigates to plan detail screen
+  - Long-press plan card → quick-edit modal for name and total amount
+  - Chevron button → expand/collapse allocations dropdown
+- Expanded allocation rows with category icon, name, and tappable inline amount editing
+- Row separators between allocation rows
+- Swipe-to-delete on plan cards using `PanResponder` + `Animated` — reveals delete button with trash icon
+- Delete action triggers 3-option alert matching plan detail screen
+- Category cards navigate to budget-transactions on tap
+- Hamburger (list) icon on category rows for budget-transactions navigation
+
+### Mobile — Multi-Colored Overall Budget Progress Bar
+- **Budgets tab**: overall budget progress bar now shows colored segments per spending category, proportional to each category's spent amount relative to total budget
+- **Dashboard**: same multi-colored progress bar applied to the overall budget pill
+- Track uses `overflow: "hidden"` with pill border-radius so segments clip naturally
+- Over-budget state: all segments turn error red
+
+### Mobile — Quick-Edit Plan Modal
+- Modal overlay with name and total amount TextInputs
+- Tap outside to dismiss, Save/Cancel buttons
+- Saves via `PUT /v1/budget-plans/{id}` and refreshes all stores
+
+### Bug Fixes
+- Fixed duplicate React key errors across `index.tsx` (budget summaries use `${category_id}-${idx}`), `spending.tsx`, and `income.tsx` (use `${category_name}-${index}`)
+- Fixed double-counted spending after budget aggregation — `spent` is per-category, kept from first entry only
+- Fixed modal double-shadow — replaced nested `TouchableOpacity` overlay with `Pressable` + `StyleSheet.absoluteFill`
+
+---
+
 ## 2026-03-24 — Category Colors, React Performance & UX Improvements
 
 ### Backend — Category Color Picker
