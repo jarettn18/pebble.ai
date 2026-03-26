@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-03-26 — Phase 4 (cont.): Budget Plan Editing, UX Cleanup & Race Condition Fixes
+
+### Backend — Budget Plan Allocation Updates
+- `update_budget_plan` now regenerates `Budget` rows for the current month when allocations change — deletes old budgets linked to the plan, also cleans up unlinked legacy budgets matching the same categories, then creates new budget rows from updated allocations
+- Added `category_id` to `SpendingByCategory` and `IncomeByCategory` schemas (`schemas/dashboard.py`)
+- Updated dashboard spending/income queries to select `Category.id`, group by `Category.id`, and include `category_id` in results — enables frontend category filtering and navigation
+
+### Mobile — Budget Plan Detail: Edit Mode (Add/Remove Allocations)
+- Added edit mode to `budget/plan/[id].tsx` with "Edit" / "Cancel" toggle next to "Allocations" title
+- Edit mode renders editable `TextInput` amount fields, red remove (X) buttons per allocation, and "+ Add Category" button
+- Category picker modal shows unallocated categories (fetched from `/v1/categories`), filtered to exclude already-allocated ones
+- "Save Allocations" button sends `PUT /v1/budget-plans/{id}` with full `allocations` array replacement (entries with amount 0 filtered out)
+- Allocated and unallocated totals remain visible in edit mode
+
+### Mobile — Budget Transactions Screen Refactor
+- Dynamic screen title via `navigation.setOptions({ title: \`${categoryName} Transactions\` })`
+- Added category icon with colored circle (`withOpacity` background) at top of summary card
+- Icon is tappable — opens `ColorPickerModal` for category color changes
+- Color changes propagate via `refreshBudgets()`, `refreshPlans()`, `refreshDashboard()`
+- Progress bar fill uses category color instead of hardcoded primary
+
+### Mobile — Shared Category Icon Utility
+- Extracted `getCategoryIcon()` and `CATEGORY_ICONS` mapping from 3 files into `src/utils/categoryIcons.ts`
+- Maps 30+ category names to MaterialCommunityIcons (Food & Drink → silverware-fork-knife, Transportation → car, etc.)
+- Removed duplicate icon maps from `budgets.tsx`, `CategoryAllocation.tsx`
+
+### Mobile — Category Navigation from Spending & Income Screens
+- Spending summary (`spending.tsx`): category rows wrapped in `TouchableOpacity`, tapping navigates to budget-transactions screen with `category_id`, `category_name`, `category_color`, `spent`, `month`, `year` params
+- Income summary (`income.tsx`): same category navigation pattern
+
+### Mobile — Dashboard Budget Deduplication & Plan Totals
+- Overall budget totals on dashboard and budgets tab now use plan totals (`plans.reduce(sum + total_amount)`) instead of per-category sums when plans exist
+- Dashboard: created `mergedBudgetSummaries` memo that deduplicates categories by `category_id` and uses plan allocation amounts
+- Budgets tab: `aggregatedBudgets` memo merges multiple plans' allocations per category (amounts summed, spent kept from first entry)
+
+### Mobile — Cascade Dropdown Animation Fix
+- Extracted `PlanCard` as `React.memo` component to isolate re-renders — previously all plan cards re-animated when any plan was expanded because `renderHeader` useCallback recreated on `expandedPlanIds` change, remounting all `CascadeRow` components
+
+### Mobile — Budgets Tab UX Cleanup
+- Removed long-press quick-edit modal (name + total amount editing)
+- Removed inline allocation amount editing in cascade dropdown — allocations are now read-only display
+- Allocation rows in cascade dropdown sorted descending by amount
+- Removed unused state: `editingAllocationId`, `editingAmount`, `savingAllocation`, `quickEditPlan`, `quickEditName`, `quickEditAmount`, `savingQuickEdit`
+- Removed unused functions: `updateAllocationAmount`, `openQuickEdit`, `saveQuickEdit`, `handleStartEdit`
+- Removed unused imports: `Modal`, `KeyboardAvoidingView`, `Platform`, `Pressable`, `TextInput`, `contrastForeground`
+- Removed unused styles: `allocationEditRow`, `allocationAmountEditing`, `modalOverlay`, `quickEdit*` styles
+
+### Mobile — Color Propagation Fix
+- Budget-transactions screen now refreshes `budgetPlans`, `budgets`, and `dashboard` stores after color PATCH
+- Budget plan detail screen refreshes `dashboard` store on all save/delete operations
+
+### Bug Fixes
+- **Fixed allocation save race condition** — save flow in `budget/plan/[id].tsx` was calling `setPlan(updated)` from PUT response then refreshing stores asynchronously, causing values to bounce between old and new. Fixed by awaiting all store refreshes + a fresh GET for the plan in parallel before updating local state
+- **Fixed budget categories not updating after allocation changes** — backend now regenerates `Budget` rows on plan update; frontend uses explicit `loadBudgets(currentMonth, currentYear)` instead of store's `refresh()` which relied on potentially unset module-level state
+- **Fixed transaction filtering showing all transactions** — backend `SpendingByCategory`/`IncomeByCategory` needed `category_id`; spending/income screens needed to pass `category_id` in navigation URLs
+
+---
+
 ## 2026-03-25 — Phase 4: Budget Plans, Multi-Colored Progress Bars & UX Refinements
 
 ### Backend — Budget Plans System

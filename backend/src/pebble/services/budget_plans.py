@@ -259,6 +259,51 @@ async def update_budget_plan(
             db.add(alloc)
             new_allocs.append(alloc)
 
+        # Regenerate budget rows for the current month
+        now = datetime.now()
+        cur_month, cur_year = now.month, now.year
+
+        # Delete existing budgets for this plan in the current month
+        # Match by budget_plan_id, or by category_id for legacy budgets without plan linkage
+        old_budgets = await db.execute(
+            select(Budget).where(
+                Budget.user_id == plan.user_id,
+                Budget.month == cur_month,
+                Budget.year == cur_year,
+                Budget.budget_plan_id == plan.id,
+            )
+        )
+        for old_b in old_budgets.scalars().all():
+            await db.delete(old_b)
+
+        # Also update any unlinked budgets for the same categories (legacy rows without budget_plan_id)
+        old_cat_ids = {a.category_id for a in new_allocs}
+        if old_cat_ids:
+            unlinked = await db.execute(
+                select(Budget).where(
+                    Budget.user_id == plan.user_id,
+                    Budget.month == cur_month,
+                    Budget.year == cur_year,
+                    Budget.budget_plan_id.is_(None),
+                    Budget.category_id.in_(old_cat_ids),
+                )
+            )
+            for old_b in unlinked.scalars().all():
+                await db.delete(old_b)
+
+        # Create new budget rows from updated allocations
+        for alloc in new_allocs:
+            db.add(
+                Budget(
+                    user_id=plan.user_id,
+                    category_id=alloc.category_id,
+                    amount=alloc.amount,
+                    month=cur_month,
+                    year=cur_year,
+                    budget_plan_id=plan.id,
+                )
+            )
+
     await db.commit()
 
     # Reload

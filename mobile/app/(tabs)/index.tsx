@@ -26,6 +26,7 @@ import { formatCurrency } from "../../src/utils/dashboard";
 import PieChart from "../../src/components/PieChart";
 import NetWorthChart from "../../src/components/NetWorthChart";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useBudgetPlansStore } from "../../src/stores/budgetPlans";
 import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../../src/theme";
 
 const PIE_COLORS = colors.spendingPalette;
@@ -115,6 +116,7 @@ export default function DashboardScreen() {
     refresh: refreshDashboard,
   } = useDashboardStore();
 
+  const { plans } = useBudgetPlansStore();
   const refreshAccounts = useAccountsStore((s) => s.refresh);
   const syncTransactions = useTransactionsStore((s) => s.syncAndRefresh);
 
@@ -205,13 +207,10 @@ export default function DashboardScreen() {
   }, [linkResult, clearResult]);
 
   const { totalBudgeted, totalSpent, budgetRemaining, budgetPct, isOverBudget } = useMemo(() => {
-    const { budgeted, spent } = budgetSummaries.reduce(
-      (acc, b) => ({
-        budgeted: acc.budgeted + parseFloat(b.amount || "0"),
-        spent: acc.spent + parseFloat(b.spent || "0"),
-      }),
-      { budgeted: 0, spent: 0 }
-    );
+    const budgeted = plans.length > 0
+      ? plans.reduce((sum, p) => sum + parseFloat(p.total_amount || "0"), 0)
+      : budgetSummaries.reduce((sum, b) => sum + parseFloat(b.amount || "0"), 0);
+    const spent = budgetSummaries.reduce((sum, b) => sum + parseFloat(b.spent || "0"), 0);
     return {
       totalBudgeted: budgeted,
       totalSpent: spent,
@@ -219,7 +218,43 @@ export default function DashboardScreen() {
       budgetPct: budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0,
       isOverBudget: spent > budgeted,
     };
-  }, [budgetSummaries]);
+  }, [budgetSummaries, plans]);
+
+  // Deduplicate budget summaries by category and use plan allocation amounts
+  const mergedBudgetSummaries = useMemo(() => {
+    // Aggregate by category_id: sum amounts and spent, keep first entry's metadata
+    const map = new Map<string, typeof budgetSummaries[number]>();
+    for (const b of budgetSummaries) {
+      const existing = map.get(b.category_id);
+      if (existing) {
+        map.set(b.category_id, {
+          ...existing,
+          amount: (parseFloat(existing.amount || "0") + parseFloat(b.amount || "0")).toFixed(2),
+          spent: (parseFloat(existing.spent || "0") + parseFloat(b.spent || "0")).toFixed(2),
+        });
+      } else {
+        map.set(b.category_id, { ...b });
+      }
+    }
+
+    // Override amounts with plan allocation totals when plans exist
+    if (plans.length > 0) {
+      const allocByCategory = new Map<string, number>();
+      for (const p of plans) {
+        for (const a of p.allocations) {
+          allocByCategory.set(a.category_id, (allocByCategory.get(a.category_id) || 0) + parseFloat(a.amount || "0"));
+        }
+      }
+      for (const [catId, amount] of allocByCategory) {
+        const entry = map.get(catId);
+        if (entry) {
+          map.set(catId, { ...entry, amount: amount.toFixed(2) });
+        }
+      }
+    }
+
+    return Array.from(map.values());
+  }, [budgetSummaries, plans]);
 
   const hasAccounts = accounts.length > 0 || assets.length > 0;
   const [carouselPage, setCarouselPage] = useState(0);
@@ -368,7 +403,7 @@ export default function DashboardScreen() {
             </Text>
           </View>
           <View style={[progressBarStyles.track, { flexDirection: "row", overflow: "hidden" }]}>
-            {budgetSummaries.map((item, idx) => {
+            {mergedBudgetSummaries.map((item, idx) => {
               const spent = parseFloat(item.spent || "0");
               if (spent <= 0) return null;
               const scale = isOverBudget ? totalBudgeted / totalSpent : 1;
@@ -391,7 +426,7 @@ export default function DashboardScreen() {
           </Pressable>
 
           {/* Expanded category breakdown */}
-          {budgetExpanded && budgetSummaries.map((b, bIdx) => {
+          {budgetExpanded && mergedBudgetSummaries.map((b, bIdx) => {
             const catBudgeted = parseFloat(b.amount || "0");
             const catSpent = parseFloat(b.spent || "0");
             const catRemaining = catBudgeted - catSpent;
@@ -405,7 +440,7 @@ export default function DashboardScreen() {
                 activeOpacity={0.7}
                 onPress={() =>
                   router.push(
-                    `/budget-transactions?category_id=${b.category_id}&category_name=${encodeURIComponent(b.category_name || "Uncategorized")}&budget_amount=${b.amount}&spent=${b.spent}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`
+                    `/budget-transactions?category_id=${b.category_id}&category_name=${encodeURIComponent(b.category_name || "Uncategorized")}&category_color=${encodeURIComponent(b.category_color || '')}&budget_amount=${b.amount}&spent=${b.spent}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`
                   )
                 }
               >
@@ -430,7 +465,7 @@ export default function DashboardScreen() {
                     onPress={(e) => {
                       e.stopPropagation();
                       router.push(
-                        `/budget-transactions?category_id=${b.category_id}&category_name=${encodeURIComponent(b.category_name || "Uncategorized")}&budget_amount=${b.amount}&spent=${b.spent}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`
+                        `/budget-transactions?category_id=${b.category_id}&category_name=${encodeURIComponent(b.category_name || "Uncategorized")}&category_color=${encodeURIComponent(b.category_color || '')}&budget_amount=${b.amount}&spent=${b.spent}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`
                       );
                     }}
                   >

@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, fonts, borderRadius } from "../theme";
 import { withOpacity } from "../utils/color";
 import { formatCurrency } from "../utils/dashboard";
+import { getCategoryIcon } from "../utils/categoryIcons";
 
 type Category = {
   id: string;
@@ -23,37 +24,6 @@ type Props = {
   onAllocationsChange: (allocations: AllocationEntry[]) => void;
 };
 
-const CATEGORY_ICONS: Record<string, string> = {
-  dining: "silverware-fork-knife",
-  food: "silverware-fork-knife",
-  restaurant: "silverware-fork-knife",
-  groceries: "cart-outline",
-  grocery: "cart-outline",
-  shopping: "shopping-outline",
-  transport: "car-outline",
-  transportation: "car-outline",
-  travel: "airplane",
-  entertainment: "movie-open-outline",
-  health: "spa-outline",
-  wellness: "spa-outline",
-  utilities: "flash-outline",
-  subscriptions: "sync",
-  rent: "home-outline",
-  housing: "home-outline",
-  education: "book-open-variant",
-  personal: "account-outline",
-  insurance: "shield-outline",
-  savings: "piggy-bank-outline",
-  investments: "chart-line",
-};
-
-function getCategoryIcon(name: string): string {
-  const lower = name.toLowerCase();
-  for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
-    if (lower.includes(key)) return icon;
-  }
-  return "clipboard-text-outline";
-}
 
 export default function CategoryAllocation({
   categories,
