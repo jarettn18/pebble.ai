@@ -1,5 +1,191 @@
 # Changelog
 
+## 2026-03-25 — Phase 4: Budget Plans, Multi-Colored Progress Bars & UX Refinements
+
+### Backend — Budget Plans System
+- Created `budget_plans` and `budget_plan_allocations` tables (Alembic migration `e6f7a8b9c0d1`)
+- Added nullable `budget_plan_id` FK to `budgets` table (SET NULL on delete)
+- Created `BudgetPlan` and `BudgetPlanAllocation` SQLAlchemy models with cascade relationships
+- Created budget plan schemas: `BudgetPlanCreateRequest`, `BudgetPlanUpdateRequest`, `BudgetPlanOut`, `AllocationIn/Out`, `MonthYear`
+- Created budget plan service (`services/budget_plans.py`): full CRUD, allocation replacement on update, idempotent recurring budget generation
+- Created budget plan router (`routers/budget_plans.py`): `GET/POST /v1/budget-plans`, `GET/PUT/DELETE /v1/budget-plans/{plan_id}`, `POST /v1/budget-plans/generate-recurring`
+- `DELETE` accepts `delete_budgets` query param to optionally remove generated budgets or just unlink them
+
+### Mobile — Multi-Step Budget Creation Wizard
+- Created `app/budget/create.tsx` — 4-step wizard: Set Total → Allocate by Category → Select Duration → Review
+- Step indicators with completed/active states and navigation
+- Review summary shows plan name, total, allocations breakdown, and duration
+- POSTs to `/v1/budget-plans` then refreshes both stores
+
+### Mobile — Budget Plan Components
+- Created `MonthPicker` component (`src/components/MonthPicker.tsx`) — grid of 12 upcoming months with multi-select and "Until I turn off" recurring toggle
+- Created `CategoryAllocation` component (`src/components/CategoryAllocation.tsx`) — category list with inline amount TextInputs, running total with progress bar
+- Created Zustand `budgetPlans` store (`src/stores/budgetPlans.ts`) with load/refresh/removePlan
+
+### Mobile — Budget Plan Detail Screen
+- Created `app/budget/plan/[id].tsx` — plan detail with inline editing:
+  - Tap plan name → inline TextInput edit with save button
+  - Tap total amount → inline decimal-pad edit with save button
+  - Tap allocation amount → inline edit with save button
+  - All edits save via `PUT /v1/budget-plans/{id}` and refresh stores
+- Recurrence toggle (Switch) to enable/disable recurring budget generation
+- Delete button with 3-option alert: Cancel / Keep Budgets / Delete Everything
+
+### Mobile — Budgets Tab Overhaul
+- Budget categories aggregated by `category_id` — multiple plans' allocations merge into one row (amounts summed, spent kept from first to avoid double-counting)
+- Stable sort order: categories sort by amount on focus/refresh only, preserved during inline edits
+- Expandable plan cards: chevron toggles expand/collapse with `LayoutAnimation`
+  - Tap plan card → navigates to plan detail screen
+  - Long-press plan card → quick-edit modal for name and total amount
+  - Chevron button → expand/collapse allocations dropdown
+- Expanded allocation rows with category icon, name, and tappable inline amount editing
+- Row separators between allocation rows
+- Swipe-to-delete on plan cards using `PanResponder` + `Animated` — reveals delete button with trash icon
+- Delete action triggers 3-option alert matching plan detail screen
+- Category cards navigate to budget-transactions on tap
+- Hamburger (list) icon on category rows for budget-transactions navigation
+
+### Mobile — Multi-Colored Overall Budget Progress Bar
+- **Budgets tab**: overall budget progress bar now shows colored segments per spending category, proportional to each category's spent amount relative to total budget
+- **Dashboard**: same multi-colored progress bar applied to the overall budget pill
+- Track uses `overflow: "hidden"` with pill border-radius so segments clip naturally
+- Over-budget state: all segments turn error red
+
+### Mobile — Quick-Edit Plan Modal
+- Modal overlay with name and total amount TextInputs
+- Tap outside to dismiss, Save/Cancel buttons
+- Saves via `PUT /v1/budget-plans/{id}` and refreshes all stores
+
+### Bug Fixes
+- Fixed duplicate React key errors across `index.tsx` (budget summaries use `${category_id}-${idx}`), `spending.tsx`, and `income.tsx` (use `${category_name}-${index}`)
+- Fixed double-counted spending after budget aggregation — `spent` is per-category, kept from first entry only
+- Fixed modal double-shadow — replaced nested `TouchableOpacity` overlay with `Pressable` + `StyleSheet.absoluteFill`
+
+---
+
+## 2026-03-24 — Category Colors, React Performance & UX Improvements
+
+### Backend — Category Color Picker
+- Added `PATCH /v1/categories/{category_id}` endpoint to update a category's color
+- Added `CategoryUpdateRequest` schema with hex color validation (`^#[0-9A-Fa-f]{6}$`)
+- Added `update_category_color()` service function in `services/categories.py`
+- Added `category_color` field to `BudgetOut` schema (`schemas/budget.py`)
+- Added `category_color` field to `SpendingByCategory`, `IncomeByCategory`, and `BudgetSummary` schemas (`schemas/dashboard.py`)
+- Updated `_budget_to_dict()` in `services/budgets.py` to include `category_color` from the category relationship
+- Updated dashboard service `spending_by_category` and `income_by_category` queries to SELECT and GROUP BY `Category.color`, returning `category_color` in response
+- Updated dashboard `budget_summaries` to include `category_color`
+
+### Mobile — Category Color Picker Feature
+- Created `ColorPickerModal` component (`src/components/ColorPickerModal.tsx`) — bottom sheet modal with 16 color swatches in a grid, checkmark on current selection
+- Created color utility (`src/utils/color.ts`) with `withOpacity(hex, opacity)` and `contrastForeground(hex)` (luminance-based contrast for icon foreground)
+- Added `colorPickerPalette` (16 colors) to `theme.ts`
+- Updated `Budget` type in `stores/budgets.ts` and `BudgetSummary`, `SpendingByCategory`, `IncomeByCategory` types in `stores/dashboard.ts` with `category_color: string | null`
+
+### Mobile — Color Propagation Across All Screens
+- **Budgets tab** (`budgets.tsx`): Icon circles are now tappable `TouchableOpacity` that open the color picker; on select, calls `PATCH /v1/categories/{id}` then refreshes budgets + dashboard stores; budget cards use `item.category_color` for progress bar fill and icon background (with `withOpacity`), fallback to palette colors when null
+- **Dashboard** (`index.tsx`): Spending and income pie chart slices use `cat.category_color || PIE_COLORS[i]`; budget pill expanded category rows use `b.category_color` for progress bar fill
+- **Spending screen** (`spending.tsx`): Stacked bar segments, category dots, and individual progress bars use `cat.category_color || CATEGORY_COLORS[i]`
+- **Income screen** (`income.tsx`): Same color propagation as spending screen
+
+### Mobile — React Performance Optimizations
+- **Dashboard** (`index.tsx`): Wrapped budget calculations in `useMemo` (single-pass reduce); memoized `onCarouselScroll` with `useCallback`; hoisted inline `hitSlop` to module-level `HIT_SLOP_8` constant; moved inline style object to `styles.accountsWidgetLeft`; dashboard no longer blocks on Plaid balance refresh before loading data
+- **Budgets tab** (`budgets.tsx`): Wrapped budget totals in `useMemo`; memoized `renderHeader` with `useCallback`
+- **Budget edit** (`budget/[id].tsx`): Parallelized categories + budget fetch with `Promise.all()`
+- **PieChart** (`PieChart.tsx`): Wrapped boundary angle computation in `useMemo`
+- **Asset detail** (`asset/[id].tsx`): Wrapped `hasChanges` in `useMemo`
+- **Transactions tab** (`transactions.tsx`): Moved inline loader style to `styles.loader`
+
+### Mobile — Tappable Monthly Trend Bars
+- **Spending screen** (`spending.tsx`): Tapping a bar in the 6-month trend chart fetches that month's category breakdown and transactions via parallel `Promise.all` API calls; selected month highlighted; tapping current month or re-tapping resets to default view; dynamic titles show selected month name
+- **Income screen** (`income.tsx`): Same tappable bar behavior as spending screen
+- **TransactionListCard** (`TransactionListCard.tsx`): Added optional `title` prop to customize card header (e.g. "Transactions — January 2026")
+
+### Mobile — Carousel Snap Fix
+- Fixed carousel cards getting stuck when swiping past the last card — replaced `snapToInterval` with `snapToOffsets` + `snapToEnd={true}`; removed `paddingRight` from carousel content and added `carouselCardLast` style with `marginRight: 0` to prevent rubber-banding on the last card
+
+---
+
+## 2026-03-22 — Drill-Down Screens, Shared Components & Transactions Restyle
+
+### Backend — Dashboard Budget Summary
+- Added `category_id` field to `BudgetSummary` schema (`schemas/dashboard.py`) so the frontend can filter transactions by budget category
+- Updated dashboard service (`services/dashboard.py`) to include `category_id` in the budget summaries response
+
+### Mobile — Budget Transactions Screen
+- Created `app/budget-transactions.tsx` — dedicated screen for viewing transactions within a budget category
+- Shows budget summary card with category name, spent amount, progress bar (spent vs budgeted), and remaining/over amount
+- Fetches transactions filtered by `category_id` and current month date range
+- Tapping a transaction navigates to the transaction detail screen
+- Registered route in `_layout.tsx` with "Budget Transactions" header
+
+### Mobile — Account Transactions Screen
+- Created `app/account-transactions.tsx` — dedicated screen for viewing transactions within a specific account
+- Shows account summary card with institution name, account name, and current balance (debt accounts shown in red)
+- Fetches transactions filtered by `account_id`
+- Dashboard account taps now navigate to this dedicated screen instead of the transactions tab with a filter
+
+### Mobile — Dashboard Budget Categories
+- Budget category rows in the expanded breakdown are now tappable, navigating to the budget transactions screen
+- Added list icon button on each category row for quick access to filtered transactions
+- Replaced "X% of $Y" display with "$X left of $Y" (or "$X over of $Y" in red) using `Math.floor` to drop cents
+- Budget expand/collapse chevron now uses sage green (`colors.primary`) instead of muted gray
+- Reduced `progressBarStyles.value` font size from 22 to 16
+
+### Mobile — Budgets Tab
+- Added list icon button on each budget row that navigates to the budget transactions screen (tap-to-edit preserved)
+- Replaced percentage display with "$X left of $Y" format matching the dashboard
+
+### Mobile — Shared TransactionListCard Component
+- Extracted `TransactionListCard` from duplicated code across 4 screens into `src/components/TransactionListCard.tsx`
+- Handles card wrapper, "Transactions (N)" title, row mapping with separators, tap-to-detail navigation, and empty state
+- Refactored `spending.tsx`, `income.tsx`, `budget-transactions.tsx`, and `account-transactions.tsx` to use the shared component
+- Removed duplicated card, empty state styles and unused imports from all 4 screens
+
+### Mobile — Dashboard "See All" Link
+- Added "See all" link inline with "My Accounts" header in the accounts widget card
+- Navigates to the Transactions tab for full transaction browsing
+
+### Mobile — Transactions Screen Restyle
+- Replaced hidden filter toggle with always-visible filter card containing search, type chips, and category chips
+- Transaction list now renders inside `TransactionListCard` (card with border/shadow) instead of a plain FlatList
+- Wrapped everything in a ScrollView with pull-to-refresh support
+- Removed filter toggle button, active filters summary bar, and `showFilters` state
+- FAB (+) button for creating transactions preserved
+- Uses `fonts.medium`/`fonts.semiBold` from theme instead of inline `fontWeight`
+
+### Mobile — formatCurrency Enhancement
+- Updated `formatCurrency` in `utils/dashboard.ts` to drop `.00` decimals when the value is a whole number (e.g., "$500" instead of "$500.00")
+
+---
+
+## 2026-03-22 — Component Refactors, Budget Breakdown & Transaction Lists
+
+### Mobile — Shared TransactionRow Component
+- Extracted `TransactionRow`, `TransactionSeparator`, and `Transaction` type from `transactions.tsx` into reusable `src/components/TransactionRow.tsx`
+- Transaction list on transactions tab now imports from shared component
+
+### Mobile — Centralized Progress Bar Styles
+- Created `progressBarStyles` in `theme.ts` — shared container, header, label, value, track, and fill styles used across all budget/progress bar UIs
+- Added `colors.progressBar` (`#45655a`) as default progress bar fill color
+- Replaced duplicated progress bar styles in `budgets.tsx` (summary pill + individual budget cards) and `index.tsx` (dashboard budget pill)
+- Replaced duplicated horizontal bar track/fill styles in `income.tsx` and `spending.tsx` with shared `progressBarStyles.track` / `progressBarStyles.fill`
+
+### Mobile — Dashboard Budget Expandable Breakdown
+- Added chevron toggle below the overall budget pill on the dashboard
+- Tapping chevron expands to show per-category budget breakdowns, each with its own progress bar, percentage, and remaining amount
+- Collapsing animates smoothly via `LayoutAnimation.easeInEaseOut`
+
+### Mobile — Transaction Lists on Spending & Income Screens
+- `spending.tsx` and `income.tsx` now fetch current month's transactions (filtered by expense/income type) and display them below category breakdowns
+- Transaction rows are tappable, navigating to the transaction detail screen
+- Uses shared `TransactionRow` component
+
+### Mobile — Budget Store: Non-Blocking Sync
+- Budget loading no longer blocks on transaction sync — fires `load()` in background with `.catch(() => {})`
+- Silent reload (no loading spinner) when budgets already exist in state, preventing UI flash on revisit
+
+---
+
 ## 2026-03-22 — Dashboard Accounts Widget & Styling Polish
 
 ### Dashboard — Accounts Widget

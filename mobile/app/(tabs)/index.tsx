@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Pressable,
+  LayoutAnimation,
 } from "react-native";
 import { useFocusEffect, useRouter, useNavigation } from "expo-router";
 import type { AssetSummary } from "../../src/stores/dashboard";
@@ -25,10 +26,12 @@ import { formatCurrency } from "../../src/utils/dashboard";
 import PieChart from "../../src/components/PieChart";
 import NetWorthChart from "../../src/components/NetWorthChart";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors, borderRadius, shadows, fonts } from "../../src/theme";
+import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../../src/theme";
 
 const PIE_COLORS = colors.spendingPalette;
 const INCOME_COLORS = colors.incomePalette;
+
+const HIT_SLOP_8 = { top: 8, bottom: 8, left: 8, right: 8 };
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   depository: "Bank",
@@ -121,15 +124,10 @@ export default function DashboardScreen() {
   // Refresh balances (if stale) and reload dashboard on tab focus
   useFocusEffect(
     useCallback(() => {
-      async function refreshAndLoad() {
-        try {
-          await apiRequest("/v1/plaid/refresh-balances", { method: "POST" });
-        } catch {
-          // may fail if no items linked
-        }
-        await loadDashboard(undefined, undefined, true);
-      }
-      refreshAndLoad();
+      // Refresh dashboard data (picks up color changes, new transactions, etc.)
+      loadDashboard(undefined, undefined, true);
+      // Refresh Plaid balances in background (doesn't block render)
+      apiRequest("/v1/plaid/refresh-balances", { method: "POST" }).catch(() => {});
     }, [])
   );
 
@@ -206,20 +204,32 @@ export default function DashboardScreen() {
     };
   }, [linkResult, clearResult]);
 
-  const totalBudgeted = budgetSummaries.reduce((sum, b) => sum + parseFloat(b.amount || "0"), 0);
-  const totalSpent = budgetSummaries.reduce((sum, b) => sum + parseFloat(b.spent || "0"), 0);
-  const budgetRemaining = totalBudgeted - totalSpent;
-  const budgetPct = totalBudgeted > 0 ? Math.round((totalSpent / totalBudgeted) * 100) : 0;
-  const isOverBudget = totalSpent > totalBudgeted;
+  const { totalBudgeted, totalSpent, budgetRemaining, budgetPct, isOverBudget } = useMemo(() => {
+    const { budgeted, spent } = budgetSummaries.reduce(
+      (acc, b) => ({
+        budgeted: acc.budgeted + parseFloat(b.amount || "0"),
+        spent: acc.spent + parseFloat(b.spent || "0"),
+      }),
+      { budgeted: 0, spent: 0 }
+    );
+    return {
+      totalBudgeted: budgeted,
+      totalSpent: spent,
+      budgetRemaining: budgeted - spent,
+      budgetPct: budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0,
+      isOverBudget: spent > budgeted,
+    };
+  }, [budgetSummaries]);
 
   const hasAccounts = accounts.length > 0 || assets.length > 0;
   const [carouselPage, setCarouselPage] = useState(0);
+  const [budgetExpanded, setBudgetExpanded] = useState(false);
   const cardWidth = Dimensions.get("window").width - 40;
 
-  const onCarouselScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const onCarouselScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / (cardWidth + 12));
     setCarouselPage(page);
-  };
+  }, [cardWidth]);
 
   return (
     <View style={styles.container}>
@@ -261,7 +271,7 @@ export default function DashboardScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           snapToOffsets={[0, cardWidth + 12]}
-          snapToEnd={false}
+          snapToEnd={true}
           decelerationRate="fast"
           disableIntervalMomentum
           onMomentumScrollEnd={onCarouselScroll}
@@ -285,7 +295,7 @@ export default function DashboardScreen() {
                 slices={incomeByCategory.map((cat, i) => ({
                   label: cat.category_name,
                   value: parseFloat(cat.amount),
-                  color: INCOME_COLORS[i % INCOME_COLORS.length],
+                  color: cat.category_color || INCOME_COLORS[i % INCOME_COLORS.length],
                 }))}
               />
             )}
@@ -295,7 +305,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.card, styles.carouselCard, { width: cardWidth }]}
+            style={[styles.card, styles.carouselCard, styles.carouselCardLast, { width: cardWidth }]}
             onPress={() => router.push("/spending")}
             activeOpacity={0.7}
           >
@@ -312,7 +322,7 @@ export default function DashboardScreen() {
                 slices={spendingByCategory.map((cat, i) => ({
                   label: cat.category_name,
                   value: parseFloat(cat.amount),
-                  color: PIE_COLORS[i % PIE_COLORS.length],
+                  color: cat.category_color || PIE_COLORS[i % PIE_COLORS.length],
                 }))}
               />
             )}
@@ -336,30 +346,130 @@ export default function DashboardScreen() {
 
       {/* Budget Summary — Overall Budget Pill */}
       {budgetSummaries.length > 0 && (
-        <View style={styles.budgetPill}>
-          <View style={styles.budgetPillTop}>
+        <View style={[progressBarStyles.container, styles.budgetPillMargin]}>
+          <Pressable
+            onPress={budgetExpanded ? () => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setBudgetExpanded(false);
+            } : undefined}
+          >
+          <View style={progressBarStyles.header}>
             <View>
-              <Text style={styles.budgetPillLabel}>Overall Budget</Text>
-              <Text style={styles.budgetPillValue}>
+              <Text style={progressBarStyles.label}>Overall Budget</Text>
+              <Text style={progressBarStyles.value}>
                 {budgetPct}%{" "}
-                <Text style={styles.budgetPillValueSub}>
+                <Text style={progressBarStyles.valueSub}>
                   of {formatCurrency(totalBudgeted)}
                 </Text>
               </Text>
             </View>
-            <Text style={[styles.budgetPillRemaining, isOverBudget && styles.negative]}>
+            <Text style={[progressBarStyles.remaining, isOverBudget && styles.negative]}>
               {isOverBudget ? "Over by " : ""}{formatCurrency(Math.abs(budgetRemaining))}{isOverBudget ? "" : " left"}
             </Text>
           </View>
-          <View style={styles.budgetProgressTrack}>
-            <View
-              style={[
-                styles.budgetProgressFill,
-                { width: `${Math.min(budgetPct, 100)}%` },
-                isOverBudget && { backgroundColor: colors.error },
-              ]}
-            />
+          <View style={[progressBarStyles.track, { flexDirection: "row", overflow: "hidden" }]}>
+            {budgetSummaries.map((item, idx) => {
+              const spent = parseFloat(item.spent || "0");
+              if (spent <= 0) return null;
+              const scale = isOverBudget ? totalBudgeted / totalSpent : 1;
+              const widthPct = (spent / totalBudgeted) * 100 * scale;
+              const catColor = isOverBudget
+                ? colors.error
+                : item.category_color || PIE_COLORS[idx % PIE_COLORS.length];
+              return (
+                <View
+                  key={`${item.category_id}-${idx}`}
+                  style={{
+                    width: `${widthPct}%`,
+                    height: "100%" as unknown as number,
+                    backgroundColor: catColor,
+                  }}
+                />
+              );
+            })}
           </View>
+          </Pressable>
+
+          {/* Expanded category breakdown */}
+          {budgetExpanded && budgetSummaries.map((b, bIdx) => {
+            const catBudgeted = parseFloat(b.amount || "0");
+            const catSpent = parseFloat(b.spent || "0");
+            const catRemaining = catBudgeted - catSpent;
+            const catPct = catBudgeted > 0 ? Math.round((catSpent / catBudgeted) * 100) : 0;
+            const catOver = catSpent > catBudgeted;
+            const now = new Date();
+            return (
+              <TouchableOpacity
+                key={`${b.category_id}-${bIdx}`}
+                style={styles.budgetCategoryRow}
+                activeOpacity={0.7}
+                onPress={() =>
+                  router.push(
+                    `/budget-transactions?category_id=${b.category_id}&category_name=${encodeURIComponent(b.category_name || "Uncategorized")}&budget_amount=${b.amount}&spent=${b.spent}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`
+                  )
+                }
+              >
+                <View style={progressBarStyles.header}>
+                  <View>
+                    <Text style={progressBarStyles.label}>
+                      {b.category_name || "Uncategorized"}
+                    </Text>
+                    <Text style={[progressBarStyles.value, styles.budgetCategoryValue, catOver && styles.negative]}>
+                      {catOver
+                        ? `${formatCurrency(Math.floor(Math.abs(catRemaining)))} over`
+                        : `${formatCurrency(Math.floor(catRemaining))} left`}
+                      {" "}
+                      <Text style={progressBarStyles.valueSub}>
+                        of {formatCurrency(Math.floor(catBudgeted))}
+                      </Text>
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.viewTxnBtn}
+                    hitSlop={HIT_SLOP_8}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      router.push(
+                        `/budget-transactions?category_id=${b.category_id}&category_name=${encodeURIComponent(b.category_name || "Uncategorized")}&budget_amount=${b.amount}&spent=${b.spent}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`
+                      );
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="format-list-bulleted"
+                      size={20}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                </View>
+                <View style={progressBarStyles.track}>
+                  <View
+                    style={[
+                      progressBarStyles.fill,
+                      { width: `${Math.min(catPct, 100)}%` },
+                      b.category_color ? { backgroundColor: b.category_color } : undefined,
+                      catOver && { backgroundColor: colors.error },
+                    ]}
+                  />
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* Chevron toggle */}
+          <TouchableOpacity
+            style={styles.budgetChevron}
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setBudgetExpanded((prev) => !prev);
+            }}
+            hitSlop={12}
+          >
+            <MaterialCommunityIcons
+              name={budgetExpanded ? "chevron-up" : "chevron-down"}
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
         </View>
       )}
 
@@ -370,7 +480,16 @@ export default function DashboardScreen() {
           <View style={styles.accountsWidgetDecor}>
             <MaterialCommunityIcons name="wallet-outline" size={140} color="#ffffff" />
           </View>
-          <Text style={styles.accountsWidgetTitle}>My Accounts</Text>
+          <View style={styles.accountsWidgetTitleRow}>
+            <Text style={styles.accountsWidgetTitle}>My Accounts</Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/transactions")}
+              activeOpacity={0.7}
+              hitSlop={HIT_SLOP_8}
+            >
+              <Text style={styles.seeAllText}>See all</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.accountsWidgetList}>
             {accounts.map((acct, index) => (
               <TouchableOpacity
@@ -379,10 +498,10 @@ export default function DashboardScreen() {
                   styles.accountsWidgetRow,
                   index < accounts.length - 1 && styles.accountsWidgetRowBorder,
                 ]}
-                onPress={() => router.push(`/(tabs)/transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}`)}
+                onPress={() => router.push(`/account-transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}&balance_current=${acct.balance_current || ""}&account_type=${acct.type}&institution_name=${encodeURIComponent(acct.institution_name || "")}`)}
                 activeOpacity={0.7}
               >
-                <View style={{ flex: 0.75, marginRight: 12 }}>
+                <View style={styles.accountsWidgetLeft}>
                   <Text style={styles.accountsWidgetSub}>
                     {acct.institution_name ?? ACCOUNT_TYPE_LABELS[acct.type] ?? acct.type}
                   </Text>
@@ -599,12 +718,13 @@ const styles = StyleSheet.create({
   carouselWrapper: {
     marginBottom: 16,
   },
-  carouselContent: {
-    paddingRight: 20,
-  },
+  carouselContent: {},
   carouselCard: {
     marginBottom: 0,
     marginRight: 12,
+  },
+  carouselCardLast: {
+    marginRight: 0,
   },
   dots: {
     flexDirection: "row",
@@ -624,51 +744,31 @@ const styles = StyleSheet.create({
   negative: {
     color: colors.negative,
   },
-  budgetPill: {
-    padding: 20,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
+  budgetPillMargin: {
     marginBottom: 16,
   },
-  budgetPillTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 12,
+  budgetChevron: {
+    alignItems: "center",
+    marginTop: 4,
+    marginBottom: -15,
   },
-  budgetPillLabel: {
-    fontSize: 11,
-    fontFamily: fonts.labelMedium,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: colors.textPrimary,
-    opacity: 0.7,
-    marginBottom: 4,
+  budgetCategoryRow: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  budgetPillValue: {
-    fontSize: 22,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
+  budgetCategoryValue: {
+    fontSize: 16,
   },
-  budgetPillValueSub: {
-    fontSize: 13,
-    fontWeight: "400",
-    opacity: 0.7,
+  viewTxnBtn: {
+    padding: 4,
   },
-  budgetPillRemaining: {
+  seeAllText: {
     fontSize: 14,
     fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
-  },
-  budgetProgressTrack: {
-    height: 16,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: 9999,
-  },
-  budgetProgressFill: {
-    height: "100%" as unknown as number,
-    backgroundColor: colors.primary,
-    borderRadius: 9999,
+    color: "#ffffff",
+    opacity: 0.8,
   },
   sectionTitle: {
     fontSize: 20,
@@ -819,12 +919,17 @@ const styles = StyleSheet.create({
     right: -10,
     opacity: 0.2,
   },
+  accountsWidgetTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
   accountsWidgetTitle: {
     fontSize: 18,
     fontFamily: fonts.bold,
     color: "#ffffff",
     opacity: 0.9,
-    marginBottom: 20,
   },
   accountsWidgetList: {
     position: "relative",
@@ -839,6 +944,10 @@ const styles = StyleSheet.create({
   accountsWidgetRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+  accountsWidgetLeft: {
+    flex: 0.75,
+    marginRight: 12,
   },
   accountsWidgetSub: {
     fontSize: 13,

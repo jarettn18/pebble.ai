@@ -6,6 +6,7 @@ export type Budget = {
   id: string;
   category_id: string;
   category_name: string | null;
+  category_color: string | null;
   amount: string;
   spent: string;
   month: number;
@@ -43,10 +44,14 @@ export const useBudgetsStore = create<BudgetsState>((set, get) => ({
     lastMonth = month;
     lastYear = year;
 
-    set({ isLoading: true, error: null });
+    // Only show loading indicator when there are no budgets yet;
+    // otherwise reload silently so the UI doesn't flash a spinner
+    const silent = get().budgets.length > 0;
+    if (!silent) set({ isLoading: true, error: null });
     try {
-      // Ensure transactions are synced so spending data is fresh
-      await useTransactionsStore.getState().load();
+      // Kick off transaction sync in background so spending data is fresh,
+      // but don't block budget loading on it
+      useTransactionsStore.getState().load().catch(() => {});
 
       const data = await apiRequest<BudgetListResponse>(
         `/v1/budgets?month=${month}&year=${year}`
@@ -55,7 +60,7 @@ export const useBudgetsStore = create<BudgetsState>((set, get) => ({
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to load budgets" });
     } finally {
-      set({ isLoading: false });
+      if (!silent) set({ isLoading: false });
     }
   },
 

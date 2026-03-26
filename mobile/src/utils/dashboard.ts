@@ -36,8 +36,10 @@ export function computeMonthlySpending(transactions: Transaction[]): number {
 }
 
 export function formatCurrency(value: number): string {
-  return "$" + Math.abs(value).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  const abs = Math.abs(value);
+  const isWhole = abs % 1 === 0;
+  return "$" + abs.toLocaleString("en-US", {
+    minimumFractionDigits: isWhole ? 0 : 2,
+    maximumFractionDigits: isWhole ? 0 : 2,
   });
 }

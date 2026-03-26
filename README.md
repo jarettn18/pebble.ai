@@ -39,7 +39,8 @@ pebble/
 │       │   ├── account.py           # PlaidItem + Account
 │       │   ├── transaction.py       # Transaction (indexed on user_id+date)
 │       │   ├── category.py          # Category
-│       │   ├── budget.py            # Budget (per category per month)
+│       │   ├── budget.py            # Budget (per category per month, optional plan FK)
+│       │   ├── budget_plan.py       # BudgetPlan + BudgetPlanAllocation (unified plans)
 │       │   ├── asset.py             # Asset (properties + vehicles, net worth)
 │       │   ├── chat.py              # ChatConversation + ChatMessage
 │       │   └── api_usage.py         # API usage metering
@@ -48,6 +49,7 @@ pebble/
 │       │   ├── account.py           # AccountOut, AccountListResponse
 │       │   ├── asset.py             # AssetOut, Create/Update, ListResponse
 │       │   ├── budget.py            # BudgetOut, Create/Update, ListResponse
+│       │   ├── budget_plan.py       # BudgetPlanOut, Create/Update, Allocation schemas
 │       │   ├── category.py          # CategoryOut, CategoryListResponse
 │       │   ├── dashboard.py         # DashboardResponse, NetWorthHistory, SpendingByCategory, AssetSummary
 │       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
@@ -57,7 +59,8 @@ pebble/
 │       │   ├── accounts.py          # /v1/accounts (list user accounts)
 │       │   ├── assets.py            # /v1/assets (CRUD for properties + vehicles)
 │       │   ├── budgets.py           # /v1/budgets (CRUD)
-│       │   ├── categories.py        # /v1/categories (list all)
+│       │   ├── budget_plans.py      # /v1/budget-plans (CRUD, recurring generation)
+│       │   ├── categories.py        # /v1/categories (list all, update color)
 │       │   ├── dashboard.py         # /v1/dashboard (aggregated overview + net worth history)
 │       │   ├── plaid.py             # /v1/plaid/* (link-token, exchange, sync, sync-all)
 │       │   └── transactions.py      # /v1/transactions (list, detail, create, update, delete)
@@ -66,13 +69,14 @@ pebble/
 │       │   ├── accounts.py          # Account queries with institution join
 │       │   ├── assets.py            # Asset CRUD (properties + vehicles)
 │       │   ├── budgets.py           # Budget CRUD + spending calculation
+│       │   ├── budget_plans.py      # Budget plan CRUD, allocation management, recurring generation
 │       │   ├── categories.py        # Category queries, Plaid category map
 │       │   ├── dashboard.py         # Aggregated dashboard + net worth history
 │       │   ├── plaid.py             # Plaid API integration (link, exchange, sync, balance refresh)
 │       │   └── transactions.py      # Transaction queries, detail, create, update, delete
 │       ├── middleware/
 │       │   └── auth.py              # JWT + API key auth dependencies
-│       ├── ai/                      # AI module (Phase 4)
+│       ├── ai/                      # AI module (Phase 5)
 │       └── utils/
 │           └── security.py          # bcrypt, JWT, Fernet, API key utils
 │
@@ -89,16 +93,21 @@ pebble/
 │   │   │   ├── _layout.tsx          # Tab navigator (5 tabs)
 │   │   │   ├── index.tsx            # Dashboard (net worth chart, pie chart, budgets)
 │   │   │   ├── transactions.tsx     # Transaction list with search, filters & FAB
-│   │   │   ├── budgets.tsx          # Budget list with progress bars
+│   │   │   ├── budgets.tsx          # Budget list with progress bars, expandable plans, swipe-to-delete
 │   │   │   ├── ai-chat.tsx          # AI chat (placeholder)
 │   │   │   └── settings.tsx         # Settings + logout
 │   │   ├── budget/
-│   │   │   └── [id].tsx             # Budget create/edit screen
+│   │   │   ├── create.tsx           # Multi-step budget plan creation wizard
+│   │   │   ├── [id].tsx             # Budget create/edit screen
+│   │   │   └── plan/
+│   │   │       └── [id].tsx         # Budget plan detail with inline editing
 │   │   ├── transaction/
 │   │   │   ├── create.tsx           # Create transaction (expense/income toggle)
 │   │   │   └── [id].tsx             # Transaction detail, edit & delete screen
 │   │   ├── spending.tsx             # Spending summary (trend chart, category bars)
 │   │   ├── income.tsx              # Income summary (trend chart, category bars)
+│   │   ├── budget-transactions.tsx # Budget category drill-down (transactions for a budget)
+│   │   ├── account-transactions.tsx# Account drill-down (balance + transactions for an account)
 │   │   ├── add-asset.tsx           # Add asset form (properties + vehicles)
 │   │   └── asset/
 │   │       └── [id].tsx            # Asset detail, edit & delete screen
@@ -106,18 +115,25 @@ pebble/
 │       ├── api/
 │       │   └── client.ts            # API client with auto JWT refresh
 │       ├── components/
+│       │   ├── CategoryAllocation.tsx # Category allocation list with inline amount inputs
+│       │   ├── ColorPickerModal.tsx   # Bottom-sheet color picker with 16 preset swatches
+│       │   ├── MonthPicker.tsx       # Multi-select month grid with recurring toggle
 │       │   ├── LineChart.tsx         # SVG line chart with bezier curves, gradient fill, axis labels
 │       │   ├── NetWorthChart.tsx     # Net worth history chart with period tabs (1M/3M/1Y/5Y)
-│       │   └── PieChart.tsx          # SVG donut chart with interactive segments + legend
+│       │   ├── PieChart.tsx          # SVG donut chart with interactive segments + legend
+│       │   ├── TransactionRow.tsx    # Shared transaction row + separator components
+│       │   └── TransactionListCard.tsx # Shared transaction list card (used across 4+ screens)
 │       ├── hooks/
 │       │   └── usePlaidLink.ts      # Plaid Link hook (fetch token, open modal)
 │       ├── utils/
+│       │   ├── color.ts             # withOpacity, contrastForeground color utilities
 │       │   └── dashboard.ts         # Net worth, spending calc, currency formatting
 │       └── stores/
 │           ├── auth.ts              # Zustand auth store
 │           ├── accounts.ts          # Zustand accounts store (24h cache)
 │           ├── assets.ts            # Zustand assets store (CRUD)
 │           ├── budgets.ts           # Zustand budgets store
+│           ├── budgetPlans.ts       # Zustand budget plans store
 │           ├── dashboard.ts         # Zustand dashboard store (server-side aggregation)
 │           └── transactions.ts      # Zustand transactions store (24h cache)
 ```
@@ -126,7 +142,7 @@ pebble/
 
 ## Database Schema
 
-10 tables, all with UUID primary keys:
+12 tables, all with UUID primary keys:
 
 | Table | Purpose |
 |-------|---------|
@@ -135,7 +151,9 @@ pebble/
 | `accounts` | Bank accounts linked via Plaid |
 | `categories` | Spending categories (name, icon, color, Plaid mapping) |
 | `transactions` | Financial transactions, indexed on `(user_id, date DESC)` |
-| `budgets` | Monthly budget per category |
+| `budgets` | Monthly budget per category (optional FK to budget_plans) |
+| `budget_plans` | Unified budget plans with total amount, recurrence settings |
+| `budget_plan_allocations` | Per-category allocations within a budget plan |
 | `assets` | Properties & vehicles with estimated values (contributes to net worth) |
 | `chat_conversations` | AI chat conversation threads |
 | `chat_messages` | Individual messages (user/assistant roles) |
@@ -150,11 +168,11 @@ pebble/
 - **Mobile storage**: expo-secure-store
 - **API client**: auto-refreshes expired access tokens transparently
 - **Auth gate**: Expo Router layout redirects unauthenticated users to login
-- **External API auth** (Phase 5): API key (SHA-256 hashed in DB), `X-API-Key` header
+- **External API auth** (Phase 6): API key (SHA-256 hashed in DB), `X-API-Key` header
 
 ---
 
-## AI Assistant Architecture (Phase 4)
+## AI Assistant Architecture (Phase 5)
 
 Claude tool-use (function-calling) — not RAG, not direct SQL.
 
@@ -189,9 +207,11 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 |-------|-------|--------|
 | 1 | Foundation — Docker, FastAPI, models, auth, Expo scaffold | **Done** |
 | 2 | Plaid + Transactions — bank linking, sync, transaction list | **Done** |
-| 3 | Budgets + Polish — CRUD, charts, search, error states | **In progress** |
-| 4 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
-| 5 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
+| 3 | Budgets + Polish — CRUD, charts, search, error states | **Done** |
+| 4 | Budget Overhaul — unified budget plans, multi-month, recurring | **In progress** |
+| 5 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
+| 6 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
+| 7 | Iteration — dark mode, data import/export, social auth | Not started |
 
 ---
 
@@ -252,7 +272,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Transaction detail/edit screen (recategorize, view details)
 - [x] Dashboard wired to real account balances + spending data
 
-## Completed (Phase 3 — In Progress)
+## Completed (Phase 3)
 
 ### Backend
 - [x] Budget CRUD service + router (`POST/GET/PUT/DELETE /v1/budgets`)
@@ -299,12 +319,32 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Header "+" button with dropdown menu for adding accounts and assets
 - [x] Accounts widget card with dark teal-green background, white text, decorative icon overlay, and shadow
 - [x] Account names truncate with ellipsis (75% width) to prevent overlap with balance
-- [x] Account-filtered transactions (tap account → transactions filtered by that account)
+- [x] Account-filtered transactions (tap account → dedicated account transactions screen)
 - [x] Multi-select filters (multiple types + categories simultaneously)
 - [x] Account name displayed in transaction rows
 - [x] Net worth chart renders when user has assets but no bank accounts
 - [x] Overall budget pill uses surface color for better visual consistency
 - [x] Budget progress bar track near-white for contrast against surface background
+- [x] Centralized `progressBarStyles` in theme.ts — shared across dashboard, budgets, spending, income screens
+- [x] Extracted `TransactionRow` component from transactions tab into reusable `src/components/TransactionRow.tsx`
+- [x] Dashboard budget pill expands on chevron tap to show per-category budget breakdowns with individual progress bars
+- [x] Spending & income summary screens show current month's transactions (tappable to detail screen)
+- [x] Budget store loads non-blocking (transaction sync fires in background, silent reload when data exists)
+- [x] Budget category drill-down screen (tap budget category → see filtered transactions with budget progress)
+- [x] Account drill-down screen (tap account → see balance and transactions for that account)
+- [x] "See all" transactions link in dashboard accounts widget
+- [x] Shared `TransactionListCard` component — used across spending, income, budget-transactions, account-transactions, and transactions screens
+- [x] Transactions screen restyled with always-visible filter card (search + type/category chips) and card-based transaction list
+- [x] Dashboard budget categories show "$X left of $Y" with tappable rows and list icon buttons
+- [x] `formatCurrency` drops `.00` decimals for whole numbers
+- [x] Category color picker — tap icon circle on budget card to choose from 16 preset colors via bottom-sheet modal
+- [x] `PATCH /v1/categories/{id}` endpoint for updating category colors with hex validation
+- [x] `category_color` field propagated through budget, dashboard spending/income, and budget summary API responses
+- [x] Category colors reflected across all screens: budget progress bars, dashboard pie charts, budget pill breakdown, spending/income category bars and dots
+- [x] Color utility functions: `withOpacity` (hex alpha append) and `contrastForeground` (luminance-based icon color)
+- [x] React performance: `useMemo` for derived state, `useCallback` for handlers, `Promise.all` for parallel fetches, hoisted constants
+- [x] Tappable monthly trend bars on spending/income screens — tap a bar to view that month's category breakdown and transactions
+- [x] Carousel snap fix — `snapToOffsets` + `snapToEnd` replacing broken `snapToInterval`, removed last-card padding
 
 ---
 
@@ -325,10 +365,11 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] 'Link session ended' error under 'Add Another Account' when plaid linking is cancelled
 - [ ] Budgets get a hanging loading icon if the back tab is pressed while making a budget
 - [ ] Positive values that are categorized do not update the progress bar on the budget (design choice?)
-- [ ] Handle budgets of the same category
+- [x] Handle budgets of the same category (aggregated by category_id on budgets tab)
 - [x] Net Worth number does not reflect real-time changes made to transactions, add focus refresh to dashboard tab
 - [ ] Fix the way net worth is plotted on the chart. Maybe just plot each individual day regardless of calculation time and zustand store the data.
 - [ ] Income summary not refreshing when transactions are categorized. Will need to update based on refresh.
+- [x] Chevron becomes muted color when expands and collapses.
 
 ### Phase 2 — Plaid + Transactions
 - [x] Plaid service: create link token, exchange public token, encrypt/store access token
@@ -363,8 +404,41 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Mobile: Header "+" dropdown menu for adding accounts and property
 - [x] Mobile: Attach the account to the transactions details
 - [x] Mobile: Refactor filtering (multi-select types + categories, account filter)
+- [x] Mobile: Overall budget - down chevron that has cascading dropdown that gives an breakdown of progress toward each budget
+- [ ] Add more transaction filters
 
-### Phase 4 — AI Assistant
+
+### Phase 4 — Budget Overhaul
+
+Redesign the budgeting system from individual per-category budgets to unified budget plans with multi-month and recurring support.
+
+#### Backend Changes
+- [x] New `budget_plans` table with `budget_plan_allocations` — Alembic migration `e6f7a8b9c0d1`
+- [x] `budgets` table updated with nullable `budget_plan_id` FK (SET NULL on delete)
+- [x] `POST /v1/budget-plans` — create plan with allocations + month list or recurring flag, generates budget rows
+- [x] `GET /v1/budget-plans` — list plans with allocations (joinedload)
+- [x] `PUT /v1/budget-plans/{id}` — update name, total, allocations, toggle recurrence
+- [x] `DELETE /v1/budget-plans/{id}?delete_budgets=` — delete plan, optionally delete generated budgets
+- [x] `POST /v1/budget-plans/generate-recurring` — idempotent recurring budget generation
+- [x] Budget plan service with full CRUD + recurring generation logic
+
+#### Mobile Changes
+- [x] Multi-step budget creation wizard (`budget/create.tsx`) — Set Total → Allocate → Duration → Review
+- [x] `MonthPicker` component — grid of 12 upcoming months with "Until I turn off" recurring toggle
+- [x] `CategoryAllocation` component — category list with inline amount inputs, running total tracker
+- [x] Budget plan detail screen (`budget/plan/[id].tsx`) — inline editing for name, total amount, and allocation amounts
+- [x] Budget plan detail: recurrence toggle, allocation list with category icons, delete with 3-option alert
+- [x] Budgets tab: aggregated budgets by category (merges multiple plans), stable sort order on edits
+- [x] Budgets tab: expandable plan cards with chevron toggle, allocation rows with inline amount editing
+- [x] Budgets tab: swipe-to-delete on plan cards with animated gesture (PanResponder + Animated)
+- [x] Budgets tab: long-press plan card for quick-edit modal (name + total amount)
+- [x] Budgets tab: category cards navigate to budget-transactions on tap, hamburger icon for list view
+- [x] Multi-colored overall budget progress bar — segments per category proportional to spending
+- [x] Dashboard: multi-colored budget progress bar matching budgets tab
+- [x] Zustand `budgetPlans` store with load/refresh/removePlan
+- [x] Fixed duplicate React key errors across dashboard, spending, and income screens
+
+### Phase 5 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id
 - [ ] AI tool definitions (`ai/tools.py`) — 8 tools for Claude function-calling
 - [ ] AI system prompts (`ai/prompts.py`)
@@ -376,7 +450,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Mobile: Chat UI with message bubbles, input, streaming display
 - [ ] Mobile: Conversation list/history
 
-### Phase 5 — Monetization + External API
+### Phase 6 — Monetization + External API
 - [ ] Subscription tier enforcement (free vs. pro feature gating)
 - [ ] API key generation endpoint (`POST /v1/settings/api-key`)
 - [ ] External AI endpoint: `POST /api/v1/financial-ai/chat` (API key auth, context in payload)
@@ -385,9 +459,10 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Mobile: Subscription/upgrade screen
 - [ ] Mobile: API key management in settings
 - [ ] API documentation for external consumers
+- [ ] AI: Bill negotiation, Credit optimization
 
 
-### Phase 6 — Iteration
+### Phase 7 — Iteration
 - [ ] AI System: Allow asset optimization/Balance Transfers
 - [ ] AI System: Debt Restructuring/Credit Optimization
 - [ ] API: Rate limiting on API calls
@@ -396,6 +471,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Mobile: Data imports and exports
 - [ ] Mobile: Sign in Google/Apple
 - [ ] Mobile: Update Settings screen to support account changes
+- [ ] Mobile: Remove FAB for adding transactions
 ---
 
 ## Running Locally

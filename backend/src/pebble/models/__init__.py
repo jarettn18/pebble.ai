@@ -3,6 +3,7 @@ from pebble.models.account import PlaidItem, Account
 from pebble.models.transaction import Transaction
 from pebble.models.category import Category
 from pebble.models.budget import Budget
+from pebble.models.budget_plan import BudgetPlan, BudgetPlanAllocation
 from pebble.models.chat import ChatConversation, ChatMessage
 from pebble.models.api_usage import ApiUsage
 from pebble.models.asset import Asset
@@ -16,6 +17,8 @@ __all__ = [
     "Transaction",
     "Category",
     "Budget",
+    "BudgetPlan",
+    "BudgetPlanAllocation",
     "ChatConversation",
     "ChatMessage",
     "ApiUsage",

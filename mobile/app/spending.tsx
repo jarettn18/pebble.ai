@@ -1,22 +1,40 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   RefreshControl,
-  Dimensions,
+  TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 import { useFocusEffect } from "expo-router";
-import { useDashboardStore } from "../src/stores/dashboard";
+import { useDashboardStore, type SpendingByCategory } from "../src/stores/dashboard";
 import { formatCurrency } from "../src/utils/dashboard";
-import { colors, borderRadius, shadows, fonts } from "../src/theme";
+import { apiRequest } from "../src/api/client";
+import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../src/theme";
+import { Transaction } from "../src/components/TransactionRow";
+import { TransactionListCard } from "../src/components/TransactionListCard";
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const CHART_PADDING = 20;
-const BAR_CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING * 2 - 40; // 40 for card padding
 
 const CATEGORY_COLORS = colors.spendingPalette;
+
+type SelectedMonth = { month: number; year: number } | null;
+
+type DashboardResponse = {
+  spending_by_category: SpendingByCategory[];
+};
+
+function dateRange(month: number, year: number) {
+  const dateFrom = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const dateTo = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  return { dateFrom, dateTo };
+}
+
+function monthLabel(month: number, year: number) {
+  return new Date(year, month - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
 
 export default function SpendingScreen() {
   const {
@@ -28,27 +46,99 @@ export default function SpendingScreen() {
     refresh,
   } = useDashboardStore();
 
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<SelectedMonth>(null);
+  const [selectedCategoryData, setSelectedCategoryData] = useState<SpendingByCategory[] | null>(null);
+  const [selectedTransactions, setSelectedTransactions] = useState<Transaction[] | null>(null);
+  const [loadingSelected, setLoadingSelected] = useState(false);
+
+  // Load current month data on focus
   useFocusEffect(
     useCallback(() => {
       load();
+      const now = new Date();
+      const { dateFrom, dateTo } = dateRange(now.getMonth() + 1, now.getFullYear());
+      apiRequest<{ transactions: Transaction[] }>(
+        `/v1/transactions?limit=50&type=expense&date_from=${dateFrom}&date_to=${dateTo}`
+      ).then((data) => setTransactions(data.transactions));
     }, [])
   );
 
-  const maxCategoryAmount = Math.max(
-    ...spendingByCategory.map((c) => parseFloat(c.amount)),
-    1
-  );
+  // Fetch data for selected month
+  useEffect(() => {
+    if (!selectedMonth) {
+      setSelectedCategoryData(null);
+      setSelectedTransactions(null);
+      return;
+    }
 
-  const maxMonthAmount = Math.max(
-    ...spendingOverTime.map((p) => parseFloat(p.amount)),
-    1
-  );
+    let cancelled = false;
+    setLoadingSelected(true);
 
-  // Donut-style breakdown as stacked horizontal bar
-  const totalCatSpending = spendingByCategory.reduce(
-    (sum, c) => sum + parseFloat(c.amount),
-    0
-  );
+    const { month, year } = selectedMonth;
+    const { dateFrom, dateTo } = dateRange(month, year);
+
+    Promise.all([
+      apiRequest<DashboardResponse>(`/v1/dashboard?month=${month}&year=${year}`),
+      apiRequest<{ transactions: Transaction[] }>(
+        `/v1/transactions?limit=50&type=expense&date_from=${dateFrom}&date_to=${dateTo}`
+      ),
+    ]).then(([dashboard, txns]) => {
+      if (!cancelled) {
+        setSelectedCategoryData(dashboard.spending_by_category);
+        setSelectedTransactions(txns.transactions);
+        setLoadingSelected(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setLoadingSelected(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [selectedMonth]);
+
+  // Use selected month data or fall back to current month
+  const activeCategoryData = selectedCategoryData ?? spendingByCategory;
+  const activeTransactions = selectedTransactions ?? transactions;
+
+  const { maxCategoryAmount, totalCatSpending } = useMemo(() => {
+    let max = 1;
+    let total = 0;
+    for (const c of activeCategoryData) {
+      const amt = parseFloat(c.amount);
+      if (amt > max) max = amt;
+      total += amt;
+    }
+    return { maxCategoryAmount: max, totalCatSpending: total };
+  }, [activeCategoryData]);
+
+  const maxMonthAmount = useMemo(() => {
+    let max = 1;
+    for (const p of spendingOverTime) {
+      const amt = parseFloat(p.amount);
+      if (amt > max) max = amt;
+    }
+    return max;
+  }, [spendingOverTime]);
+
+  function handleBarPress(month: number, year: number) {
+    const now = new Date();
+    const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
+    const isAlreadySelected = selectedMonth?.month === month && selectedMonth?.year === year;
+
+    if (isAlreadySelected || isCurrentMonth) {
+      setSelectedMonth(null);
+    } else {
+      setSelectedMonth({ month, year });
+    }
+  }
+
+  const categoryTitle = selectedMonth
+    ? `By Category — ${monthLabel(selectedMonth.month, selectedMonth.year)}`
+    : "By Category";
+
+  const transactionTitle = selectedMonth
+    ? `Transactions — ${monthLabel(selectedMonth.month, selectedMonth.year)}`
+    : undefined;
 
   return (
     <ScrollView
@@ -64,22 +154,38 @@ export default function SpendingScreen() {
     >
       {/* Monthly Total */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>This Month's Spending</Text>
-        <Text style={styles.totalAmount}>{formatCurrency(monthlySpending)}</Text>
+        <Text style={styles.cardTitle}>
+          {selectedMonth
+            ? `${monthLabel(selectedMonth.month, selectedMonth.year)} Spending`
+            : "This Month's Spending"}
+        </Text>
+        <Text style={styles.totalAmount}>
+          {selectedMonth
+            ? formatCurrency(totalCatSpending)
+            : formatCurrency(monthlySpending)}
+        </Text>
       </View>
 
       {/* Monthly Trend Bar Chart */}
       {spendingOverTime.length > 0 && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Monthly Trend</Text>
+          <Text style={styles.chartHint}>Tap a bar to view details</Text>
           <View style={styles.barChart}>
             {spendingOverTime.map((point, i) => {
               const amount = parseFloat(point.amount);
               const heightPct = maxMonthAmount > 0 ? (amount / maxMonthAmount) * 100 : 0;
-              const isCurrentMonth =
-                i === spendingOverTime.length - 1;
+              const now = new Date();
+              const isCurrentMonth = point.month === now.getMonth() + 1 && point.year === now.getFullYear();
+              const isSelected = selectedMonth?.month === point.month && selectedMonth?.year === point.year;
+              const isActive = isSelected || (!selectedMonth && isCurrentMonth);
               return (
-                <View key={`${point.year}-${point.month}`} style={styles.barColumn}>
+                <TouchableOpacity
+                  key={`${point.year}-${point.month}`}
+                  style={styles.barColumn}
+                  onPress={() => handleBarPress(point.month, point.year)}
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.barValue}>
                     {amount > 0 ? formatCurrency(amount) : ""}
                   </Text>
@@ -89,7 +195,7 @@ export default function SpendingScreen() {
                         styles.bar,
                         {
                           height: `${Math.max(heightPct, 2)}%`,
-                          backgroundColor: isCurrentMonth ? colors.primaryLight : colors.primaryDark,
+                          backgroundColor: isActive ? colors.primaryLight : colors.primaryDark,
                         },
                       ]}
                     />
@@ -97,12 +203,12 @@ export default function SpendingScreen() {
                   <Text
                     style={[
                       styles.barLabel,
-                      isCurrentMonth && styles.barLabelActive,
+                      isActive && styles.barLabelActive,
                     ]}
                   >
                     {point.label}
                   </Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -110,13 +216,17 @@ export default function SpendingScreen() {
       )}
 
       {/* Category Breakdown — Horizontal Bars */}
-      {spendingByCategory.length > 0 && (
+      {loadingSelected ? (
+        <View style={styles.loadingCard}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      ) : activeCategoryData.length > 0 ? (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>By Category</Text>
+          <Text style={styles.cardTitle}>{categoryTitle}</Text>
 
           {/* Stacked summary bar */}
           <View style={styles.stackedBar}>
-            {spendingByCategory.map((cat, i) => {
+            {activeCategoryData.map((cat, i) => {
               const pct =
                 totalCatSpending > 0
                   ? (parseFloat(cat.amount) / totalCatSpending) * 100
@@ -124,16 +234,16 @@ export default function SpendingScreen() {
               if (pct < 1) return null;
               return (
                 <View
-                  key={cat.category_name}
+                  key={`${cat.category_name}-${i}`}
                   style={[
                     styles.stackedSegment,
                     {
                       width: `${pct}%`,
                       backgroundColor:
-                        CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                        cat.category_color || CATEGORY_COLORS[i % CATEGORY_COLORS.length],
                     },
                     i === 0 && styles.stackedFirst,
-                    i === spendingByCategory.length - 1 && styles.stackedLast,
+                    i === activeCategoryData.length - 1 && styles.stackedLast,
                   ]}
                 />
               );
@@ -141,12 +251,12 @@ export default function SpendingScreen() {
           </View>
 
           {/* Individual category bars */}
-          {spendingByCategory.map((cat, i) => {
+          {activeCategoryData.map((cat, i) => {
             const amount = parseFloat(cat.amount);
             const pct = (amount / maxCategoryAmount) * 100;
-            const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+            const color = cat.category_color || CATEGORY_COLORS[i % CATEGORY_COLORS.length];
             return (
-              <View key={cat.category_name} style={styles.categoryRow}>
+              <View key={`${cat.category_name}-${i}`} style={styles.categoryRow}>
                 <View style={styles.categoryHeader}>
                   <View style={styles.categoryLabelRow}>
                     <View
@@ -158,14 +268,11 @@ export default function SpendingScreen() {
                     {formatCurrency(amount)}
                   </Text>
                 </View>
-                <View style={styles.horizontalBarTrack}>
+                <View style={progressBarStyles.track}>
                   <View
                     style={[
-                      styles.horizontalBar,
-                      {
-                        width: `${pct}%`,
-                        backgroundColor: color,
-                      },
+                      progressBarStyles.fill,
+                      { width: `${pct}%`, backgroundColor: color },
                     ]}
                   />
                 </View>
@@ -173,15 +280,19 @@ export default function SpendingScreen() {
             );
           })}
         </View>
+      ) : null}
+
+      {/* Transactions */}
+      {!loadingSelected && activeTransactions.length > 0 && (
+        <TransactionListCard transactions={activeTransactions} title={transactionTitle} />
       )}
 
-      {spendingByCategory.length === 0 && !isLoading && (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No spending data yet</Text>
-          <Text style={styles.emptyHint}>
-            Transactions will appear here once synced
-          </Text>
-        </View>
+      {activeCategoryData.length === 0 && !isLoading && !loadingSelected && (
+        <TransactionListCard
+          transactions={[]}
+          emptyMessage="No spending data yet"
+          emptyHint="Transactions will appear here once synced"
+        />
       )}
     </ScrollView>
   );
@@ -211,10 +322,27 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 12,
   },
+  chartHint: {
+    fontSize: 11,
+    fontFamily: fonts.medium,
+    color: colors.textMuted,
+    marginTop: -8,
+    marginBottom: 8,
+  },
   totalAmount: {
     fontSize: 32,
     fontFamily: fonts.bold,
     color: colors.textPrimary,
+  },
+  loadingCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 40,
+    marginBottom: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}1A`,
+    ...shadows.card,
   },
 
   // --- Bar Chart (vertical) ---
@@ -313,33 +441,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.semiBold,
     color: colors.textPrimary,
-  },
-  horizontalBarTrack: {
-    height: 10,
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 9999,
-    overflow: "hidden",
-  },
-  horizontalBar: {
-    height: "100%",
-    borderRadius: 9999,
-  },
-
-  // --- Empty ---
-  emptyCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 40,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 18,
-    fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
-  },
-  emptyHint: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 8,
   },
 });

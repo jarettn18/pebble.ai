@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,34 +7,30 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  LayoutAnimation,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Animated,
+  PanResponder,
+  Alert,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useBudgetsStore } from "../../src/stores/budgets";
+import { useBudgetsStore, type Budget } from "../../src/stores/budgets";
+import { useBudgetPlansStore, type BudgetPlan } from "../../src/stores/budgetPlans";
+import { useDashboardStore } from "../../src/stores/dashboard";
 import { formatCurrency } from "../../src/utils/dashboard";
-import { colors, borderRadius, shadows, fonts } from "../../src/theme";
+import { withOpacity, contrastForeground } from "../../src/utils/color";
+import { apiRequest } from "../../src/api/client";
+import { colors, fonts, progressBarStyles } from "../../src/theme";
+import ColorPickerModal from "../../src/components/ColorPickerModal";
 
-function getCurrentMonth() {
-  const now = new Date();
-  return { month: now.getMonth() + 1, year: now.getFullYear() };
-}
+const HIT_SLOP_8 = { top: 8, bottom: 8, left: 8, right: 8 };
 
-function monthLabel(month: number, year: number) {
-  const date = new Date(year, month - 1);
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
-
-// Cycle through design-system accent backgrounds for category icon circles
-const ICON_BG_COLORS = [
-  colors.secondaryContainer,
-  colors.primaryFixed,
-  colors.tertiaryFixed,
-  `${colors.secondaryContainer}80`, // 50% opacity
-  `${colors.primaryFixed}99`, // 60% opacity
-  `${colors.tertiaryFixed}66`, // 40% opacity
-];
-
-const ICON_FG_COLORS = [
+const FALLBACK_COLORS = [
   colors.secondary,
   colors.primary,
   colors.tertiary,
@@ -43,17 +39,6 @@ const ICON_FG_COLORS = [
   colors.tertiary,
 ];
 
-// Progress bar colors cycle through primary/secondary/tertiary
-const PROGRESS_COLORS = [
-  colors.primary,
-  colors.secondary,
-  colors.primaryContainer,
-  colors.tertiaryContainer,
-  colors.primary,
-  colors.secondary,
-];
-
-// Category icon mapping (MaterialCommunityIcons names)
 const CATEGORY_ICONS: Record<string, string> = {
   dining: "silverware-fork-knife",
   food: "silverware-fork-knife",
@@ -86,18 +71,117 @@ function getCategoryIcon(name: string): string {
   return "clipboard-text-outline";
 }
 
+function getCurrentMonth() {
+  const now = new Date();
+  return { month: now.getMonth() + 1, year: now.getFullYear() };
+}
+
+function monthLabel(month: number, year: number) {
+  const date = new Date(year, month - 1);
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function BudgetSeparator() {
+  return <View style={styles.separator} />;
+}
+
+const DELETE_BTN_WIDTH = 80;
+
+function SwipeableRow({
+  children,
+  onDelete,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderMove: (_, g) => {
+        if (g.dx < 0) translateX.setValue(Math.max(g.dx, -DELETE_BTN_WIDTH));
+      },
+      onPanResponderRelease: (_, g) => {
+        const open = g.dx < -DELETE_BTN_WIDTH / 2;
+        Animated.spring(translateX, {
+          toValue: open ? -DELETE_BTN_WIDTH : 0,
+          useNativeDriver: true,
+          bounciness: 4,
+        }).start();
+      },
+    })
+  ).current;
+
+  function close() {
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+      bounciness: 4,
+    }).start();
+  }
+
+  return (
+    <View style={styles.swipeableContainer}>
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => {
+          close();
+          onDelete();
+        }}
+        activeOpacity={0.8}
+      >
+        <MaterialCommunityIcons name="trash-can-outline" size={22} color={colors.error} />
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </TouchableOpacity>
+      <Animated.View
+        style={{ transform: [{ translateX }] }}
+        {...panResponder.panHandlers}
+      >
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
 export default function BudgetsScreen() {
   const router = useRouter();
   const { budgets, isLoading, error, load } = useBudgetsStore();
+  const { plans, load: loadPlans } = useBudgetPlansStore();
+  const refreshDashboard = useDashboardStore((s) => s.refresh);
   const [period, setPeriod] = useState(getCurrentMonth);
+
+  // Color picker state
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerCategoryId, setPickerCategoryId] = useState<string | null>(null);
+  const [pickerCurrentColor, setPickerCurrentColor] = useState<string | null>(null);
+
+  // Expandable plan state
+  const [expandedPlanIds, setExpandedPlanIds] = useState<Set<string>>(new Set());
+  const [editingAllocationId, setEditingAllocationId] = useState<string | null>(null);
+  const [editingAmount, setEditingAmount] = useState("");
+  const [savingAllocation, setSavingAllocation] = useState(false);
+
+  // Quick-edit plan modal state
+  const [quickEditPlan, setQuickEditPlan] = useState<BudgetPlan | null>(null);
+  const [quickEditName, setQuickEditName] = useState("");
+  const [quickEditAmount, setQuickEditAmount] = useState("");
+  const [savingQuickEdit, setSavingQuickEdit] = useState(false);
+
+  // Sort order: only re-sort categories on focus/refresh, not inline edits
+  const shouldResort = useRef(true);
+  const categorySortOrder = useRef<string[]>([]);
 
   useFocusEffect(
     useCallback(() => {
+      shouldResort.current = true;
       load(period.month, period.year);
+      loadPlans();
     }, [period.month, period.year])
   );
 
   function shiftMonth(delta: number) {
+    shouldResort.current = true;
     setPeriod((prev) => {
       let m = prev.month + delta;
       let y = prev.year;
@@ -112,20 +196,202 @@ export default function BudgetsScreen() {
     });
   }
 
-  const totalBudgeted = budgets.reduce(
-    (sum, b) => sum + parseFloat(b.amount || "0"),
-    0
-  );
-  const totalSpent = budgets.reduce(
-    (sum, b) => sum + parseFloat(b.spent || "0"),
-    0
-  );
-  const budgetRemaining = totalBudgeted - totalSpent;
-  const budgetPct =
-    totalBudgeted > 0 ? Math.round((totalSpent / totalBudgeted) * 100) : 0;
-  const isOverBudget = totalSpent > totalBudgeted;
+  // Aggregate budgets by category so multiple plans' allocations merge into one row
+  const aggregatedBudgets = useMemo(() => {
+    const map = new Map<string, Budget>();
+    for (const b of budgets) {
+      const existing = map.get(b.category_id);
+      if (existing) {
+        const mergedAmount = parseFloat(existing.amount || "0") + parseFloat(b.amount || "0");
+        map.set(b.category_id, {
+          ...existing,
+          amount: mergedAmount.toFixed(2),
+          // spent is per-category, not per-budget — keep the first value to avoid double-counting
+        });
+      } else {
+        map.set(b.category_id, { ...b });
+      }
+    }
 
-  const renderHeader = () => (
+    const rows = Array.from(map.values());
+
+    if (shouldResort.current) {
+      // Sort by amount descending on focus/refresh
+      rows.sort((a, b) => parseFloat(b.amount || "0") - parseFloat(a.amount || "0"));
+      categorySortOrder.current = rows.map((r) => r.category_id);
+      shouldResort.current = false;
+    } else {
+      // Preserve previous order, append any new categories at the end
+      const order = categorySortOrder.current;
+      rows.sort((a, b) => {
+        const ai = order.indexOf(a.category_id);
+        const bi = order.indexOf(b.category_id);
+        return (ai === -1 ? order.length : ai) - (bi === -1 ? order.length : bi);
+      });
+    }
+
+    return rows;
+  }, [budgets]);
+
+  const { totalBudgeted, totalSpent, budgetRemaining, budgetPct, isOverBudget } = useMemo(() => {
+    const { budgeted, spent } = aggregatedBudgets.reduce(
+      (acc, b) => ({
+        budgeted: acc.budgeted + parseFloat(b.amount || "0"),
+        spent: acc.spent + parseFloat(b.spent || "0"),
+      }),
+      { budgeted: 0, spent: 0 }
+    );
+    return {
+      totalBudgeted: budgeted,
+      totalSpent: spent,
+      budgetRemaining: budgeted - spent,
+      budgetPct: budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0,
+      isOverBudget: spent > budgeted,
+    };
+  }, [aggregatedBudgets]);
+
+  function openColorPicker(categoryId: string, currentColor: string | null) {
+    setPickerCategoryId(categoryId);
+    setPickerCurrentColor(currentColor);
+    setPickerVisible(true);
+  }
+
+  async function handleColorSelect(color: string) {
+    setPickerVisible(false);
+    if (!pickerCategoryId) return;
+
+    try {
+      await apiRequest(`/v1/categories/${pickerCategoryId}`, {
+        method: "PATCH",
+        body: { color },
+      });
+      // Refresh both stores so colors update everywhere
+      await Promise.all([
+        load(period.month, period.year),
+        refreshDashboard(),
+      ]);
+    } catch {
+      // Silently fail — the old color remains
+    }
+  }
+
+  // Lookup spent per category for allocation rows
+  const spentByCategory = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of aggregatedBudgets) {
+      map.set(b.category_id, b.spent);
+    }
+    return map;
+  }, [aggregatedBudgets]);
+
+  function togglePlanExpanded(planId: string) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedPlanIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(planId)) next.delete(planId);
+      else next.add(planId);
+      return next;
+    });
+  }
+
+  function handleDeletePlan(plan: BudgetPlan) {
+    Alert.alert(
+      "Delete Budget Plan",
+      "Do you also want to delete all budgets generated by this plan?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Keep Budgets",
+          onPress: () => deletePlan(plan.id, false),
+        },
+        {
+          text: "Delete Everything",
+          style: "destructive",
+          onPress: () => deletePlan(plan.id, true),
+        },
+      ]
+    );
+  }
+
+  async function deletePlan(planId: string, deleteBudgets: boolean) {
+    try {
+      await apiRequest(
+        `/v1/budget-plans/${planId}?delete_budgets=${deleteBudgets}`,
+        { method: "DELETE" }
+      );
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      const { removePlan } = useBudgetPlansStore.getState();
+      removePlan(planId);
+      await Promise.all([
+        load(period.month, period.year),
+        refreshDashboard(),
+      ]);
+    } catch {
+      // Silently fail
+    }
+  }
+
+  async function updateAllocationAmount(plan: BudgetPlan, allocationId: string, newAmount: string) {
+    const parsed = parseFloat(newAmount);
+    if (isNaN(parsed) || parsed < 0) return;
+
+    setSavingAllocation(true);
+    try {
+      const updatedAllocations = plan.allocations.map((a) => ({
+        category_id: a.category_id,
+        amount: a.id === allocationId ? parsed.toFixed(2) : a.amount,
+      }));
+      await apiRequest(`/v1/budget-plans/${plan.id}`, {
+        method: "PUT",
+        body: { allocations: updatedAllocations },
+      });
+      await Promise.all([
+        loadPlans(),
+        load(period.month, period.year),
+        refreshDashboard(),
+      ]);
+    } catch {
+      // Silently fail
+    } finally {
+      setSavingAllocation(false);
+      setEditingAllocationId(null);
+    }
+  }
+
+  function openQuickEdit(plan: BudgetPlan) {
+    setQuickEditPlan(plan);
+    setQuickEditName(plan.name || "");
+    setQuickEditAmount(plan.total_amount);
+  }
+
+  async function saveQuickEdit() {
+    if (!quickEditPlan) return;
+    const parsed = parseFloat(quickEditAmount);
+    if (isNaN(parsed) || parsed < 0) return;
+
+    setSavingQuickEdit(true);
+    try {
+      await apiRequest(`/v1/budget-plans/${quickEditPlan.id}`, {
+        method: "PUT",
+        body: {
+          name: quickEditName.trim() || null,
+          total_amount: parsed.toFixed(2),
+        },
+      });
+      await Promise.all([
+        loadPlans(),
+        load(period.month, period.year),
+        refreshDashboard(),
+      ]);
+    } catch {
+      // Silently fail
+    } finally {
+      setSavingQuickEdit(false);
+      setQuickEditPlan(null);
+    }
+  }
+
+  const renderHeader = useCallback(() => (
     <>
       {/* Month Selector */}
       <View style={styles.monthSelector}>
@@ -141,47 +407,196 @@ export default function BudgetsScreen() {
       </View>
 
       {/* Hero Header */}
-      {budgets.length > 0 && (
+      {aggregatedBudgets.length > 0 && (
         <View style={styles.heroSection}>
           <Text style={styles.heroLabel}>SPENDING CATEGORIES</Text>
           <Text style={styles.heroAmount}>{formatCurrency(totalSpent)}</Text>
           <Text style={styles.heroSubtitle}>Total monthly spend so far</Text>
 
           {/* Summary Progress Pill */}
-          <View style={styles.summaryPill}>
-            <View style={styles.summaryPillTop}>
+          <View style={[progressBarStyles.container, styles.summaryPill]}>
+            <View style={progressBarStyles.header}>
               <View>
-                <Text style={styles.summaryPillLabel}>Overall Budget</Text>
-                <Text style={styles.summaryPillValue}>
+                <Text style={progressBarStyles.label}>Overall Budget</Text>
+                <Text style={progressBarStyles.value}>
                   {budgetPct}%{" "}
-                  <Text style={styles.summaryPillValueSub}>
+                  <Text style={progressBarStyles.valueSub}>
                     of {formatCurrency(totalBudgeted)}
                   </Text>
                 </Text>
               </View>
-              <View style={styles.summaryPillRight}>
-                <Text
-                  style={[
-                    styles.summaryPillRemaining,
-                    isOverBudget && styles.errorText,
-                  ]}
-                >
-                  {isOverBudget ? "Over by " : ""}
-                  {formatCurrency(Math.abs(budgetRemaining))}{" "}
-                  {isOverBudget ? "" : "left"}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.summaryProgressTrack}>
-              <View
+              <Text
                 style={[
-                  styles.summaryProgressFill,
-                  { width: `${Math.min(budgetPct, 100)}%` },
-                  isOverBudget && { backgroundColor: colors.error },
+                  progressBarStyles.remaining,
+                  isOverBudget && styles.errorText,
                 ]}
-              />
+              >
+                {isOverBudget ? "Over by " : ""}
+                {formatCurrency(Math.abs(budgetRemaining))}{" "}
+                {isOverBudget ? "" : "left"}
+              </Text>
+            </View>
+            <View style={[progressBarStyles.track, { flexDirection: "row", overflow: "hidden" }]}>
+              {aggregatedBudgets.map((item, idx) => {
+                const spent = parseFloat(item.spent || "0");
+                if (spent <= 0) return null;
+                const scale = isOverBudget ? totalBudgeted / totalSpent : 1;
+                const widthPct = (spent / totalBudgeted) * 100 * scale;
+                const catColor = isOverBudget
+                  ? colors.error
+                  : item.category_color || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+                return (
+                  <View
+                    key={item.category_id}
+                    style={{
+                      width: `${widthPct}%`,
+                      height: "100%" as unknown as number,
+                      backgroundColor: catColor,
+                    }}
+                  />
+                );
+              })}
             </View>
           </View>
+        </View>
+      )}
+
+      {/* Budget Plans */}
+      {plans.length > 0 && (
+        <View style={styles.plansSection}>
+          <Text style={styles.plansSectionTitle}>Budget Plans</Text>
+          {plans.map((p) => {
+            const isExpanded = expandedPlanIds.has(p.id);
+            const allocTotal = p.allocations.reduce(
+              (sum, a) => sum + parseFloat(a.amount), 0
+            );
+            return (
+              <SwipeableRow key={p.id} onDelete={() => handleDeletePlan(p)}>
+              <View style={styles.planCardExpanded}>
+                {/* Plan header — tap for details, long-press to quick edit */}
+                <TouchableOpacity
+                  style={styles.planCardHeader}
+                  onPress={() => router.push(`/budget/plan/${p.id}`)}
+                  onLongPress={() => openQuickEdit(p)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.planCardLeft}>
+                    <Text style={styles.planCardName} numberOfLines={1}>
+                      {p.name || "Budget Plan"}
+                    </Text>
+                    <Text style={styles.planCardSub}>
+                      {formatCurrency(parseFloat(p.total_amount))}/mo
+                      {p.is_recurring && p.recurring_active ? "  \u00B7  Recurring" : ""}
+                      {p.is_recurring && !p.recurring_active ? "  \u00B7  Paused" : ""}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    hitSlop={HIT_SLOP_8}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      togglePlanExpanded(p.id);
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={isExpanded ? "chevron-up" : "chevron-down"}
+                      size={22}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+
+                {/* Expanded allocations */}
+                {isExpanded && (
+                  <View style={styles.allocationsContainer}>
+                    {p.allocations.map((a, allocIdx) => {
+                      const catColor = a.category_color || colors.primary;
+                      const catName = a.category_name || "Unknown";
+                      const isEditing = editingAllocationId === a.id;
+
+                      return (
+                        <View key={a.id}>
+                          {allocIdx > 0 && <View style={styles.allocationSeparator} />}
+                          <TouchableOpacity
+                            style={styles.allocationRow}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              if (!isEditing) {
+                                setEditingAllocationId(a.id);
+                                setEditingAmount(a.amount);
+                              }
+                            }}
+                          >
+                            <View style={styles.allocationTappable}>
+                              <View
+                                style={[
+                                  styles.allocationIconCircle,
+                                  { backgroundColor: withOpacity(catColor, 0.2) },
+                                ]}
+                              >
+                                <MaterialCommunityIcons
+                                  name={getCategoryIcon(catName) as any}
+                                  size={18}
+                                  color={catColor}
+                                />
+                              </View>
+                              <Text style={styles.allocationName} numberOfLines={1}>
+                                {catName}
+                              </Text>
+                            </View>
+
+                            {/* Amount — tap row to edit inline */}
+                            {isEditing ? (
+                              <View style={styles.allocationEditRow}>
+                                <TextInput
+                                  style={styles.allocationAmountEditing}
+                                  value={editingAmount}
+                                  onChangeText={setEditingAmount}
+                                  keyboardType="decimal-pad"
+                                  autoFocus
+                                  selectTextOnFocus
+                                />
+                                <TouchableOpacity
+                                  hitSlop={HIT_SLOP_8}
+                                  onPress={() => updateAllocationAmount(p, a.id, editingAmount)}
+                                  disabled={savingAllocation}
+                                >
+                                  {savingAllocation ? (
+                                    <ActivityIndicator size="small" color={colors.primary} />
+                                  ) : (
+                                    <MaterialCommunityIcons
+                                      name="check"
+                                      size={20}
+                                      color={colors.primary}
+                                    />
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <Text style={styles.allocationAmount}>
+                                {formatCurrency(parseFloat(a.amount))}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+
+                    {/* Total row */}
+                    <View style={styles.allocationTotalRow}>
+                      <Text style={styles.allocationTotalLabel}>
+                        Allocated
+                      </Text>
+                      <Text style={styles.allocationTotalAmount}>
+                        {formatCurrency(allocTotal)} of{" "}
+                        {formatCurrency(parseFloat(p.total_amount))}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+              </SwipeableRow>
+            );
+          })}
         </View>
       )}
 
@@ -189,29 +604,25 @@ export default function BudgetsScreen() {
       <View style={styles.categoriesHeader}>
         <Text style={styles.categoriesTitle}>Categories</Text>
         <TouchableOpacity
-          onPress={() =>
-            router.push(
-              `/budget/new?month=${period.month}&year=${period.year}`
-            )
-          }
+          onPress={() => router.push("/budget/create")}
           hitSlop={8}
         >
           <Text style={styles.createNewText}>+ Create New</Text>
         </TouchableOpacity>
       </View>
     </>
-  );
+  ), [period, aggregatedBudgets, plans, expandedPlanIds, editingAllocationId, editingAmount, savingAllocation, spentByCategory, totalSpent, totalBudgeted, budgetPct, budgetRemaining, isOverBudget, router]);
 
   return (
     <View style={styles.container}>
-      {isLoading && budgets.length === 0 ? (
+      {isLoading && aggregatedBudgets.length === 0 ? (
         <>
           {renderHeader()}
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
         </>
-      ) : budgets.length === 0 ? (
+      ) : aggregatedBudgets.length === 0 ? (
         <>
           {renderHeader()}
           <View style={styles.centered}>
@@ -223,13 +634,16 @@ export default function BudgetsScreen() {
         </>
       ) : (
         <FlatList
-          data={budgets}
-          keyExtractor={(item) => item.id}
+          data={aggregatedBudgets}
+          keyExtractor={(item) => item.category_id}
           ListHeaderComponent={renderHeader}
           refreshControl={
             <RefreshControl
               refreshing={isLoading}
-              onRefresh={() => load(period.month, period.year)}
+              onRefresh={() => {
+                shouldResort.current = true;
+                load(period.month, period.year);
+              }}
               tintColor={colors.primary}
             />
           }
@@ -237,87 +651,156 @@ export default function BudgetsScreen() {
             const budgeted = parseFloat(item.amount || "0");
             const spent = parseFloat(item.spent || "0");
             const remaining = budgeted - spent;
-            const progress = budgeted > 0 ? spent / budgeted : 0;
-            const clampedProgress = Math.min(progress, 1);
+            const pct = budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0;
+            const clampedPct = Math.min(pct, 100);
             const overBudget = spent > budgeted;
             const categoryName = item.category_name || "Uncategorized";
-            const iconBg = ICON_BG_COLORS[index % ICON_BG_COLORS.length];
-            const iconFg = ICON_FG_COLORS[index % ICON_FG_COLORS.length];
-            const progressColor = overBudget
-              ? colors.error
-              : PROGRESS_COLORS[index % PROGRESS_COLORS.length];
+            const catColor = item.category_color || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+            const iconBg = withOpacity(catColor, 0.2);
+            const iconFg = catColor;
 
             return (
               <TouchableOpacity
-                style={styles.budgetCard}
+                style={[progressBarStyles.container, styles.budgetCard]}
                 onPress={() =>
                   router.push(
-                    `/budget/${item.id}?month=${period.month}&year=${period.year}`
+                    `/budget-transactions?category_id=${item.category_id}&category_name=${encodeURIComponent(categoryName)}&budget_amount=${item.amount}&spent=${item.spent}&month=${period.month}&year=${period.year}`
                   )
                 }
                 activeOpacity={0.7}
               >
-                <View style={styles.budgetCardTop}>
-                  <View style={styles.budgetCardLeft}>
-                    <View
+                <View style={progressBarStyles.header}>
+                  <View style={styles.labelRow}>
+                    <TouchableOpacity
                       style={[styles.iconCircle, { backgroundColor: iconBg }]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        openColorPicker(item.category_id, item.category_color);
+                      }}
+                      activeOpacity={0.6}
                     >
                       <MaterialCommunityIcons
                         name={getCategoryIcon(categoryName) as any}
                         size={22}
                         color={iconFg}
                       />
-                    </View>
-                    <View style={styles.budgetCardInfo}>
-                      <Text style={styles.budgetCategoryName}>
-                        {categoryName}
-                      </Text>
-                      <Text style={styles.budgetSpentLabel}>
-                        {formatCurrency(spent)} spent
+                    </TouchableOpacity>
+                    <View style={styles.labelText}>
+                      <Text style={progressBarStyles.label}>{categoryName}</Text>
+                      <Text style={[progressBarStyles.value, overBudget && styles.errorText]}>
+                        {overBudget
+                          ? `${formatCurrency(Math.floor(Math.abs(remaining)))} over`
+                          : `${formatCurrency(Math.floor(remaining))} left`}
+                        {" "}
+                        <Text style={progressBarStyles.valueSub}>
+                          of {formatCurrency(Math.floor(budgeted))}
+                        </Text>
                       </Text>
                     </View>
                   </View>
-                  <View style={styles.budgetAmountCol}>
-                    {overBudget ? (
-                      <>
-                        <Text style={styles.overBudgetLabel}>Over budget</Text>
-                        <Text style={styles.overBudgetAmount}>
-                          -{formatCurrency(Math.abs(remaining))}
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.remainingAmount}>
-                          {formatCurrency(remaining)}
-                        </Text>
-                        <Text style={styles.remainingLabel}>REMAINING</Text>
-                      </>
-                    )}
-                  </View>
+                  <TouchableOpacity
+                    hitSlop={HIT_SLOP_8}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      router.push(
+                        `/budget-transactions?category_id=${item.category_id}&category_name=${encodeURIComponent(categoryName)}&budget_amount=${item.amount}&spent=${item.spent}&month=${period.month}&year=${period.year}`
+                      );
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="format-list-bulleted"
+                      size={22}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
                 </View>
-
-                {/* Progress Bar */}
-                <View style={styles.progressTrack}>
+                <View style={progressBarStyles.track}>
                   <View
                     style={[
-                      styles.progressFill,
-                      {
-                        width: `${clampedProgress * 100}%`,
-                        backgroundColor: progressColor,
-                      },
+                      progressBarStyles.fill,
+                      { width: `${clampedPct}%`, backgroundColor: catColor },
+                      overBudget && { backgroundColor: colors.error },
                     ]}
                   />
                 </View>
               </TouchableOpacity>
             );
           }}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={BudgetSeparator}
           contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
           ListFooterComponent={
             error ? <Text style={styles.errorText}>{error}</Text> : null
           }
         />
       )}
+
+      <ColorPickerModal
+        visible={pickerVisible}
+        currentColor={pickerCurrentColor}
+        onSelect={handleColorSelect}
+        onClose={() => setPickerVisible(false)}
+      />
+
+      {/* Quick-edit plan modal */}
+      <Modal
+        visible={!!quickEditPlan}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setQuickEditPlan(null)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setQuickEditPlan(null)}
+          />
+          <View style={styles.quickEditModal}>
+              <Text style={styles.quickEditTitle}>Edit Budget Plan</Text>
+
+              <Text style={styles.quickEditLabel}>Name</Text>
+              <TextInput
+                style={styles.quickEditInput}
+                value={quickEditName}
+                onChangeText={setQuickEditName}
+                placeholder="Budget Plan"
+                placeholderTextColor={colors.textMuted}
+                autoFocus
+              />
+
+              <Text style={styles.quickEditLabel}>Total Amount</Text>
+              <TextInput
+                style={styles.quickEditInput}
+                value={quickEditAmount}
+                onChangeText={setQuickEditAmount}
+                keyboardType="decimal-pad"
+                selectTextOnFocus
+              />
+
+              <View style={styles.quickEditActions}>
+                <TouchableOpacity
+                  style={styles.quickEditCancel}
+                  onPress={() => setQuickEditPlan(null)}
+                >
+                  <Text style={styles.quickEditCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickEditSave}
+                  onPress={saveQuickEdit}
+                  disabled={savingQuickEdit}
+                >
+                  {savingQuickEdit ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.quickEditSaveText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -374,52 +857,153 @@ const styles = StyleSheet.create({
   // Summary Progress Pill
   summaryPill: {
     marginTop: 24,
-    padding: 20,
-    backgroundColor: `${colors.primaryFixed}4D`, // 30% opacity
-    borderRadius: borderRadius.lg,
   },
-  summaryPillTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 12,
+
+  // Plans Section
+  plansSection: {
+    paddingHorizontal: 24,
+    marginBottom: 20,
   },
-  summaryPillLabel: {
-    fontSize: 11,
+  plansSectionTitle: {
+    fontSize: 14,
     fontFamily: fonts.labelMedium,
     letterSpacing: 1,
     textTransform: "uppercase",
-    color: colors.onPrimaryFixedVariant,
-    opacity: 0.7,
-    marginBottom: 4,
+    color: colors.textMuted,
+    marginBottom: 10,
   },
-  summaryPillValue: {
-    fontSize: 22,
-    fontFamily: fonts.bold,
-    color: colors.onPrimaryFixedVariant,
+  swipeableContainer: {
+    marginBottom: 8,
+    overflow: "hidden",
+    borderRadius: 12,
   },
-  summaryPillValueSub: {
+  deleteAction: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: DELETE_BTN_WIDTH,
+    backgroundColor: colors.background,
+    justifyContent: "center",
+    alignItems: "center",
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+    borderWidth: 1,
+    borderLeftWidth: 0,
+    borderColor: `${colors.border}4D`,
+  },
+  deleteActionText: {
+    color: colors.error,
+    fontSize: 12,
+    fontFamily: fonts.semiBold,
+    marginTop: 2,
+  },
+  planCardExpanded: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  planCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+  },
+  planCardLeft: {
+    flex: 1,
+  },
+  planCardName: {
+    fontSize: 16,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  planCardSub: {
     fontSize: 13,
-    fontWeight: "400",
-    opacity: 0.7,
+    fontFamily: fonts.regular,
+    color: colors.textMuted,
   },
-  summaryPillRight: {
-    alignItems: "flex-end",
+  planCardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
-  summaryPillRemaining: {
+
+  // Expanded allocation rows
+  allocationsContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  allocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  allocationTappable: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  allocationIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  allocationName: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
+  },
+  allocationSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+  },
+  allocationAmount: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.primary,
+  },
+  allocationEditRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  allocationAmountEditing: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+    width: 100,
+    textAlign: "right",
+  },
+  allocationTotalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    marginTop: 4,
+  },
+  allocationTotalLabel: {
     fontSize: 14,
     fontFamily: fonts.semiBold,
-    color: colors.onPrimaryFixedVariant,
+    color: colors.textMuted,
   },
-  summaryProgressTrack: {
-    height: 16,
-    backgroundColor: "rgba(255,255,255,0.4)",
-    borderRadius: 9999,
-  },
-  summaryProgressFill: {
-    height: "100%" as unknown as number,
-    backgroundColor: colors.primary,
-    borderRadius: 9999,
+  allocationTotalAmount: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.textMuted,
   },
 
   // Categories Header
@@ -446,23 +1030,14 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   budgetCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 20,
     marginHorizontal: 24,
-    borderWidth: 1,
-    borderColor: `${colors.outlineVariant}1A`, // 10% opacity
-    ...shadows.card,
   },
-  budgetCardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  budgetCardLeft: {
+  labelRow: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
+  },
+  labelText: {
     flex: 1,
   },
   iconCircle: {
@@ -472,62 +1047,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
-  },
-  budgetCardInfo: {
-    flex: 1,
-  },
-  budgetCategoryName: {
-    fontSize: 15,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-    marginBottom: 2,
-  },
-  budgetSpentLabel: {
-    fontSize: 13,
-    fontFamily: fonts.medium,
-    color: colors.textSecondary,
-  },
-  budgetAmountCol: {
-    alignItems: "flex-end",
-    marginLeft: 8,
-  },
-  remainingAmount: {
-    fontSize: 14,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-  },
-  remainingLabel: {
-    fontSize: 9,
-    fontFamily: fonts.labelMedium,
-    color: `${colors.textSecondary}99`,
-    letterSpacing: -0.3,
-    textTransform: "uppercase",
-    marginTop: 1,
-  },
-  overBudgetLabel: {
-    fontSize: 14,
-    fontFamily: fonts.bold,
-    color: colors.error,
-  },
-  overBudgetAmount: {
-    fontSize: 9,
-    fontFamily: fonts.labelMedium,
-    color: `${colors.error}99`,
-    letterSpacing: -0.3,
-    textTransform: "uppercase",
-    marginTop: 1,
-  },
-
-  // Progress Bar
-  progressTrack: {
-    height: 10,
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 9999,
-    overflow: "hidden" as const,
-  },
-  progressFill: {
-    height: "100%" as unknown as number,
-    borderRadius: 9999,
   },
 
   separator: {
@@ -558,5 +1077,74 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 24,
     paddingVertical: 8,
+  },
+
+  // Quick-edit modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  quickEditModal: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 360,
+  },
+  quickEditTitle: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+    marginBottom: 20,
+  },
+  quickEditLabel: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    color: colors.textMuted,
+    marginBottom: 6,
+  },
+  quickEditInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
+    marginBottom: 16,
+  },
+  quickEditActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+    marginTop: 4,
+  },
+  quickEditCancel: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  quickEditCancelText: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.textSecondary,
+  },
+  quickEditSave: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  quickEditSaveText: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: "#fff",
   },
 });

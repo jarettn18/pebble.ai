@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -86,13 +86,16 @@ export default function AssetDetailScreen() {
     fetchAsset();
   }, [id]);
 
-  const hasChanges =
-    asset !== null &&
-    (name !== asset.name ||
-      assetType !== asset.asset_type ||
-      estimatedValue !== asset.estimated_value ||
-      (address || null) !== (asset.address || null) ||
-      (notes || null) !== (asset.notes || null));
+  const hasChanges = useMemo(
+    () =>
+      asset !== null &&
+      (name !== asset.name ||
+        assetType !== asset.asset_type ||
+        estimatedValue !== asset.estimated_value ||
+        (address || null) !== (asset.address || null) ||
+        (notes || null) !== (asset.notes || null)),
+    [asset, name, assetType, estimatedValue, address, notes]
+  );
 
   const showAddress = PROPERTY_TYPES.has(assetType);
 

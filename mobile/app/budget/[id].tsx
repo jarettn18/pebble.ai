@@ -51,11 +51,13 @@ export default function BudgetDetailScreen() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const catData = await apiRequest<CategoryListResponse>("/v1/categories");
+        const [catData, budget] = await Promise.all([
+          apiRequest<CategoryListResponse>("/v1/categories"),
+          !isNew ? apiRequest<Budget>(`/v1/budgets/${id}`) : null,
+        ]);
         setCategories(catData.categories);
 
-        if (!isNew) {
-          const budget = await apiRequest<Budget>(`/v1/budgets/${id}`);
+        if (budget) {
           setSelectedCategoryId(budget.category_id);
           setAmount(budget.amount);
           setMonth(budget.month);
@@ -68,7 +70,7 @@ export default function BudgetDetailScreen() {
       }
     }
     fetchData();
-  }, [id]);
+  }, [id, isNew]);
 
   async function handleSave() {
     if (!selectedCategoryId) {
