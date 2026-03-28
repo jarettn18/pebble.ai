@@ -1,3 +1,4 @@
+import React, { memo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { colors } from "../theme";
 
@@ -12,7 +13,7 @@ export type Transaction = {
   category_name: string | null;
 };
 
-export function TransactionRow({ txn }: { txn: Transaction }) {
+export const TransactionRow = memo(function TransactionRow({ txn }: { txn: Transaction }) {
   const amount = parseFloat(txn.amount);
   const isDebit = amount > 0;
   const displayAmount = isDebit
@@ -37,7 +38,7 @@ export function TransactionRow({ txn }: { txn: Transaction }) {
       </Text>
     </View>
   );
-}
+});
 
 export function TransactionSeparator() {
   return <View style={styles.separator} />;

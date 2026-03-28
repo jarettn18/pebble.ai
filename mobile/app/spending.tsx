@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useDashboardStore, type SpendingByCategory } from "../src/stores/dashboard";
 import { formatCurrency } from "../src/utils/dashboard";
 import { apiRequest } from "../src/api/client";
@@ -37,6 +37,7 @@ function monthLabel(month: number, year: number) {
 }
 
 export default function SpendingScreen() {
+  const router = useRouter();
   const {
     monthlySpending,
     spendingByCategory,
@@ -255,8 +256,18 @@ export default function SpendingScreen() {
             const amount = parseFloat(cat.amount);
             const pct = (amount / maxCategoryAmount) * 100;
             const color = cat.category_color || CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+            const activeMonth = selectedMonth ?? { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
             return (
-              <View key={`${cat.category_name}-${i}`} style={styles.categoryRow}>
+              <TouchableOpacity
+                key={`${cat.category_name}-${i}`}
+                style={styles.categoryRow}
+                activeOpacity={0.7}
+                onPress={() =>
+                  router.push(
+                    `/budget-transactions?category_id=${cat.category_id}&category_name=${encodeURIComponent(cat.category_name)}&category_color=${encodeURIComponent(color)}&spent=${cat.amount}&month=${activeMonth.month}&year=${activeMonth.year}`
+                  )
+                }
+              >
                 <View style={styles.categoryHeader}>
                   <View style={styles.categoryLabelRow}>
                     <View
@@ -276,7 +287,7 @@ export default function SpendingScreen() {
                     ]}
                   />
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>

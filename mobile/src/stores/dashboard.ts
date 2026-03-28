@@ -19,12 +19,14 @@ export type BudgetSummary = {
 };
 
 export type SpendingByCategory = {
+  category_id: string;
   category_name: string;
   category_color: string | null;
   amount: string;
 };
 
 export type IncomeByCategory = {
+  category_id: string;
   category_name: string;
   category_color: string | null;
   amount: string;

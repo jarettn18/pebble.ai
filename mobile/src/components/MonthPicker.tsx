@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { memo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Switch } from "react-native";
 import { colors, fonts, borderRadius } from "../theme";
 
@@ -46,7 +46,7 @@ function isSelected(m: MonthYear, selected: MonthYear[]): boolean {
   return selected.some((s) => s.month === m.month && s.year === m.year);
 }
 
-export default function MonthPicker({
+export default memo(function MonthPicker({
   selected,
   onSelectionChange,
   untilTurnOff,
@@ -133,7 +133,7 @@ export default function MonthPicker({
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {},

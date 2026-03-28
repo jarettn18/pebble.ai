@@ -1,5 +1,107 @@
 # Changelog
 
+## 2026-03-26 — Phase 4 (cont.): React Best Practices Refactor, Animation Fixes & UX Cleanup
+
+### Mobile — Full React Best Practices Refactor (12 files)
+
+Applied Vercel React best practices across all frontend code — extracted inline components, added memoization, hoisted constants, and stabilized callbacks.
+
+#### Batch 1: Extract Inline FlatList renderItems (HIGH IMPACT)
+- **`CategoryAllocation.tsx`**: Extracted `CategoryRow` as top-level `memo` component (was inline `renderItem`). Hoisted `Separator` to module level. Wrapped `updateAmount` and `getAllocAmount` in `useCallback`. Wrapped entire `CategoryAllocation` export in `React.memo`.
+- **`transaction/[id].tsx`**: Extracted `CategoryChip` as top-level `memo` component with `item`, `isSelected`, `onPress` props (was inline `renderItem` creating new component type every render).
+- **`budget/plan/[id].tsx`**: Extracted `CategoryPickerRow` as top-level `memo` component for category picker modal (was inline `renderItem`). Wrapped `addCategory` in `useCallback` with stable `setEditAllocations` functional updater.
+
+#### Batch 2: Hoist Constants & Memoize Computations (HIGH IMPACT)
+- **`NetWorthChart.tsx`**: Hoisted `MONTH_ABBR` array from render body to module level. Wrapped x-axis label computation in `useMemo([points, period])` — previously recomputed every render. Wrapped export in `React.memo`.
+- **`PieChart.tsx`**: Extracted `wedgePath()` to module-level pure function (was closure capturing `cx`, `cy`, `innerR`, `outerR` — now takes them as parameters). Consolidated all segment geometry (dash lengths, rotations, boundaries, wedge paths) into a single `useMemo` — previously computed with mutable `cumulativeOffset` variable and IIFE during render. Wrapped export in `React.memo`.
+- **`MonthPicker.tsx`**: Wrapped export in `React.memo` (already had hoisted constants and module-level helpers).
+
+#### Batch 3: Add `React.memo` to Reusable Display Components (MEDIUM IMPACT)
+- **`TransactionRow.tsx`**: Wrapped `TransactionRow` in `memo` — rendered in `.map()` loops across 5+ screens.
+- **`TransactionListCard.tsx`**: Wrapped in `memo` — used on spending, income, budget-transactions, and account-transactions screens.
+- **`LineChart.tsx`**: Wrapped in `memo` — expensive SVG path computation, rendered inside `NetWorthChart`.
+- **`ColorPickerModal.tsx`**: Wrapped in `memo` — re-renders with parent even when not visible.
+
+#### Batch 4: Verified useEffect Dependencies
+- **`transaction/create.tsx`**: `[loadAccounts]` dep is stable (Zustand selector); `[accounts, selectedAccount]` auto-select effect has correct deps. No changes needed.
+- **`NetWorthChart.tsx`**: `fetchData` wrapped in `useCallback([])` with `[period, fetchData, refreshKey]` effect — correct, no unnecessary refetches. No changes needed.
+
+### Mobile — Budgets Tab Deep Refactor (React Performance)
+- Extracted `PlansSection` as self-contained `memo` component managing its own `expandedPlanIds` state — eliminates parent re-renders from propagating into plan cards
+- Module-level `persistedExpandedIds` (`Set<string>`) preserves expanded budget state across tab navigations and component remounts
+- `PlanCard` derives animation state during render via `useRef` comparison (`shouldAnimate = isExpanded && !prevExpanded.current`) — cascade animation only plays when a budget is expanded, never on tab focus
+- Extracted `BudgetCategoryRow` from inline FlatList `renderItem` into top-level `memo` component
+- Replaced `indexOf`-based sort with O(1) `Map` lookup for category ordering
+- Stabilized `renderItem`, `keyExtractor`, and `refreshControl` as `useCallback`/`useMemo` to prevent FlatList re-renders
+
+### Mobile — Dashboard UX Fixes
+- Fixed "View details" link positioning on income/spending summary cards — anchored to bottom-left with `marginTop: "auto"` and `alignItems: "stretch"` on carousel content
+- Fixed over-budget amount having extra left margin — split `errorText` style (which had `textAlign: "center"` and `paddingHorizontal: 24`) into separate `overText` style (just `color: colors.error`) for budget amounts
+
+### Bug Fixes
+- **Fixed cascade animation playing on tab focus**: Root cause was `renderHeader` `useCallback` recreating when `expandedPlanIds` changed (tab focus → `plans` prop changes → callback recreates → PlanCard remounts → animation replays). Solution: isolated expanding state in `PlansSection` memo component with `useRef`-based derived animation state.
+- **Fixed expanded budget state lost on tab navigation**: Module-level `persistedExpandedIds` Set survives component unmount/remount cycles, initialized into `PlansSection` via `useState(() => new Set(persistedExpandedIds))`.
+
+---
+
+## 2026-03-26 — Phase 4 (cont.): Budget Plan Editing, UX Cleanup & Race Condition Fixes
+
+### Backend — Budget Plan Allocation Updates
+- `update_budget_plan` now regenerates `Budget` rows for the current month when allocations change — deletes old budgets linked to the plan, also cleans up unlinked legacy budgets matching the same categories, then creates new budget rows from updated allocations
+- Added `category_id` to `SpendingByCategory` and `IncomeByCategory` schemas (`schemas/dashboard.py`)
+- Updated dashboard spending/income queries to select `Category.id`, group by `Category.id`, and include `category_id` in results — enables frontend category filtering and navigation
+
+### Mobile — Budget Plan Detail: Edit Mode (Add/Remove Allocations)
+- Added edit mode to `budget/plan/[id].tsx` with "Edit" / "Cancel" toggle next to "Allocations" title
+- Edit mode renders editable `TextInput` amount fields, red remove (X) buttons per allocation, and "+ Add Category" button
+- Category picker modal shows unallocated categories (fetched from `/v1/categories`), filtered to exclude already-allocated ones
+- "Save Allocations" button sends `PUT /v1/budget-plans/{id}` with full `allocations` array replacement (entries with amount 0 filtered out)
+- Allocated and unallocated totals remain visible in edit mode
+
+### Mobile — Budget Transactions Screen Refactor
+- Dynamic screen title via `navigation.setOptions({ title: \`${categoryName} Transactions\` })`
+- Added category icon with colored circle (`withOpacity` background) at top of summary card
+- Icon is tappable — opens `ColorPickerModal` for category color changes
+- Color changes propagate via `refreshBudgets()`, `refreshPlans()`, `refreshDashboard()`
+- Progress bar fill uses category color instead of hardcoded primary
+
+### Mobile — Shared Category Icon Utility
+- Extracted `getCategoryIcon()` and `CATEGORY_ICONS` mapping from 3 files into `src/utils/categoryIcons.ts`
+- Maps 30+ category names to MaterialCommunityIcons (Food & Drink → silverware-fork-knife, Transportation → car, etc.)
+- Removed duplicate icon maps from `budgets.tsx`, `CategoryAllocation.tsx`
+
+### Mobile — Category Navigation from Spending & Income Screens
+- Spending summary (`spending.tsx`): category rows wrapped in `TouchableOpacity`, tapping navigates to budget-transactions screen with `category_id`, `category_name`, `category_color`, `spent`, `month`, `year` params
+- Income summary (`income.tsx`): same category navigation pattern
+
+### Mobile — Dashboard Budget Deduplication & Plan Totals
+- Overall budget totals on dashboard and budgets tab now use plan totals (`plans.reduce(sum + total_amount)`) instead of per-category sums when plans exist
+- Dashboard: created `mergedBudgetSummaries` memo that deduplicates categories by `category_id` and uses plan allocation amounts
+- Budgets tab: `aggregatedBudgets` memo merges multiple plans' allocations per category (amounts summed, spent kept from first entry)
+
+### Mobile — Cascade Dropdown Animation Fix
+- Extracted `PlanCard` as `React.memo` component to isolate re-renders — previously all plan cards re-animated when any plan was expanded because `renderHeader` useCallback recreated on `expandedPlanIds` change, remounting all `CascadeRow` components
+
+### Mobile — Budgets Tab UX Cleanup
+- Removed long-press quick-edit modal (name + total amount editing)
+- Removed inline allocation amount editing in cascade dropdown — allocations are now read-only display
+- Allocation rows in cascade dropdown sorted descending by amount
+- Removed unused state: `editingAllocationId`, `editingAmount`, `savingAllocation`, `quickEditPlan`, `quickEditName`, `quickEditAmount`, `savingQuickEdit`
+- Removed unused functions: `updateAllocationAmount`, `openQuickEdit`, `saveQuickEdit`, `handleStartEdit`
+- Removed unused imports: `Modal`, `KeyboardAvoidingView`, `Platform`, `Pressable`, `TextInput`, `contrastForeground`
+- Removed unused styles: `allocationEditRow`, `allocationAmountEditing`, `modalOverlay`, `quickEdit*` styles
+
+### Mobile — Color Propagation Fix
+- Budget-transactions screen now refreshes `budgetPlans`, `budgets`, and `dashboard` stores after color PATCH
+- Budget plan detail screen refreshes `dashboard` store on all save/delete operations
+
+### Bug Fixes
+- **Fixed allocation save race condition** — save flow in `budget/plan/[id].tsx` was calling `setPlan(updated)` from PUT response then refreshing stores asynchronously, causing values to bounce between old and new. Fixed by awaiting all store refreshes + a fresh GET for the plan in parallel before updating local state
+- **Fixed budget categories not updating after allocation changes** — backend now regenerates `Budget` rows on plan update; frontend uses explicit `loadBudgets(currentMonth, currentYear)` instead of store's `refresh()` which relied on potentially unset module-level state
+- **Fixed transaction filtering showing all transactions** — backend `SpendingByCategory`/`IncomeByCategory` needed `category_id`; spending/income screens needed to pass `category_id` in navigation URLs
+
+---
+
 ## 2026-03-25 — Phase 4: Budget Plans, Multi-Colored Progress Bars & UX Refinements
 
 ### Backend — Budget Plans System

@@ -126,6 +126,7 @@ pebble/
 │       ├── hooks/
 │       │   └── usePlaidLink.ts      # Plaid Link hook (fetch token, open modal)
 │       ├── utils/
+│       │   ├── categoryIcons.ts     # Shared getCategoryIcon() mapping (30+ categories → MaterialCommunityIcons)
 │       │   ├── color.ts             # withOpacity, contrastForeground color utilities
 │       │   └── dashboard.ts         # Net worth, spending calc, currency formatting
 │       └── stores/
@@ -369,7 +370,11 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [x] Net Worth number does not reflect real-time changes made to transactions, add focus refresh to dashboard tab
 - [ ] Fix the way net worth is plotted on the chart. Maybe just plot each individual day regardless of calculation time and zustand store the data.
 - [ ] Income summary not refreshing when transactions are categorized. Will need to update based on refresh.
+- [x] When budget allocations are edited. Have to save form twice in order to process.
 - [x] Chevron becomes muted color when expands and collapses.
+- [x] Cascade animation plays on tab focus instead of only on budget expand
+- [x] Over-budget amount has extra left margin on budgets tab
+- [x] "View details" not anchored to bottom-left of dashboard summary cards
 
 ### Phase 2 — Plaid + Transactions
 - [x] Plaid service: create link token, exchange public token, encrypt/store access token
@@ -431,12 +436,40 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [x] Budgets tab: aggregated budgets by category (merges multiple plans), stable sort order on edits
 - [x] Budgets tab: expandable plan cards with chevron toggle, allocation rows with inline amount editing
 - [x] Budgets tab: swipe-to-delete on plan cards with animated gesture (PanResponder + Animated)
-- [x] Budgets tab: long-press plan card for quick-edit modal (name + total amount)
 - [x] Budgets tab: category cards navigate to budget-transactions on tap, hamburger icon for list view
 - [x] Multi-colored overall budget progress bar — segments per category proportional to spending
 - [x] Dashboard: multi-colored budget progress bar matching budgets tab
 - [x] Zustand `budgetPlans` store with load/refresh/removePlan
 - [x] Fixed duplicate React key errors across dashboard, spending, and income screens
+- [x] Shared `getCategoryIcon()` utility extracted to `src/utils/categoryIcons.ts` (30+ category → icon mappings)
+- [x] Budget-transactions screen refactored: dynamic title, category icon with colored circle, tappable color picker
+- [x] Category navigation from spending & income summary screens (tap category → budget-transactions)
+- [x] Dashboard budget deduplication by `category_id` with plan-total-based budget amounts
+- [x] Cascade animation fix: `PlanCard` extracted as `React.memo` to prevent all cards re-animating on expand
+- [x] Cascade dropdown allocations sorted descending by amount, inline editing removed (read-only display)
+- [x] Long-press quick-edit modal removed — plan editing consolidated to plan detail screen
+- [x] Budget plan detail: edit mode for add/remove allocations with category picker modal
+- [x] Color propagation fix: store refreshes (`budgets`, `plans`, `dashboard`) after color PATCH across all screens
+- [x] Backend: budget row regeneration on plan allocation updates (deletes old + creates new for current month)
+- [x] Backend: `category_id` added to spending/income dashboard schemas for category filtering
+- [x] Fixed allocation save race condition — stores + fresh GET all resolve before UI updates
+- [x] Dashboard UX: "View details" anchored to bottom-left of income/spending summary cards
+- [x] Dashboard UX: fixed over-budget amount extra left margin (split `errorText` into `overText` for budget amounts)
+- [x] Cascade animation only plays on budget expand (not tab focus) — `PlansSection` memo component with `useRef`-derived animation state
+- [x] Expanded budget state persists across tab navigations — module-level `persistedExpandedIds` Set
+- [x] Budgets tab: extracted `PlansSection`, `PlanCard`, `BudgetCategoryRow` as top-level `memo` components
+- [x] Budgets tab: O(1) `Map` lookup for category sort order (replaced `indexOf`)
+- [x] Budgets tab: stabilized `renderItem`, `keyExtractor`, `refreshControl` as `useCallback`/`useMemo`
+- [x] React best practices refactor — extracted inline FlatList `renderItem` functions across 3 files:
+  - `CategoryAllocation.tsx`: `CategoryRow` + `Separator` extracted, `useCallback` wrappers, `memo` export
+  - `transaction/[id].tsx`: `CategoryChip` extracted as `memo` component
+  - `budget/plan/[id].tsx`: `CategoryPickerRow` extracted as `memo` component, `useCallback` for `addCategory`
+- [x] React best practices refactor — hoisted constants & memoized computations:
+  - `NetWorthChart.tsx`: `MONTH_ABBR` hoisted to module level, x-axis labels wrapped in `useMemo`, `memo` export
+  - `PieChart.tsx`: `wedgePath` extracted to module-level pure function, segment geometry consolidated into single `useMemo`, `memo` export
+  - `MonthPicker.tsx`: wrapped export in `memo`
+- [x] React best practices refactor — added `React.memo` to 4 reusable display components: `TransactionRow`, `TransactionListCard`, `LineChart`, `ColorPickerModal`
+- [x] Verified `useEffect` dependencies in `transaction/create.tsx` and `NetWorthChart.tsx` — all correct, no changes needed
 
 ### Phase 5 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id

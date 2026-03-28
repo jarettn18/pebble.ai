@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList } from "react-native";
+import React, { memo, useCallback } from "react";
+import { View, Text, StyleSheet, TextInput, FlatList } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, fonts, borderRadius } from "../theme";
 import { withOpacity } from "../utils/color";
 import { formatCurrency } from "../utils/dashboard";
+import { getCategoryIcon } from "../utils/categoryIcons";
 
 type Category = {
   id: string;
@@ -23,39 +25,59 @@ type Props = {
   onAllocationsChange: (allocations: AllocationEntry[]) => void;
 };
 
-const CATEGORY_ICONS: Record<string, string> = {
-  dining: "silverware-fork-knife",
-  food: "silverware-fork-knife",
-  restaurant: "silverware-fork-knife",
-  groceries: "cart-outline",
-  grocery: "cart-outline",
-  shopping: "shopping-outline",
-  transport: "car-outline",
-  transportation: "car-outline",
-  travel: "airplane",
-  entertainment: "movie-open-outline",
-  health: "spa-outline",
-  wellness: "spa-outline",
-  utilities: "flash-outline",
-  subscriptions: "sync",
-  rent: "home-outline",
-  housing: "home-outline",
-  education: "book-open-variant",
-  personal: "account-outline",
-  insurance: "shield-outline",
-  savings: "piggy-bank-outline",
-  investments: "chart-line",
-};
-
-function getCategoryIcon(name: string): string {
-  const lower = name.toLowerCase();
-  for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
-    if (lower.includes(key)) return icon;
-  }
-  return "clipboard-text-outline";
+// Hoisted static separator
+function Separator() {
+  return <View style={styles.separator} />;
 }
 
-export default function CategoryAllocation({
+// Extracted memoized row component
+interface CategoryRowProps {
+  item: Category;
+  amount: string;
+  onAmountChange: (categoryId: string, value: string) => void;
+}
+
+const CategoryRow = memo(function CategoryRow({ item, amount, onAmountChange }: CategoryRowProps) {
+  const catColor = item.color || colors.primary;
+  const hasAmount = !!amount && parseFloat(amount) > 0;
+
+  return (
+    <View style={styles.categoryRow}>
+      <View
+        style={[
+          styles.iconCircle,
+          { backgroundColor: withOpacity(catColor, 0.2) },
+        ]}
+      >
+        <MaterialCommunityIcons
+          name={getCategoryIcon(item.name) as any}
+          size={20}
+          color={catColor}
+        />
+      </View>
+      <Text style={styles.categoryName} numberOfLines={1}>
+        {item.name}
+      </Text>
+      <View style={styles.amountInputWrap}>
+        <Text style={styles.dollarSign}>$</Text>
+        <TextInput
+          style={[
+            styles.amountInput,
+            hasAmount && styles.amountInputActive,
+          ]}
+          value={amount}
+          onChangeText={(v) => onAmountChange(item.id, v)}
+          placeholder="0"
+          placeholderTextColor={colors.textMuted}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+        />
+      </View>
+    </View>
+  );
+});
+
+export default memo(function CategoryAllocation({
   categories,
   allocations,
   totalBudget,
@@ -67,11 +89,10 @@ export default function CategoryAllocation({
   );
   const remaining = totalBudget - allocated;
 
-  function updateAmount(categoryId: string, value: string) {
+  const updateAmount = useCallback((categoryId: string, value: string) => {
     const existing = allocations.find((a) => a.category_id === categoryId);
     if (existing) {
       if (value === "" || value === "0") {
-        // Remove allocation when cleared
         onAllocationsChange(
           allocations.filter((a) => a.category_id !== categoryId)
         );
@@ -88,11 +109,21 @@ export default function CategoryAllocation({
         { category_id: categoryId, amount: value },
       ]);
     }
-  }
+  }, [allocations, onAllocationsChange]);
 
-  function getAllocAmount(categoryId: string): string {
+  const getAllocAmount = useCallback((categoryId: string): string => {
     return allocations.find((a) => a.category_id === categoryId)?.amount || "";
-  }
+  }, [allocations]);
+
+  const renderItem = useCallback(({ item }: { item: Category }) => (
+    <CategoryRow
+      item={item}
+      amount={getAllocAmount(item.id)}
+      onAmountChange={updateAmount}
+    />
+  ), [getAllocAmount, updateAmount]);
+
+  const keyExtractor = useCallback((item: Category) => item.id, []);
 
   return (
     <View style={styles.container}>
@@ -132,53 +163,14 @@ export default function CategoryAllocation({
       {/* Category list */}
       <FlatList
         data={categories}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
         scrollEnabled={false}
-        renderItem={({ item }) => {
-          const catColor = item.color || colors.primary;
-          const amount = getAllocAmount(item.id);
-          const hasAmount = !!amount && parseFloat(amount) > 0;
-
-          return (
-            <View style={styles.categoryRow}>
-              <View
-                style={[
-                  styles.iconCircle,
-                  { backgroundColor: withOpacity(catColor, 0.2) },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name={getCategoryIcon(item.name) as any}
-                  size={20}
-                  color={catColor}
-                />
-              </View>
-              <Text style={styles.categoryName} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <View style={styles.amountInputWrap}>
-                <Text style={styles.dollarSign}>$</Text>
-                <TextInput
-                  style={[
-                    styles.amountInput,
-                    hasAmount && styles.amountInputActive,
-                  ]}
-                  value={amount}
-                  onChangeText={(v) => updateAmount(item.id, v)}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="decimal-pad"
-                  returnKeyType="done"
-                />
-              </View>
-            </View>
-          );
-        }}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        renderItem={renderItem}
+        ItemSeparatorComponent={Separator}
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {},

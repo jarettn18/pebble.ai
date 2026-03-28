@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   Alert,
   Switch,
   TextInput,
+  Modal,
+  FlatList,
+  Pressable,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -18,38 +21,68 @@ import {
   type BudgetPlan,
 } from "../../../src/stores/budgetPlans";
 import { useBudgetsStore } from "../../../src/stores/budgets";
+import { useDashboardStore } from "../../../src/stores/dashboard";
 import { colors, fonts, borderRadius } from "../../../src/theme";
 import { formatCurrency } from "../../../src/utils/dashboard";
 import { withOpacity } from "../../../src/utils/color";
+import { getCategoryIcon } from "../../../src/utils/categoryIcons";
 
-const CATEGORY_ICONS: Record<string, string> = {
-  dining: "silverware-fork-knife",
-  food: "silverware-fork-knife",
-  groceries: "cart-outline",
-  shopping: "shopping-outline",
-  transport: "car-outline",
-  transportation: "car-outline",
-  travel: "airplane",
-  entertainment: "movie-open-outline",
-  health: "spa-outline",
-  utilities: "flash-outline",
-  rent: "home-outline",
-  housing: "home-outline",
+type Category = {
+  id: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
 };
 
-function getCategoryIcon(name: string): string {
-  const lower = name.toLowerCase();
-  for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
-    if (lower.includes(key)) return icon;
-  }
-  return "clipboard-text-outline";
-}
+type EditAllocation = {
+  category_id: string;
+  category_name: string;
+  category_color: string | null;
+  amount: string;
+};
+
+const CategoryPickerRow = memo(function CategoryPickerRow({
+  item,
+  onPress,
+}: {
+  item: Category;
+  onPress: (cat: Category) => void;
+}) {
+  const catColor = item.color || colors.primary;
+  return (
+    <TouchableOpacity
+      style={styles.pickerRow}
+      onPress={() => onPress(item)}
+      activeOpacity={0.7}
+    >
+      <View
+        style={[
+          styles.iconCircle,
+          { backgroundColor: withOpacity(catColor, 0.2) },
+        ]}
+      >
+        <MaterialCommunityIcons
+          name={getCategoryIcon(item.name) as any}
+          size={18}
+          color={catColor}
+        />
+      </View>
+      <Text style={styles.pickerRowText}>{item.name}</Text>
+    </TouchableOpacity>
+  );
+});
 
 export default function BudgetPlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { removePlan, refresh: refreshPlans } = useBudgetPlansStore();
-  const refreshBudgets = useBudgetsStore((s) => s.refresh);
+  const loadBudgets = useBudgetsStore((s) => s.load);
+  const refreshDashboard = useDashboardStore((s) => s.refresh);
+
+  const refreshBudgets = async () => {
+    const now = new Date();
+    await loadBudgets(now.getMonth() + 1, now.getFullYear());
+  };
 
   const [plan, setPlan] = useState<BudgetPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,6 +93,13 @@ export default function BudgetPlanDetailScreen() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Edit mode state (add/remove allocations)
+  const [isEditing, setIsEditing] = useState(false);
+  const [editAllocations, setEditAllocations] = useState<EditAllocation[]>([]);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [savingEdits, setSavingEdits] = useState(false);
 
   useEffect(() => {
     loadPlan();
@@ -80,15 +120,15 @@ export default function BudgetPlanDetailScreen() {
     if (!plan) return;
     setTogglingRecurrence(true);
     try {
-      const updated = await apiRequest<BudgetPlan>(
-        `/v1/budget-plans/${id}`,
-        {
-          method: "PUT",
-          body: { recurring_active: val },
-        }
-      );
-      setPlan(updated);
-      await refreshPlans();
+      await apiRequest(`/v1/budget-plans/${id}`, {
+        method: "PUT",
+        body: { recurring_active: val },
+      });
+      const [freshPlan] = await Promise.all([
+        apiRequest<BudgetPlan>(`/v1/budget-plans/${id}`),
+        refreshPlans(),
+      ]);
+      setPlan(freshPlan);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update");
     } finally {
@@ -107,12 +147,15 @@ export default function BudgetPlanDetailScreen() {
       }
       setSaving(true);
       try {
-        const updated = await apiRequest<BudgetPlan>(`/v1/budget-plans/${id}`, {
+        await apiRequest(`/v1/budget-plans/${id}`, {
           method: "PUT",
           body: { name: trimmed || null },
         });
-        setPlan(updated);
-        await refreshPlans();
+        const [freshPlan] = await Promise.all([
+          apiRequest<BudgetPlan>(`/v1/budget-plans/${id}`),
+          refreshPlans(),
+        ]);
+        setPlan(freshPlan);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update");
       } finally {
@@ -131,12 +174,17 @@ export default function BudgetPlanDetailScreen() {
       }
       setSaving(true);
       try {
-        const updated = await apiRequest<BudgetPlan>(`/v1/budget-plans/${id}`, {
+        await apiRequest(`/v1/budget-plans/${id}`, {
           method: "PUT",
           body: { total_amount: parsed.toFixed(2) },
         });
-        setPlan(updated);
-        await Promise.all([refreshPlans(), refreshBudgets()]);
+        const [freshPlan] = await Promise.all([
+          apiRequest<BudgetPlan>(`/v1/budget-plans/${id}`),
+          refreshPlans(),
+          refreshBudgets(),
+          refreshDashboard(),
+        ]);
+        setPlan(freshPlan);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update");
       } finally {
@@ -156,12 +204,17 @@ export default function BudgetPlanDetailScreen() {
           category_id: a.category_id,
           amount: a.id === allocId ? parsed.toFixed(2) : a.amount,
         }));
-        const updated = await apiRequest<BudgetPlan>(`/v1/budget-plans/${id}`, {
+        await apiRequest(`/v1/budget-plans/${id}`, {
           method: "PUT",
           body: { allocations: updatedAllocations },
         });
-        setPlan(updated);
-        await Promise.all([refreshPlans(), refreshBudgets()]);
+        const [freshPlan] = await Promise.all([
+          apiRequest<BudgetPlan>(`/v1/budget-plans/${id}`),
+          refreshPlans(),
+          refreshBudgets(),
+          refreshDashboard(),
+        ]);
+        setPlan(freshPlan);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update");
       } finally {
@@ -197,12 +250,90 @@ export default function BudgetPlanDetailScreen() {
         { method: "DELETE" }
       );
       removePlan(id!);
-      await refreshBudgets();
+      await Promise.all([refreshBudgets(), refreshDashboard()]);
       router.back();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete");
     }
   }
+
+  async function enterEditMode() {
+    if (!plan) return;
+    setEditAllocations(
+      plan.allocations.map((a) => ({
+        category_id: a.category_id,
+        category_name: a.category_name || "Unknown",
+        category_color: a.category_color,
+        amount: a.amount,
+      }))
+    );
+    setIsEditing(true);
+    // Fetch all categories for the picker
+    try {
+      const data = await apiRequest<{ categories: Category[] }>("/v1/categories");
+      setAllCategories(data.categories);
+    } catch {}
+  }
+
+  function cancelEditMode() {
+    setIsEditing(false);
+    setEditAllocations([]);
+  }
+
+  function removeEditAllocation(categoryId: string) {
+    setEditAllocations((prev) => prev.filter((a) => a.category_id !== categoryId));
+  }
+
+  function updateEditAmount(categoryId: string, amount: string) {
+    setEditAllocations((prev) =>
+      prev.map((a) => (a.category_id === categoryId ? { ...a, amount } : a))
+    );
+  }
+
+  const addCategory = useCallback((cat: Category) => {
+    setEditAllocations((prev) => [
+      ...prev,
+      {
+        category_id: cat.id,
+        category_name: cat.name,
+        category_color: cat.color,
+        amount: "0",
+      },
+    ]);
+    setShowCategoryPicker(false);
+  }, []);
+
+  async function saveEditAllocations() {
+    if (!plan) return;
+    setSavingEdits(true);
+    try {
+      const allocations = editAllocations
+        .filter((a) => parseFloat(a.amount) > 0)
+        .map((a) => ({ category_id: a.category_id, amount: parseFloat(a.amount).toFixed(2) }));
+      await apiRequest(`/v1/budget-plans/${id}`, {
+        method: "PUT",
+        body: { allocations },
+      });
+      // Wait for ALL refreshes + a fresh plan GET to complete before updating UI
+      const [freshPlan] = await Promise.all([
+        apiRequest<BudgetPlan>(`/v1/budget-plans/${id}`),
+        refreshPlans(),
+        refreshBudgets(),
+        refreshDashboard(),
+      ]);
+      setPlan(freshPlan);
+      setIsEditing(false);
+      setEditAllocations([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSavingEdits(false);
+    }
+  }
+
+  const availableCategories = allCategories.filter(
+    (c) => !editAllocations.some((a) => a.category_id === c.id)
+  );
 
   if (isLoading) {
     return (
@@ -353,83 +484,188 @@ export default function BudgetPlanDetailScreen() {
         )}
 
         {/* Allocations */}
-        <Text style={styles.sectionTitle}>Allocations</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Allocations</Text>
+          <TouchableOpacity
+            onPress={isEditing ? cancelEditMode : enterEditMode}
+            hitSlop={8}
+          >
+            <Text style={styles.editBtn}>{isEditing ? "Cancel" : "Edit"}</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.card}>
-          {plan.allocations.map((a) => {
-            const catColor = a.category_color || colors.primary;
-            const isEditingThis = editingField === `alloc:${a.id}`;
-            return (
-              <View key={a.id} style={styles.allocRow}>
-                <View
-                  style={[
-                    styles.iconCircle,
-                    { backgroundColor: withOpacity(catColor, 0.2) },
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name={getCategoryIcon(a.category_name || "") as any}
-                    size={18}
-                    color={catColor}
-                  />
-                </View>
-                <Text style={styles.allocName} numberOfLines={1}>
-                  {a.category_name || "Unknown"}
-                </Text>
-                {isEditingThis ? (
-                  <View style={styles.allocEditRow}>
+          {isEditing ? (
+            <>
+              {editAllocations.map((a) => {
+                const catColor = a.category_color || colors.primary;
+                return (
+                  <View key={a.category_id} style={styles.allocRow}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        { backgroundColor: withOpacity(catColor, 0.2) },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={getCategoryIcon(a.category_name) as any}
+                        size={18}
+                        color={catColor}
+                      />
+                    </View>
+                    <Text style={styles.allocName} numberOfLines={1}>
+                      {a.category_name}
+                    </Text>
                     <TextInput
                       style={styles.allocAmountInput}
-                      value={editingValue}
-                      onChangeText={setEditingValue}
+                      value={a.amount}
+                      onChangeText={(val) => updateEditAmount(a.category_id, val)}
                       keyboardType="decimal-pad"
-                      autoFocus
                       selectTextOnFocus
-                      onSubmitEditing={saveField}
-                      returnKeyType="done"
                     />
-                    <TouchableOpacity onPress={saveField} disabled={saving}>
-                      {saving ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                      ) : (
-                        <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
-                      )}
+                    <TouchableOpacity
+                      onPress={() => removeEditAllocation(a.category_id)}
+                      hitSlop={8}
+                      style={styles.removeBtn}
+                    >
+                      <MaterialCommunityIcons name="close-circle" size={20} color={colors.error} />
                     </TouchableOpacity>
                   </View>
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setEditingField(`alloc:${a.id}`);
-                      setEditingValue(a.amount);
-                    }}
-                  >
-                    <Text style={styles.allocAmount}>
-                      {formatCurrency(parseFloat(a.amount))}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            );
-          })}
-          <View style={styles.divider} />
-          <View style={styles.allocRow}>
-            <View style={{ width: 40 }} />
-            <Text style={styles.allocTotalLabel}>Total Allocated</Text>
-            <Text style={styles.allocAmount}>
-              {formatCurrency(allocatedTotal)}
-            </Text>
-          </View>
-          {totalAmount - allocatedTotal > 0 && (
-            <View style={styles.allocRow}>
-              <View style={{ width: 40 }} />
-              <Text style={[styles.allocTotalLabel, { color: colors.textMuted }]}>
-                Unallocated
-              </Text>
-              <Text
-                style={[styles.allocAmount, { color: colors.textMuted }]}
+                );
+              })}
+
+              {/* Add Category */}
+              <TouchableOpacity
+                style={styles.addCategoryBtn}
+                onPress={() => setShowCategoryPicker(true)}
+                activeOpacity={0.7}
               >
-                {formatCurrency(totalAmount - allocatedTotal)}
-              </Text>
-            </View>
+                <MaterialCommunityIcons name="plus-circle-outline" size={20} color={colors.primary} />
+                <Text style={styles.addCategoryText}>Add Category</Text>
+              </TouchableOpacity>
+
+              <View style={styles.divider} />
+              {(() => {
+                const editTotal = editAllocations.reduce(
+                  (sum, a) => sum + (parseFloat(a.amount) || 0), 0
+                );
+                const unalloc = totalAmount - editTotal;
+                return (
+                  <>
+                    <View style={styles.allocRow}>
+                      <View style={{ width: 40 }} />
+                      <Text style={styles.allocTotalLabel}>Total Allocated</Text>
+                      <Text style={styles.allocAmount}>
+                        {formatCurrency(editTotal)}
+                      </Text>
+                    </View>
+                    {unalloc > 0 && (
+                      <View style={styles.allocRow}>
+                        <View style={{ width: 40 }} />
+                        <Text style={[styles.allocTotalLabel, { color: colors.textMuted }]}>
+                          Unallocated
+                        </Text>
+                        <Text style={[styles.allocAmount, { color: colors.textMuted }]}>
+                          {formatCurrency(unalloc)}
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* Save */}
+              <TouchableOpacity
+                style={styles.saveAllocBtn}
+                onPress={saveEditAllocations}
+                disabled={savingEdits}
+                activeOpacity={0.8}
+              >
+                {savingEdits ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveAllocBtnText}>Save Allocations</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              {plan.allocations.map((a) => {
+                const catColor = a.category_color || colors.primary;
+                const isEditingThis = editingField === `alloc:${a.id}`;
+                return (
+                  <View key={a.id} style={styles.allocRow}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        { backgroundColor: withOpacity(catColor, 0.2) },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={getCategoryIcon(a.category_name || "") as any}
+                        size={18}
+                        color={catColor}
+                      />
+                    </View>
+                    <Text style={styles.allocName} numberOfLines={1}>
+                      {a.category_name || "Unknown"}
+                    </Text>
+                    {isEditingThis ? (
+                      <View style={styles.allocEditRow}>
+                        <TextInput
+                          style={styles.allocAmountInput}
+                          value={editingValue}
+                          onChangeText={setEditingValue}
+                          keyboardType="decimal-pad"
+                          autoFocus
+                          selectTextOnFocus
+                          onSubmitEditing={saveField}
+                          returnKeyType="done"
+                        />
+                        <TouchableOpacity onPress={saveField} disabled={saving}>
+                          {saving ? (
+                            <ActivityIndicator size="small" color={colors.primary} />
+                          ) : (
+                            <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setEditingField(`alloc:${a.id}`);
+                          setEditingValue(a.amount);
+                        }}
+                      >
+                        <Text style={styles.allocAmount}>
+                          {formatCurrency(parseFloat(a.amount))}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+              <View style={styles.divider} />
+              <View style={styles.allocRow}>
+                <View style={{ width: 40 }} />
+                <Text style={styles.allocTotalLabel}>Total Allocated</Text>
+                <Text style={styles.allocAmount}>
+                  {formatCurrency(allocatedTotal)}
+                </Text>
+              </View>
+              {totalAmount - allocatedTotal > 0 && (
+                <View style={styles.allocRow}>
+                  <View style={{ width: 40 }} />
+                  <Text style={[styles.allocTotalLabel, { color: colors.textMuted }]}>
+                    Unallocated
+                  </Text>
+                  <Text
+                    style={[styles.allocAmount, { color: colors.textMuted }]}
+                  >
+                    {formatCurrency(totalAmount - allocatedTotal)}
+                  </Text>
+                </View>
+              )}
+            </>
           )}
         </View>
 
@@ -454,6 +690,41 @@ export default function BudgetPlanDetailScreen() {
           <Text style={styles.deleteBtnText}>Delete Plan</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Category Picker Modal */}
+      <Modal
+        visible={showCategoryPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCategoryPicker(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowCategoryPicker(false)}
+        >
+          <View style={styles.pickerCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.pickerTitle}>Add Category</Text>
+            {availableCategories.length === 0 ? (
+              <Text style={styles.pickerEmpty}>All categories are already allocated</Text>
+            ) : (
+              <FlatList
+                data={availableCategories}
+                keyExtractor={(item) => item.id}
+                style={styles.pickerList}
+                renderItem={({ item }) => (
+                  <CategoryPickerRow item={item} onPress={addCategory} />
+                )}
+              />
+            )}
+            <TouchableOpacity
+              style={styles.pickerCancelBtn}
+              onPress={() => setShowCategoryPicker(false)}
+            >
+              <Text style={styles.pickerCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -555,11 +826,23 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
   },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 18,
     fontFamily: fonts.bold,
     color: colors.textPrimary,
-    marginBottom: 12,
+  },
+  editBtn: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.primary,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
 
   // Toggle
@@ -659,5 +942,85 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginBottom: 12,
+  },
+
+  // Edit mode
+  removeBtn: {
+    marginLeft: 8,
+  },
+  addCategoryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+  },
+  addCategoryText: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.primary,
+  },
+  saveAllocBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  saveAllocBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontFamily: fonts.semiBold,
+  },
+
+  // Category Picker Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pickerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 24,
+    width: "85%",
+    maxHeight: "60%",
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+    marginBottom: 16,
+  },
+  pickerEmpty: {
+    fontSize: 14,
+    fontFamily: fonts.regular,
+    color: colors.textMuted,
+    textAlign: "center",
+    paddingVertical: 20,
+  },
+  pickerList: {
+    maxHeight: 300,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  pickerRowText: {
+    fontSize: 15,
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
+    marginLeft: 12,
+  },
+  pickerCancelBtn: {
+    marginTop: 16,
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  pickerCancelText: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.textMuted,
   },
 });

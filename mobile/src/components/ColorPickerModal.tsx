@@ -1,3 +1,4 @@
+import React, { memo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, borderRadius, fonts } from "../theme";
@@ -12,7 +13,7 @@ type Props = {
   onClose: () => void;
 };
 
-export default function ColorPickerModal({ visible, currentColor, onSelect, onClose }: Props) {
+export default memo(function ColorPickerModal({ visible, currentColor, onSelect, onClose }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
@@ -46,7 +47,7 @@ export default function ColorPickerModal({ visible, currentColor, onSelect, onCl
       </Pressable>
     </Modal>
   );
-}
+});
 
 const SWATCH_SIZE = 44;
 const GRID_GAP = 12;

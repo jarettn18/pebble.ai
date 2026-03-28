@@ -85,7 +85,7 @@ function AuthGate() {
         name="budget-transactions"
         options={{
           headerShown: true,
-          title: "Budget Transactions",
+          title: "",
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.primary,
           headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },

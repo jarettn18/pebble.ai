@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -39,6 +39,28 @@ type Category = {
 type CategoryListResponse = {
   categories: Category[];
 };
+
+const CategoryChip = memo(function CategoryChip({
+  item,
+  isSelected,
+  onPress,
+}: {
+  item: Category;
+  isSelected: boolean;
+  onPress: (item: Category) => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.chip, isSelected && styles.chipSelected]}
+      onPress={() => onPress(item)}
+    >
+      <View style={[styles.chipDot, { backgroundColor: item.color || "#999" }]} />
+      <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+        {item.name}
+      </Text>
+    </TouchableOpacity>
+  );
+});
 
 export default function TransactionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -234,28 +256,11 @@ export default function TransactionDetailScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.chipList}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.chip,
-                  item.id === txn.category_id && styles.chipSelected,
-                ]}
-                onPress={() => handleCategorySelect(item)}
-              >
-                <View
-                  style={[
-                    styles.chipDot,
-                    { backgroundColor: item.color || "#999" },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.chipText,
-                    item.id === txn.category_id && styles.chipTextSelected,
-                  ]}
-                >
-                  {item.name}
-                </Text>
-              </TouchableOpacity>
+              <CategoryChip
+                item={item}
+                isSelected={item.id === txn.category_id}
+                onPress={handleCategorySelect}
+              />
             )}
           />
         </View>

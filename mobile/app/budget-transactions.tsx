@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,18 +6,28 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { apiRequest } from "../src/api/client";
+import { useBudgetsStore } from "../src/stores/budgets";
+import { useBudgetPlansStore } from "../src/stores/budgetPlans";
+import { useDashboardStore } from "../src/stores/dashboard";
 import { formatCurrency } from "../src/utils/dashboard";
+import { getCategoryIcon } from "../src/utils/categoryIcons";
+import { withOpacity } from "../src/utils/color";
 import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../src/theme";
 import { Transaction } from "../src/components/TransactionRow";
 import { TransactionListCard } from "../src/components/TransactionListCard";
+import ColorPickerModal from "../src/components/ColorPickerModal";
 
 export default function BudgetTransactionsScreen() {
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{
     category_id: string;
     category_name: string;
+    category_color?: string;
     budget_amount?: string;
     spent?: string;
     month?: string;
@@ -35,9 +45,20 @@ export default function BudgetTransactionsScreen() {
   const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
   const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
 
+  const [catColor, setCatColor] = useState(params.category_color || colors.primary);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const refreshBudgets = useBudgetsStore((s) => s.refresh);
+  const refreshPlans = useBudgetPlansStore((s) => s.load);
+  const refreshDashboard = useDashboardStore((s) => s.refresh);
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Set dynamic title
+  useEffect(() => {
+    navigation.setOptions({ title: `${categoryName} Transactions` });
+  }, [categoryName, navigation]);
 
   const fetchTransactions = useCallback(async () => {
     const dateFrom = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -63,6 +84,20 @@ export default function BudgetTransactionsScreen() {
     setRefreshing(false);
   }, [fetchTransactions]);
 
+  async function handleColorSelect(color: string) {
+    setPickerVisible(false);
+    setCatColor(color);
+    try {
+      await apiRequest(`/v1/categories/${categoryId}`, {
+        method: "PATCH",
+        body: { color },
+      });
+      await Promise.all([refreshBudgets(), refreshPlans(), refreshDashboard()]);
+    } catch {
+      // Silently fail — old color remains
+    }
+  }
+
   const pct =
     budgetAmount && budgetAmount > 0 && spent !== null
       ? Math.min((spent / budgetAmount) * 100, 100)
@@ -85,10 +120,25 @@ export default function BudgetTransactionsScreen() {
     >
       {/* Budget Summary Card */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>{categoryName}</Text>
-        {spent !== null && (
-          <Text style={styles.totalAmount}>{formatCurrency(spent)}</Text>
-        )}
+        <View style={styles.cardHeader}>
+          <TouchableOpacity
+            style={[styles.iconCircle, { backgroundColor: withOpacity(catColor, 0.2) }]}
+            onPress={() => setPickerVisible(true)}
+            activeOpacity={0.6}
+          >
+            <MaterialCommunityIcons
+              name={getCategoryIcon(categoryName) as any}
+              size={24}
+              color={catColor}
+            />
+          </TouchableOpacity>
+          <View style={styles.cardHeaderText}>
+            <Text style={styles.cardTitle}>{categoryName}</Text>
+            {spent !== null && (
+              <Text style={styles.totalAmount}>{formatCurrency(spent)}</Text>
+            )}
+          </View>
+        </View>
         {budgetAmount !== null && pct !== null && (
           <View style={styles.budgetInfo}>
             <View style={progressBarStyles.header}>
@@ -114,7 +164,7 @@ export default function BudgetTransactionsScreen() {
                     width: `${pct}%`,
                     backgroundColor: overBudget
                       ? colors.negative
-                      : colors.primary,
+                      : catColor,
                   },
                 ]}
               />
@@ -139,6 +189,13 @@ export default function BudgetTransactionsScreen() {
           emptyHint="No transactions found for this category"
         />
       )}
+
+      <ColorPickerModal
+        visible={pickerVisible}
+        currentColor={catColor}
+        onSelect={handleColorSelect}
+        onClose={() => setPickerVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -161,14 +218,29 @@ const styles = StyleSheet.create({
     borderColor: `${colors.outlineVariant}1A`,
     ...shadows.card,
   },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cardHeaderText: {
+    flex: 1,
+  },
   cardTitle: {
     fontSize: 14,
     fontFamily: fonts.medium,
     color: colors.textSecondary,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   totalAmount: {
-    fontSize: 32,
+    fontSize: 28,
     fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
