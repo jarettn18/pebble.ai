@@ -372,6 +372,9 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 - [ ] Income summary not refreshing when transactions are categorized. Will need to update based on refresh.
 - [x] When budget allocations are edited. Have to save form twice in order to process.
 - [x] Chevron becomes muted color when expands and collapses.
+- [x] Cascade animation plays on tab focus instead of only on budget expand
+- [x] Over-budget amount has extra left margin on budgets tab
+- [x] "View details" not anchored to bottom-left of dashboard summary cards
 
 ### Phase 2 — Plaid + Transactions
 - [x] Plaid service: create link token, exchange public token, encrypt/store access token
@@ -450,6 +453,23 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [x] Backend: budget row regeneration on plan allocation updates (deletes old + creates new for current month)
 - [x] Backend: `category_id` added to spending/income dashboard schemas for category filtering
 - [x] Fixed allocation save race condition — stores + fresh GET all resolve before UI updates
+- [x] Dashboard UX: "View details" anchored to bottom-left of income/spending summary cards
+- [x] Dashboard UX: fixed over-budget amount extra left margin (split `errorText` into `overText` for budget amounts)
+- [x] Cascade animation only plays on budget expand (not tab focus) — `PlansSection` memo component with `useRef`-derived animation state
+- [x] Expanded budget state persists across tab navigations — module-level `persistedExpandedIds` Set
+- [x] Budgets tab: extracted `PlansSection`, `PlanCard`, `BudgetCategoryRow` as top-level `memo` components
+- [x] Budgets tab: O(1) `Map` lookup for category sort order (replaced `indexOf`)
+- [x] Budgets tab: stabilized `renderItem`, `keyExtractor`, `refreshControl` as `useCallback`/`useMemo`
+- [x] React best practices refactor — extracted inline FlatList `renderItem` functions across 3 files:
+  - `CategoryAllocation.tsx`: `CategoryRow` + `Separator` extracted, `useCallback` wrappers, `memo` export
+  - `transaction/[id].tsx`: `CategoryChip` extracted as `memo` component
+  - `budget/plan/[id].tsx`: `CategoryPickerRow` extracted as `memo` component, `useCallback` for `addCategory`
+- [x] React best practices refactor — hoisted constants & memoized computations:
+  - `NetWorthChart.tsx`: `MONTH_ABBR` hoisted to module level, x-axis labels wrapped in `useMemo`, `memo` export
+  - `PieChart.tsx`: `wedgePath` extracted to module-level pure function, segment geometry consolidated into single `useMemo`, `memo` export
+  - `MonthPicker.tsx`: wrapped export in `memo`
+- [x] React best practices refactor — added `React.memo` to 4 reusable display components: `TransactionRow`, `TransactionListCard`, `LineChart`, `ColorPickerModal`
+- [x] Verified `useEffect` dependencies in `transaction/create.tsx` and `NetWorthChart.tsx` — all correct, no changes needed
 
 ### Phase 5 — AI Assistant
 - [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id

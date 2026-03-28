@@ -1,3 +1,4 @@
+import React, { memo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
 import { colors, fonts } from "../theme";
@@ -38,7 +39,7 @@ const Y_LABEL_WIDTH = 48;
 const Y_TICK_COUNT = 4;
 const X_LABEL_HEIGHT = 20;
 
-export default function LineChart({
+export default memo(function LineChart({
   data,
   width,
   height = 160,
@@ -161,7 +162,7 @@ export default function LineChart({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

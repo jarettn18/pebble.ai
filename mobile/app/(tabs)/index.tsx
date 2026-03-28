@@ -745,7 +745,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.primary,
     fontWeight: "600",
-    marginTop: 8,
+    marginTop: "auto",
+    paddingTop: 12,
   },
   incomeValue: {
     color: colors.textSecondary,
@@ -753,7 +754,9 @@ const styles = StyleSheet.create({
   carouselWrapper: {
     marginBottom: 16,
   },
-  carouselContent: {},
+  carouselContent: {
+    alignItems: "stretch",
+  },
   carouselCard: {
     marginBottom: 0,
     marginRight: 12,

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import React, { useCallback, useMemo, useRef, useState, memo, useEffect } from "react";
 import {
   View,
   Text,
@@ -46,40 +46,36 @@ function monthLabel(month: number, year: number) {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
+// Hoisted static component (6.3)
 function BudgetSeparator() {
   return <View style={styles.separator} />;
 }
 
+// ─── CascadeRow ───────────────────────────────────────────────────────────────
+// Animate on mount only when `animate` is true; otherwise render fully visible.
 function CascadeRow({
-  expanded,
+  animate,
   index,
   showTopBorder,
   children,
 }: {
-  expanded: boolean;
+  animate: boolean;
   index: number;
   showTopBorder?: boolean;
   children: React.ReactNode;
 }) {
-  const anim = useRef(new Animated.Value(expanded ? 1 : 0)).current;
+  const anim = useRef(new Animated.Value(animate ? 0 : 1)).current;
 
   useEffect(() => {
-    if (expanded) {
-      anim.setValue(0);
+    if (animate) {
       Animated.timing(anim, {
         toValue: 1,
         duration: 250,
         delay: index * 65,
         useNativeDriver: true,
       }).start();
-    } else {
-      Animated.timing(anim, {
-        toValue: 0,
-        duration: 120,
-        useNativeDriver: true,
-      }).start();
     }
-  }, [expanded]);
+  }, []);
 
   return (
     <Animated.View
@@ -102,6 +98,7 @@ function CascadeRow({
   );
 }
 
+// ─── SwipeableRow ─────────────────────────────────────────────────────────────
 const DELETE_BTN_WIDTH = 80;
 
 function SwipeableRow({
@@ -161,6 +158,9 @@ function SwipeableRow({
   );
 }
 
+// ─── PlanCard ─────────────────────────────────────────────────────────────────
+// 5.1: Derive animation state during render, not via effect
+// 5.8: No state+effect pattern for expand — derive from prop transition
 interface PlanCardProps {
   plan: BudgetPlan;
   isExpanded: boolean;
@@ -176,6 +176,12 @@ const PlanCard = memo(function PlanCard({
   onDelete,
   onNavigate,
 }: PlanCardProps) {
+  // Derive animation flag during render (5.1)
+  const prevExpanded = useRef(isExpanded);
+  const shouldAnimate = isExpanded && !prevExpanded.current;
+  // Update ref synchronously so next render sees current value
+  prevExpanded.current = isExpanded;
+
   const allocTotal = p.allocations.reduce(
     (sum, a) => sum + parseFloat(a.amount), 0
   );
@@ -223,7 +229,7 @@ const PlanCard = memo(function PlanCard({
               const catName = a.category_name || "Unknown";
 
               return (
-                <CascadeRow key={a.id} expanded={isExpanded} index={allocIdx} showTopBorder={allocIdx === 0}>
+                <CascadeRow key={a.id} animate={shouldAnimate} index={allocIdx} showTopBorder={allocIdx === 0}>
                   {allocIdx > 0 && <View style={styles.allocationSeparator} />}
                   <View style={styles.allocationRow}>
                     <View style={styles.allocationTappable}>
@@ -251,7 +257,7 @@ const PlanCard = memo(function PlanCard({
               );
             })}
 
-            <CascadeRow expanded={isExpanded} index={sortedAllocations.length}>
+            <CascadeRow animate={shouldAnimate} index={sortedAllocations.length}>
               <View style={styles.allocationTotalRow}>
                 <Text style={styles.allocationTotalLabel}>
                   Allocated
@@ -269,140 +275,27 @@ const PlanCard = memo(function PlanCard({
   );
 });
 
-export default function BudgetsScreen() {
+// ─── PlansSection ─────────────────────────────────────────────────────────────
+// Extracted as own component so expanded state is isolated here (5.4, 5.6).
+// This prevents PlanCard remounts when parent data (budgets, period) changes.
+// Module-level ref so expanded state survives component remounts (tab focus)
+let persistedExpandedIds = new Set<string>();
+
+interface PlansSectionProps {
+  plans: BudgetPlan[];
+}
+
+const PlansSection = memo(function PlansSection({ plans }: PlansSectionProps) {
   const router = useRouter();
-  const { budgets, isLoading, error, load } = useBudgetsStore();
-  const { plans, load: loadPlans } = useBudgetPlansStore();
-  const refreshDashboard = useDashboardStore((s) => s.refresh);
-  const [period, setPeriod] = useState(getCurrentMonth);
-
-  // Color picker state
-  const [pickerVisible, setPickerVisible] = useState(false);
-  const [pickerCategoryId, setPickerCategoryId] = useState<string | null>(null);
-  const [pickerCurrentColor, setPickerCurrentColor] = useState<string | null>(null);
-
-  // Expandable plan state
-  const [expandedPlanIds, setExpandedPlanIds] = useState<Set<string>>(new Set());
-
-  // Sort order: only re-sort categories on focus/refresh, not inline edits
-  const shouldResort = useRef(true);
-  const categorySortOrder = useRef<string[]>([]);
-
-  useFocusEffect(
-    useCallback(() => {
-      shouldResort.current = true;
-      load(period.month, period.year);
-      loadPlans();
-    }, [period.month, period.year])
-  );
-
-  function shiftMonth(delta: number) {
-    shouldResort.current = true;
-    setPeriod((prev) => {
-      let m = prev.month + delta;
-      let y = prev.year;
-      if (m < 1) {
-        m = 12;
-        y -= 1;
-      } else if (m > 12) {
-        m = 1;
-        y += 1;
-      }
-      return { month: m, year: y };
-    });
-  }
-
-  // Aggregate budgets by category so multiple plans' allocations merge into one row
-  const aggregatedBudgets = useMemo(() => {
-    const map = new Map<string, Budget>();
-    for (const b of budgets) {
-      const existing = map.get(b.category_id);
-      if (existing) {
-        const mergedAmount = parseFloat(existing.amount || "0") + parseFloat(b.amount || "0");
-        map.set(b.category_id, {
-          ...existing,
-          amount: mergedAmount.toFixed(2),
-          // spent is per-category, not per-budget — keep the first value to avoid double-counting
-        });
-      } else {
-        map.set(b.category_id, { ...b });
-      }
-    }
-
-    const rows = Array.from(map.values());
-
-    if (shouldResort.current) {
-      // Sort by amount descending on focus/refresh
-      rows.sort((a, b) => parseFloat(b.amount || "0") - parseFloat(a.amount || "0"));
-      categorySortOrder.current = rows.map((r) => r.category_id);
-      shouldResort.current = false;
-    } else {
-      // Preserve previous order, append any new categories at the end
-      const order = categorySortOrder.current;
-      rows.sort((a, b) => {
-        const ai = order.indexOf(a.category_id);
-        const bi = order.indexOf(b.category_id);
-        return (ai === -1 ? order.length : ai) - (bi === -1 ? order.length : bi);
-      });
-    }
-
-    return rows;
-  }, [budgets]);
-
-  const { totalBudgeted, totalSpent, budgetRemaining, budgetPct, isOverBudget } = useMemo(() => {
-    // Use plan totals for the budgeted amount so it matches what the user set
-    const budgeted = plans.length > 0
-      ? plans.reduce((sum, p) => sum + parseFloat(p.total_amount || "0"), 0)
-      : aggregatedBudgets.reduce((sum, b) => sum + parseFloat(b.amount || "0"), 0);
-    const spent = aggregatedBudgets.reduce((sum, b) => sum + parseFloat(b.spent || "0"), 0);
-    return {
-      totalBudgeted: budgeted,
-      totalSpent: spent,
-      budgetRemaining: budgeted - spent,
-      budgetPct: budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0,
-      isOverBudget: spent > budgeted,
-    };
-  }, [aggregatedBudgets, plans]);
-
-  function openColorPicker(categoryId: string, currentColor: string | null) {
-    setPickerCategoryId(categoryId);
-    setPickerCurrentColor(currentColor);
-    setPickerVisible(true);
-  }
-
-  async function handleColorSelect(color: string) {
-    setPickerVisible(false);
-    if (!pickerCategoryId) return;
-
-    try {
-      await apiRequest(`/v1/categories/${pickerCategoryId}`, {
-        method: "PATCH",
-        body: { color },
-      });
-      // Refresh both stores so colors update everywhere
-      await Promise.all([
-        load(period.month, period.year),
-        refreshDashboard(),
-      ]);
-    } catch {
-      // Silently fail — the old color remains
-    }
-  }
-
-  // Lookup spent per category for allocation rows
-  const spentByCategory = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const b of aggregatedBudgets) {
-      map.set(b.category_id, b.spent);
-    }
-    return map;
-  }, [aggregatedBudgets]);
+  // Initialize from persisted value; sync back on every change
+  const [expandedPlanIds, setExpandedPlanIds] = useState(() => new Set(persistedExpandedIds));
 
   const togglePlanExpanded = useCallback((planId: string) => {
     setExpandedPlanIds((prev) => {
       const next = new Set(prev);
       if (next.has(planId)) next.delete(planId);
       else next.add(planId);
+      persistedExpandedIds = next;
       return next;
     });
   }, []);
@@ -411,7 +304,7 @@ export default function BudgetsScreen() {
     router.push(`/budget/plan/${id}`);
   }, [router]);
 
-  function handleDeletePlan(plan: BudgetPlan) {
+  const handleDeletePlan = useCallback((plan: BudgetPlan) => {
     Alert.alert(
       "Delete Budget Plan",
       "Do you also want to delete all budgets generated by this plan?",
@@ -428,7 +321,7 @@ export default function BudgetsScreen() {
         },
       ]
     );
-  }
+  }, []);
 
   async function deletePlan(planId: string, deleteBudgets: boolean) {
     try {
@@ -439,8 +332,11 @@ export default function BudgetsScreen() {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       const { removePlan } = useBudgetPlansStore.getState();
       removePlan(planId);
+      const refreshDashboard = useDashboardStore.getState().refresh;
+      const { load } = useBudgetsStore.getState();
+      const now = new Date();
       await Promise.all([
-        load(period.month, period.year),
+        load(now.getMonth() + 1, now.getFullYear()),
         refreshDashboard(),
       ]);
     } catch {
@@ -448,6 +344,245 @@ export default function BudgetsScreen() {
     }
   }
 
+  if (plans.length === 0) return null;
+
+  return (
+    <View style={styles.plansSection}>
+      <View style={styles.plansSectionHeader}>
+        <Text style={styles.plansSectionTitle}>Budget Plans</Text>
+        <TouchableOpacity
+          onPress={() => router.push("/budget/create")}
+          hitSlop={8}
+        >
+          <Text style={styles.createNewText}>+ Create New</Text>
+        </TouchableOpacity>
+      </View>
+      {plans.map((p) => (
+        <PlanCard
+          key={p.id}
+          plan={p}
+          isExpanded={expandedPlanIds.has(p.id)}
+          onToggle={togglePlanExpanded}
+          onDelete={handleDeletePlan}
+          onNavigate={handleNavigatePlan}
+        />
+      ))}
+    </View>
+  );
+});
+
+// ─── BudgetCategoryRow ────────────────────────────────────────────────────────
+// Extracted from inline renderItem (5.4) into top-level memoized component (5.6)
+interface BudgetCategoryRowProps {
+  item: Budget;
+  index: number;
+  period: { month: number; year: number };
+  onColorPick: (categoryId: string, currentColor: string | null) => void;
+}
+
+const BudgetCategoryRow = memo(function BudgetCategoryRow({
+  item,
+  index,
+  period,
+  onColorPick,
+}: BudgetCategoryRowProps) {
+  const router = useRouter();
+  const budgeted = parseFloat(item.amount || "0");
+  const spent = parseFloat(item.spent || "0");
+  const remaining = budgeted - spent;
+  const pct = budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0;
+  const clampedPct = Math.min(pct, 100);
+  const overBudget = spent > budgeted;
+  const categoryName = item.category_name || "Uncategorized";
+  const catColor = item.category_color || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  const iconBg = withOpacity(catColor, 0.2);
+
+  const transactionUrl = `/budget-transactions?category_id=${item.category_id}&category_name=${encodeURIComponent(categoryName)}&category_color=${encodeURIComponent(item.category_color || '')}&budget_amount=${item.amount}&spent=${item.spent}&month=${period.month}&year=${period.year}`;
+
+  return (
+    <TouchableOpacity
+      style={[progressBarStyles.container, styles.budgetCard]}
+      onPress={() => router.push(transactionUrl)}
+      activeOpacity={0.7}
+    >
+      <View style={progressBarStyles.header}>
+        <View style={styles.labelRow}>
+          <TouchableOpacity
+            style={[styles.iconCircle, { backgroundColor: iconBg }]}
+            onPress={(e) => {
+              e.stopPropagation();
+              onColorPick(item.category_id, item.category_color);
+            }}
+            activeOpacity={0.6}
+          >
+            <MaterialCommunityIcons
+              name={getCategoryIcon(categoryName) as any}
+              size={22}
+              color={catColor}
+            />
+          </TouchableOpacity>
+          <View style={styles.labelText}>
+            <Text style={progressBarStyles.label}>{categoryName}</Text>
+            <Text style={[progressBarStyles.value, overBudget && styles.overText]}>
+              {overBudget
+                ? `${formatCurrency(Math.floor(Math.abs(remaining)))} over`
+                : `${formatCurrency(Math.floor(remaining))} left`}
+              {" "}
+              <Text style={progressBarStyles.valueSub}>
+                of {formatCurrency(Math.floor(budgeted))}
+              </Text>
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          hitSlop={HIT_SLOP_8}
+          onPress={(e) => {
+            e.stopPropagation();
+            router.push(transactionUrl);
+          }}
+        >
+          <MaterialCommunityIcons
+            name="format-list-bulleted"
+            size={22}
+            color={colors.textMuted}
+          />
+        </TouchableOpacity>
+      </View>
+      <View style={progressBarStyles.track}>
+        <View
+          style={[
+            progressBarStyles.fill,
+            { width: `${clampedPct}%`, backgroundColor: catColor },
+            overBudget && { backgroundColor: colors.error },
+          ]}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+// ─── BudgetsScreen ────────────────────────────────────────────────────────────
+export default function BudgetsScreen() {
+  const router = useRouter();
+  const { budgets, isLoading, error, load } = useBudgetsStore();
+  const { plans, load: loadPlans } = useBudgetPlansStore();
+  const refreshDashboard = useDashboardStore((s) => s.refresh);
+  // Lazy state initialization (5.12)
+  const [period, setPeriod] = useState(getCurrentMonth);
+
+  // Color picker state
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerCategoryId, setPickerCategoryId] = useState<string | null>(null);
+  const [pickerCurrentColor, setPickerCurrentColor] = useState<string | null>(null);
+
+  // Sort order: only re-sort categories on focus/refresh, not inline edits (5.15)
+  const shouldResort = useRef(true);
+  const categorySortOrder = useRef<string[]>([]);
+
+  // Narrow dependencies: use primitives (5.7)
+  useFocusEffect(
+    useCallback(() => {
+      shouldResort.current = true;
+      load(period.month, period.year);
+      loadPlans();
+    }, [period.month, period.year])
+  );
+
+  // Functional setState (5.11)
+  function shiftMonth(delta: number) {
+    shouldResort.current = true;
+    setPeriod((prev) => {
+      let m = prev.month + delta;
+      let y = prev.year;
+      if (m < 1) {
+        m = 12;
+        y -= 1;
+      } else if (m > 12) {
+        m = 1;
+        y += 1;
+      }
+      return { month: m, year: y };
+    });
+  }
+
+  // Aggregate budgets by category — single iteration (7.6)
+  const aggregatedBudgets = useMemo(() => {
+    const map = new Map<string, Budget>();
+    for (const b of budgets) {
+      const existing = map.get(b.category_id);
+      if (existing) {
+        const mergedAmount = parseFloat(existing.amount || "0") + parseFloat(b.amount || "0");
+        map.set(b.category_id, {
+          ...existing,
+          amount: mergedAmount.toFixed(2),
+        });
+      } else {
+        map.set(b.category_id, { ...b });
+      }
+    }
+
+    const rows = Array.from(map.values());
+
+    if (shouldResort.current) {
+      rows.sort((a, b) => parseFloat(b.amount || "0") - parseFloat(a.amount || "0"));
+      categorySortOrder.current = rows.map((r) => r.category_id);
+      shouldResort.current = false;
+    } else {
+      // Use Map for O(1) lookups (7.12)
+      const orderMap = new Map(categorySortOrder.current.map((id, i) => [id, i]));
+      const len = orderMap.size;
+      rows.sort((a, b) => {
+        const ai = orderMap.get(a.category_id) ?? len;
+        const bi = orderMap.get(b.category_id) ?? len;
+        return ai - bi;
+      });
+    }
+
+    return rows;
+  }, [budgets]);
+
+  // Derive budget totals — no useMemo needed for simple primitives (5.3),
+  // but the reduce iterations justify memoization here
+  const { totalBudgeted, totalSpent, budgetRemaining, budgetPct, isOverBudget } = useMemo(() => {
+    const budgeted = plans.length > 0
+      ? plans.reduce((sum, p) => sum + parseFloat(p.total_amount || "0"), 0)
+      : aggregatedBudgets.reduce((sum, b) => sum + parseFloat(b.amount || "0"), 0);
+    const spent = aggregatedBudgets.reduce((sum, b) => sum + parseFloat(b.spent || "0"), 0);
+    return {
+      totalBudgeted: budgeted,
+      totalSpent: spent,
+      budgetRemaining: budgeted - spent,
+      budgetPct: budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0,
+      isOverBudget: spent > budgeted,
+    };
+  }, [aggregatedBudgets, plans]);
+
+  // Put interaction logic in event handlers (5.8)
+  function openColorPicker(categoryId: string, currentColor: string | null) {
+    setPickerCategoryId(categoryId);
+    setPickerCurrentColor(currentColor);
+    setPickerVisible(true);
+  }
+
+  async function handleColorSelect(color: string) {
+    setPickerVisible(false);
+    if (!pickerCategoryId) return;
+
+    try {
+      await apiRequest(`/v1/categories/${pickerCategoryId}`, {
+        method: "PATCH",
+        body: { color },
+      });
+      await Promise.all([
+        load(period.month, period.year),
+        refreshDashboard(),
+      ]);
+    } catch {
+      // Silently fail — the old color remains
+    }
+  }
+
+  // renderHeader no longer depends on expandedPlanIds — PlansSection manages that
   const renderHeader = useCallback(() => (
     <>
       {/* Month Selector */}
@@ -485,7 +620,7 @@ export default function BudgetsScreen() {
               <Text
                 style={[
                   progressBarStyles.remaining,
-                  isOverBudget && styles.errorText,
+                  isOverBudget && styles.overText,
                 ]}
               >
                 {isOverBudget ? "Over by " : ""}
@@ -518,37 +653,37 @@ export default function BudgetsScreen() {
         </View>
       )}
 
-      {/* Budget Plans */}
-      {plans.length > 0 && (
-        <View style={styles.plansSection}>
-          <View style={styles.plansSectionHeader}>
-            <Text style={styles.plansSectionTitle}>Budget Plans</Text>
-            <TouchableOpacity
-              onPress={() => router.push("/budget/create")}
-              hitSlop={8}
-            >
-              <Text style={styles.createNewText}>+ Create New</Text>
-            </TouchableOpacity>
-          </View>
-          {plans.map((p) => (
-            <PlanCard
-              key={p.id}
-              plan={p}
-              isExpanded={expandedPlanIds.has(p.id)}
-              onToggle={togglePlanExpanded}
-              onDelete={handleDeletePlan}
-              onNavigate={handleNavigatePlan}
-            />
-          ))}
-        </View>
-      )}
+      <PlansSection plans={plans} />
 
-      {/* Categories Header */}
       <View style={styles.categoriesHeader}>
         <Text style={styles.categoriesTitle}>Categories</Text>
       </View>
     </>
-  ), [period, aggregatedBudgets, plans, expandedPlanIds, spentByCategory, totalSpent, totalBudgeted, budgetPct, budgetRemaining, isOverBudget, router]);
+  ), [period, aggregatedBudgets, plans, totalSpent, totalBudgeted, budgetPct, budgetRemaining, isOverBudget, router]);
+
+  const renderItem = useCallback(({ item, index }: { item: Budget; index: number }) => (
+    <BudgetCategoryRow
+      item={item}
+      index={index}
+      period={period}
+      onColorPick={openColorPicker}
+    />
+  ), [period]);
+
+  const keyExtractor = useCallback((item: Budget) => item.category_id, []);
+
+  const refreshControl = useMemo(() => (
+    <RefreshControl
+      refreshing={isLoading}
+      onRefresh={() => {
+        shouldResort.current = true;
+        load(period.month, period.year);
+      }}
+      tintColor={colors.primary}
+    />
+  ), [isLoading, period.month, period.year]);
+
+  const footerComponent = error ? <Text style={styles.errorText}>{error}</Text> : null;
 
   return (
     <View style={styles.container}>
@@ -572,103 +707,14 @@ export default function BudgetsScreen() {
       ) : (
         <FlatList
           data={aggregatedBudgets}
-          keyExtractor={(item) => item.category_id}
+          keyExtractor={keyExtractor}
           ListHeaderComponent={renderHeader}
-          refreshControl={
-            <RefreshControl
-              refreshing={isLoading}
-              onRefresh={() => {
-                shouldResort.current = true;
-                load(period.month, period.year);
-              }}
-              tintColor={colors.primary}
-            />
-          }
-          renderItem={({ item, index }) => {
-            const budgeted = parseFloat(item.amount || "0");
-            const spent = parseFloat(item.spent || "0");
-            const remaining = budgeted - spent;
-            const pct = budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0;
-            const clampedPct = Math.min(pct, 100);
-            const overBudget = spent > budgeted;
-            const categoryName = item.category_name || "Uncategorized";
-            const catColor = item.category_color || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
-            const iconBg = withOpacity(catColor, 0.2);
-            const iconFg = catColor;
-
-            return (
-              <TouchableOpacity
-                style={[progressBarStyles.container, styles.budgetCard]}
-                onPress={() =>
-                  router.push(
-                    `/budget-transactions?category_id=${item.category_id}&category_name=${encodeURIComponent(categoryName)}&category_color=${encodeURIComponent(item.category_color || '')}&budget_amount=${item.amount}&spent=${item.spent}&month=${period.month}&year=${period.year}`
-                  )
-                }
-                activeOpacity={0.7}
-              >
-                <View style={progressBarStyles.header}>
-                  <View style={styles.labelRow}>
-                    <TouchableOpacity
-                      style={[styles.iconCircle, { backgroundColor: iconBg }]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        openColorPicker(item.category_id, item.category_color);
-                      }}
-                      activeOpacity={0.6}
-                    >
-                      <MaterialCommunityIcons
-                        name={getCategoryIcon(categoryName) as any}
-                        size={22}
-                        color={iconFg}
-                      />
-                    </TouchableOpacity>
-                    <View style={styles.labelText}>
-                      <Text style={progressBarStyles.label}>{categoryName}</Text>
-                      <Text style={[progressBarStyles.value, overBudget && styles.errorText]}>
-                        {overBudget
-                          ? `${formatCurrency(Math.floor(Math.abs(remaining)))} over`
-                          : `${formatCurrency(Math.floor(remaining))} left`}
-                        {" "}
-                        <Text style={progressBarStyles.valueSub}>
-                          of {formatCurrency(Math.floor(budgeted))}
-                        </Text>
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    hitSlop={HIT_SLOP_8}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      router.push(
-                        `/budget-transactions?category_id=${item.category_id}&category_name=${encodeURIComponent(categoryName)}&category_color=${encodeURIComponent(item.category_color || '')}&budget_amount=${item.amount}&spent=${item.spent}&month=${period.month}&year=${period.year}`
-                      );
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="format-list-bulleted"
-                      size={22}
-                      color={colors.textMuted}
-                    />
-                  </TouchableOpacity>
-                </View>
-                <View style={progressBarStyles.track}>
-                  <View
-                    style={[
-                      progressBarStyles.fill,
-                      { width: `${clampedPct}%`, backgroundColor: catColor },
-                      overBudget && { backgroundColor: colors.error },
-                    ]}
-                  />
-                </View>
-              </TouchableOpacity>
-            );
-          }}
+          refreshControl={refreshControl}
+          renderItem={renderItem}
           ItemSeparatorComponent={BudgetSeparator}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
-          ListFooterComponent={
-            error ? <Text style={styles.errorText}>{error}</Text> : null
-          }
+          ListFooterComponent={footerComponent}
         />
       )}
 
@@ -935,6 +981,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 8,
     textAlign: "center",
+  },
+  overText: {
+    color: colors.error,
   },
   errorText: {
     color: colors.error,

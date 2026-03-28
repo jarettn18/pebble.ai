@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import React, { memo, useEffect, useMemo, useState, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native";
 import { apiRequest } from "../api/client";
 import LineChart from "./LineChart";
@@ -21,6 +21,8 @@ type NetWorthHistoryResponse = {
   change_pct: string | null;
 };
 
+const MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 const PERIODS = ["1M", "3M", "1Y", "5Y"] as const;
 type Period = (typeof PERIODS)[number];
 
@@ -29,7 +31,7 @@ type NetWorthChartProps = {
   refreshKey?: number;
 };
 
-export default function NetWorthChart({ refreshKey }: NetWorthChartProps) {
+export default memo(function NetWorthChart({ refreshKey }: NetWorthChartProps) {
   const [period, setPeriod] = useState<Period>("1Y");
   const [data, setData] = useState<NetWorthHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,11 +61,11 @@ export default function NetWorthChart({ refreshKey }: NetWorthChartProps) {
 
   const chartColor = isPositive ? colors.primary : colors.negative;
 
-  const MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
   // Build x-axis labels from point dates based on period
-  const xLabels: { index: number; label: string }[] = [];
-  if (points.length > 0) {
+  const xLabels = useMemo(() => {
+    const labels: { index: number; label: string }[] = [];
+    if (points.length === 0) return labels;
+
     const seen = new Set<string>();
     const maxLabels = period === "1M" ? 5 : period === "3M" ? 4 : period === "1Y" ? 6 : 5;
     const step = Math.max(1, Math.floor(points.length / maxLabels));
@@ -74,25 +76,23 @@ export default function NetWorthChart({ refreshKey }: NetWorthChartProps) {
       let key: string;
 
       if (period === "1M") {
-        // Show day: "Mar 5"
         label = `${MONTH_ABBR[d.getMonth() + 1]} ${d.getDate()}`;
         key = label;
       } else if (period === "3M" || period === "1Y") {
-        // Show month: "Mar"
         label = MONTH_ABBR[d.getMonth() + 1];
         key = `${d.getFullYear()}-${d.getMonth()}`;
       } else {
-        // 5Y — show year: "2024"
         label = String(d.getFullYear());
         key = label;
       }
 
       if (!seen.has(key)) {
         seen.add(key);
-        xLabels.push({ index: i, label });
+        labels.push({ index: i, label });
       }
     }
-  }
+    return labels;
+  }, [points, period]);
 
   return (
     <View style={styles.container}>
@@ -145,7 +145,7 @@ export default function NetWorthChart({ refreshKey }: NetWorthChartProps) {
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

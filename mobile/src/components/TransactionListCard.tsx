@@ -1,3 +1,4 @@
+import React, { memo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { colors, borderRadius, shadows, fonts } from "../theme";
@@ -14,7 +15,7 @@ type Props = {
   emptyHint?: string;
 };
 
-export function TransactionListCard({
+export const TransactionListCard = memo(function TransactionListCard({
   transactions,
   title,
   emptyMessage = "No transactions",
@@ -48,7 +49,7 @@ export function TransactionListCard({
       ))}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

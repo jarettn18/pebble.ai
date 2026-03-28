@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -40,6 +40,37 @@ type EditAllocation = {
   category_color: string | null;
   amount: string;
 };
+
+const CategoryPickerRow = memo(function CategoryPickerRow({
+  item,
+  onPress,
+}: {
+  item: Category;
+  onPress: (cat: Category) => void;
+}) {
+  const catColor = item.color || colors.primary;
+  return (
+    <TouchableOpacity
+      style={styles.pickerRow}
+      onPress={() => onPress(item)}
+      activeOpacity={0.7}
+    >
+      <View
+        style={[
+          styles.iconCircle,
+          { backgroundColor: withOpacity(catColor, 0.2) },
+        ]}
+      >
+        <MaterialCommunityIcons
+          name={getCategoryIcon(item.name) as any}
+          size={18}
+          color={catColor}
+        />
+      </View>
+      <Text style={styles.pickerRowText}>{item.name}</Text>
+    </TouchableOpacity>
+  );
+});
 
 export default function BudgetPlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -259,7 +290,7 @@ export default function BudgetPlanDetailScreen() {
     );
   }
 
-  function addCategory(cat: Category) {
+  const addCategory = useCallback((cat: Category) => {
     setEditAllocations((prev) => [
       ...prev,
       {
@@ -270,7 +301,7 @@ export default function BudgetPlanDetailScreen() {
       },
     ]);
     setShowCategoryPicker(false);
-  }
+  }, []);
 
   async function saveEditAllocations() {
     if (!plan) return;
@@ -680,30 +711,9 @@ export default function BudgetPlanDetailScreen() {
                 data={availableCategories}
                 keyExtractor={(item) => item.id}
                 style={styles.pickerList}
-                renderItem={({ item }) => {
-                  const catColor = item.color || colors.primary;
-                  return (
-                    <TouchableOpacity
-                      style={styles.pickerRow}
-                      onPress={() => addCategory(item)}
-                      activeOpacity={0.7}
-                    >
-                      <View
-                        style={[
-                          styles.iconCircle,
-                          { backgroundColor: withOpacity(catColor, 0.2) },
-                        ]}
-                      >
-                        <MaterialCommunityIcons
-                          name={getCategoryIcon(item.name) as any}
-                          size={18}
-                          color={catColor}
-                        />
-                      </View>
-                      <Text style={styles.pickerRowText}>{item.name}</Text>
-                    </TouchableOpacity>
-                  );
-                }}
+                renderItem={({ item }) => (
+                  <CategoryPickerRow item={item} onPress={addCategory} />
+                )}
               />
             )}
             <TouchableOpacity

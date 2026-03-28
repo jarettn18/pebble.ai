@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { colors, fonts } from "../theme";
@@ -15,7 +15,25 @@ type Props = {
   size?: number;
 };
 
-export default function PieChart({ slices, size = 110 }: Props) {
+function wedgePath(
+  cx: number, cy: number, innerR: number, outerR: number,
+  startDeg: number, endDeg: number,
+): string {
+  const startRad = ((startDeg - 90) * Math.PI) / 180;
+  const endRad = ((endDeg - 90) * Math.PI) / 180;
+  const x1 = cx + innerR * Math.cos(startRad);
+  const y1 = cy + innerR * Math.sin(startRad);
+  const x2 = cx + outerR * Math.cos(startRad);
+  const y2 = cy + outerR * Math.sin(startRad);
+  const x3 = cx + outerR * Math.cos(endRad);
+  const y3 = cy + outerR * Math.sin(endRad);
+  const x4 = cx + innerR * Math.cos(endRad);
+  const y4 = cy + innerR * Math.sin(endRad);
+  const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+  return `M ${x1} ${y1} L ${x2} ${y2} A ${outerR} ${outerR} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x1} ${y1} Z`;
+}
+
+export default memo(function PieChart({ slices, size = 110 }: Props) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const total = slices.reduce((sum, s) => sum + s.value, 0);
   if (total === 0) return null;
@@ -29,37 +47,35 @@ export default function PieChart({ slices, size = 110 }: Props) {
   const innerR = r - strokeWidth / 2;
   const outerR = r + strokeWidth / 2;
 
-  // Compute boundary angles between segments (memoized)
-  const boundaries = useMemo(() => {
-    const result: number[] = [];
+  // Precompute all segment geometry
+  const segments = useMemo(() => {
+    const result: {
+      sliceDeg: number;
+      dashLength: number;
+      dashGap: number;
+      rotation: number;
+      boundary: number | null;
+      wedgeD: string;
+    }[] = [];
     let angleSoFar = 0;
     for (let i = 0; i < slices.length; i++) {
       const sliceDeg = (slices[i].value / total) * 360;
+      const dashLength = (sliceDeg / 360) * circumference;
+      const dashGap = circumference - dashLength;
+      const rotation = -90 + angleSoFar;
+      const startAngle = angleSoFar;
       angleSoFar += sliceDeg;
-      if (i < slices.length - 1) {
-        result.push(angleSoFar);
-      }
+      result.push({
+        sliceDeg,
+        dashLength,
+        dashGap,
+        rotation,
+        boundary: i < slices.length - 1 ? angleSoFar : null,
+        wedgeD: wedgePath(cx, cy, innerR, outerR, startAngle, angleSoFar),
+      });
     }
     return result;
-  }, [slices, total]);
-
-  let cumulativeOffset = 0;
-
-  // Build invisible hit areas for each segment (filled wedges)
-  function wedgePath(startDeg: number, endDeg: number): string {
-    const startRad = ((startDeg - 90) * Math.PI) / 180;
-    const endRad = ((endDeg - 90) * Math.PI) / 180;
-    const x1 = cx + innerR * Math.cos(startRad);
-    const y1 = cy + innerR * Math.sin(startRad);
-    const x2 = cx + outerR * Math.cos(startRad);
-    const y2 = cy + outerR * Math.sin(startRad);
-    const x3 = cx + outerR * Math.cos(endRad);
-    const y3 = cy + outerR * Math.sin(endRad);
-    const x4 = cx + innerR * Math.cos(endRad);
-    const y4 = cy + innerR * Math.sin(endRad);
-    const largeArc = endDeg - startDeg > 180 ? 1 : 0;
-    return `M ${x1} ${y1} L ${x2} ${y2} A ${outerR} ${outerR} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x1} ${y1} Z`;
-  }
+  }, [slices, total, circumference, cx, cy, innerR, outerR]);
 
   const selected = selectedIndex !== null ? slices[selectedIndex] : null;
 
@@ -68,31 +84,24 @@ export default function PieChart({ slices, size = 110 }: Props) {
       <View style={{ width: size, height: size }}>
         <Svg width={size} height={size}>
           {/* Colored segments */}
-          {slices.map((slice) => {
-            const sliceDeg = (slice.value / total) * 360;
-            const dashLength = (sliceDeg / 360) * circumference;
-            const dashGap = circumference - dashLength;
-            const rotation = -90 + cumulativeOffset;
-            cumulativeOffset += sliceDeg;
-
-            return (
-              <Circle
-                key={slice.label}
-                cx={cx}
-                cy={cy}
-                r={r}
-                fill="none"
-                stroke={slice.color}
-                strokeWidth={strokeWidth}
-                strokeDasharray={`${dashLength} ${dashGap}`}
-                rotation={rotation}
-                origin={`${cx}, ${cy}`}
-              />
-            );
-          })}
+          {segments.map((seg, i) => (
+            <Circle
+              key={slices[i].label}
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill="none"
+              stroke={slices[i].color}
+              strokeWidth={strokeWidth}
+              strokeDasharray={`${seg.dashLength} ${seg.dashGap}`}
+              rotation={seg.rotation}
+              origin={`${cx}, ${cy}`}
+            />
+          ))}
           {/* Curved divider lines at segment boundaries */}
-          {boundaries.map((angleDeg, i) => {
-            const rad = ((angleDeg - 90) * Math.PI) / 180;
+          {segments.map((seg, i) => {
+            if (seg.boundary === null) return null;
+            const rad = ((seg.boundary - 90) * Math.PI) / 180;
             const x1 = cx + innerR * Math.cos(rad);
             const y1 = cy + innerR * Math.sin(rad);
             const x2 = cx + outerR * Math.cos(rad);
@@ -113,24 +122,15 @@ export default function PieChart({ slices, size = 110 }: Props) {
             );
           })}
           {/* Invisible tap targets */}
-          {(() => {
-            let startAngle = 0;
-            return slices.map((slice, i) => {
-              const sliceDeg = (slice.value / total) * 360;
-              const endAngle = startAngle + sliceDeg;
-              const d = wedgePath(startAngle, endAngle);
-              startAngle = endAngle;
-              return (
-                <Path
-                  key={`tap-${slice.label}`}
-                  d={d}
-                  fill="transparent"
-                  onPressIn={() => setSelectedIndex(i)}
-                  onPressOut={() => setSelectedIndex(null)}
-                />
-              );
-            });
-          })()}
+          {segments.map((seg, i) => (
+            <Path
+              key={`tap-${slices[i].label}`}
+              d={seg.wedgeD}
+              fill="transparent"
+              onPressIn={() => setSelectedIndex(i)}
+              onPressOut={() => setSelectedIndex(null)}
+            />
+          ))}
         </Svg>
         {/* Center bubble */}
         {selected && (
@@ -168,7 +168,7 @@ export default function PieChart({ slices, size = 110 }: Props) {
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrapper: {

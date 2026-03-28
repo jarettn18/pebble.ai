@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-03-26 — Phase 4 (cont.): React Best Practices Refactor, Animation Fixes & UX Cleanup
+
+### Mobile — Full React Best Practices Refactor (12 files)
+
+Applied Vercel React best practices across all frontend code — extracted inline components, added memoization, hoisted constants, and stabilized callbacks.
+
+#### Batch 1: Extract Inline FlatList renderItems (HIGH IMPACT)
+- **`CategoryAllocation.tsx`**: Extracted `CategoryRow` as top-level `memo` component (was inline `renderItem`). Hoisted `Separator` to module level. Wrapped `updateAmount` and `getAllocAmount` in `useCallback`. Wrapped entire `CategoryAllocation` export in `React.memo`.
+- **`transaction/[id].tsx`**: Extracted `CategoryChip` as top-level `memo` component with `item`, `isSelected`, `onPress` props (was inline `renderItem` creating new component type every render).
+- **`budget/plan/[id].tsx`**: Extracted `CategoryPickerRow` as top-level `memo` component for category picker modal (was inline `renderItem`). Wrapped `addCategory` in `useCallback` with stable `setEditAllocations` functional updater.
+
+#### Batch 2: Hoist Constants & Memoize Computations (HIGH IMPACT)
+- **`NetWorthChart.tsx`**: Hoisted `MONTH_ABBR` array from render body to module level. Wrapped x-axis label computation in `useMemo([points, period])` — previously recomputed every render. Wrapped export in `React.memo`.
+- **`PieChart.tsx`**: Extracted `wedgePath()` to module-level pure function (was closure capturing `cx`, `cy`, `innerR`, `outerR` — now takes them as parameters). Consolidated all segment geometry (dash lengths, rotations, boundaries, wedge paths) into a single `useMemo` — previously computed with mutable `cumulativeOffset` variable and IIFE during render. Wrapped export in `React.memo`.
+- **`MonthPicker.tsx`**: Wrapped export in `React.memo` (already had hoisted constants and module-level helpers).
+
+#### Batch 3: Add `React.memo` to Reusable Display Components (MEDIUM IMPACT)
+- **`TransactionRow.tsx`**: Wrapped `TransactionRow` in `memo` — rendered in `.map()` loops across 5+ screens.
+- **`TransactionListCard.tsx`**: Wrapped in `memo` — used on spending, income, budget-transactions, and account-transactions screens.
+- **`LineChart.tsx`**: Wrapped in `memo` — expensive SVG path computation, rendered inside `NetWorthChart`.
+- **`ColorPickerModal.tsx`**: Wrapped in `memo` — re-renders with parent even when not visible.
+
+#### Batch 4: Verified useEffect Dependencies
+- **`transaction/create.tsx`**: `[loadAccounts]` dep is stable (Zustand selector); `[accounts, selectedAccount]` auto-select effect has correct deps. No changes needed.
+- **`NetWorthChart.tsx`**: `fetchData` wrapped in `useCallback([])` with `[period, fetchData, refreshKey]` effect — correct, no unnecessary refetches. No changes needed.
+
+### Mobile — Budgets Tab Deep Refactor (React Performance)
+- Extracted `PlansSection` as self-contained `memo` component managing its own `expandedPlanIds` state — eliminates parent re-renders from propagating into plan cards
+- Module-level `persistedExpandedIds` (`Set<string>`) preserves expanded budget state across tab navigations and component remounts
+- `PlanCard` derives animation state during render via `useRef` comparison (`shouldAnimate = isExpanded && !prevExpanded.current`) — cascade animation only plays when a budget is expanded, never on tab focus
+- Extracted `BudgetCategoryRow` from inline FlatList `renderItem` into top-level `memo` component
+- Replaced `indexOf`-based sort with O(1) `Map` lookup for category ordering
+- Stabilized `renderItem`, `keyExtractor`, and `refreshControl` as `useCallback`/`useMemo` to prevent FlatList re-renders
+
+### Mobile — Dashboard UX Fixes
+- Fixed "View details" link positioning on income/spending summary cards — anchored to bottom-left with `marginTop: "auto"` and `alignItems: "stretch"` on carousel content
+- Fixed over-budget amount having extra left margin — split `errorText` style (which had `textAlign: "center"` and `paddingHorizontal: 24`) into separate `overText` style (just `color: colors.error`) for budget amounts
+
+### Bug Fixes
+- **Fixed cascade animation playing on tab focus**: Root cause was `renderHeader` `useCallback` recreating when `expandedPlanIds` changed (tab focus → `plans` prop changes → callback recreates → PlanCard remounts → animation replays). Solution: isolated expanding state in `PlansSection` memo component with `useRef`-based derived animation state.
+- **Fixed expanded budget state lost on tab navigation**: Module-level `persistedExpandedIds` Set survives component unmount/remount cycles, initialized into `PlansSection` via `useState(() => new Set(persistedExpandedIds))`.
+
+---
+
 ## 2026-03-26 — Phase 4 (cont.): Budget Plan Editing, UX Cleanup & Race Condition Fixes
 
 ### Backend — Budget Plan Allocation Updates
