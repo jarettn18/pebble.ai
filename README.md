@@ -52,6 +52,7 @@ pebble/
 │       │   ├── budget_plan.py       # BudgetPlanOut, Create/Update, Allocation schemas
 │       │   ├── category.py          # CategoryOut, CategoryListResponse
 │       │   ├── dashboard.py         # DashboardResponse, NetWorthHistory, SpendingByCategory, AssetSummary
+│       │   ├── ai_chat.py            # ChatRequest, ConversationOut, MessageOut schemas
 │       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
 │       │   └── transaction.py       # TransactionOut, Detail, Create, Update, List schemas
 │       ├── routers/
@@ -62,6 +63,7 @@ pebble/
 │       │   ├── budget_plans.py      # /v1/budget-plans (CRUD, recurring generation)
 │       │   ├── categories.py        # /v1/categories (list all, update color)
 │       │   ├── dashboard.py         # /v1/dashboard (aggregated overview + net worth history)
+│       │   ├── ai_chat.py            # /v1/ai/* (chat SSE, conversations CRUD)
 │       │   ├── plaid.py             # /v1/plaid/* (link-token, exchange, sync, sync-all)
 │       │   └── transactions.py      # /v1/transactions (list, detail, create, update, delete)
 │       ├── services/
@@ -77,6 +79,11 @@ pebble/
 │       ├── middleware/
 │       │   └── auth.py              # JWT + API key auth dependencies
 │       ├── ai/                      # AI module (Phase 5)
+│       │   ├── __init__.py
+│       │   ├── prompts.py           # System prompt with persona + date placeholder
+│       │   ├── tools.py             # 8 tool definitions + handler registry
+│       │   ├── data_access.py       # Tool handler functions (parameterized queries)
+│       │   └── service.py           # AIChatService orchestrator (streaming + tool loop)
 │       └── utils/
 │           └── security.py          # bcrypt, JWT, Fernet, API key utils
 │
@@ -94,7 +101,7 @@ pebble/
 │   │   │   ├── index.tsx            # Dashboard (net worth chart, pie chart, budgets)
 │   │   │   ├── transactions.tsx     # Transaction list with search, filters & FAB
 │   │   │   ├── budgets.tsx          # Budget list with progress bars, expandable plans, swipe-to-delete
-│   │   │   ├── ai-chat.tsx          # AI chat (placeholder)
+│   │   │   ├── ai-chat.tsx          # AI chat (streaming, markdown, conversation history)
 │   │   │   └── settings.tsx         # Settings + logout
 │   │   ├── budget/
 │   │   │   ├── create.tsx           # Multi-step budget plan creation wizard
@@ -113,7 +120,8 @@ pebble/
 │   │       └── [id].tsx            # Asset detail, edit & delete screen
 │   └── src/
 │       ├── api/
-│       │   └── client.ts            # API client with auto JWT refresh
+│       │   ├── client.ts            # API client with auto JWT refresh
+│       │   └── streaming.ts         # SSE streaming client (XHR onprogress for React Native)
 │       ├── components/
 │       │   ├── CategoryAllocation.tsx # Category allocation list with inline amount inputs
 │       │   ├── ColorPickerModal.tsx   # Bottom-sheet color picker with 16 preset swatches
@@ -132,6 +140,7 @@ pebble/
 │       └── stores/
 │           ├── auth.ts              # Zustand auth store
 │           ├── accounts.ts          # Zustand accounts store (24h cache)
+│           ├── aiChat.ts            # Zustand AI chat store (streaming, conversations)
 │           ├── assets.ts            # Zustand assets store (CRUD)
 │           ├── budgets.ts           # Zustand budgets store
 │           ├── budgetPlans.ts       # Zustand budget plans store
@@ -209,8 +218,8 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 | 1 | Foundation — Docker, FastAPI, models, auth, Expo scaffold | **Done** |
 | 2 | Plaid + Transactions — bank linking, sync, transaction list | **Done** |
 | 3 | Budgets + Polish — CRUD, charts, search, error states | **Done** |
-| 4 | Budget Overhaul — unified budget plans, multi-month, recurring | **In progress** |
-| 5 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
+| 4 | Budget Overhaul — unified budget plans, multi-month, recurring | **Done** |
+| 5 | AI Assistant — tools, Claude integration, chat UI, SSE | **Done** |
 | 6 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
 | 7 | Iteration — dark mode, data import/export, social auth | Not started |
 
@@ -472,16 +481,47 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [x] Verified `useEffect` dependencies in `transaction/create.tsx` and `NetWorthChart.tsx` — all correct, no changes needed
 
 ### Phase 5 — AI Assistant
-- [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id
-- [ ] AI tool definitions (`ai/tools.py`) — 8 tools for Claude function-calling
-- [ ] AI system prompts (`ai/prompts.py`)
-- [ ] AI service orchestrator (`ai/service.py`) — message → tools → Claude → response
-- [ ] SSE streaming endpoint: `POST /v1/ai/chat`
-- [ ] AI schemas (`ai/schemas.py`)
-- [ ] Conversation persistence (save messages to chat_conversations/chat_messages)
-- [ ] Basic usage tracking (request + token counts)
-- [ ] Mobile: Chat UI with message bubbles, input, streaming display
-- [ ] Mobile: Conversation list/history
+- [x] AI data access layer (`ai/data_access.py`) — 8 parameterized query handlers scoped by user_id
+- [x] AI tool definitions (`ai/tools.py`) — 8 tools in Anthropic tool-use schema + handler registry
+- [x] AI system prompts (`ai/prompts.py`) — persona, formatting rules, `{current_date}` placeholder
+- [x] AI service orchestrator (`ai/service.py`) — tool loop (max 3 rounds), SSE streaming, auto-title generation
+- [x] SSE streaming endpoint: `POST /v1/ai/chat` with `StreamingResponse` (text/event-stream)
+- [x] Conversation CRUD endpoints: `GET /v1/ai/conversations`, `GET /v1/ai/conversations/{id}`, `DELETE /v1/ai/conversations/{id}`
+- [x] AI schemas (`schemas/ai_chat.py`) — ChatRequest, ConversationOut, MessageOut, response wrappers
+- [x] Conversation persistence (messages saved to chat_conversations/chat_messages)
+- [x] Usage tracking (request_count + token_count per billing period in api_usage)
+- [x] Mobile: SSE streaming client (`api/streaming.ts`) using XHR onprogress (fetch ReadableStream unsupported in RN)
+- [x] Mobile: Zustand AI chat store (`stores/aiChat.ts`) with optimistic message append, streaming state, abort handle
+- [x] Mobile: Full chat UI with message bubbles, markdown rendering (`react-native-marked`), keyboard avoidance
+- [x] Mobile: Conversation history modal with load/delete
+- [x] Mobile: Empty state with suggested prompt chips
+- [x] Mobile: Tool call indicator with pulse animation
+- [x] Mobile: React best practices audit — hoisted non-primitive props, ref-based transient values, explicit ternaries, stable FlatList callbacks
+
+## Completed (Phase 5)
+
+### Backend
+- [x] AI data access layer (`ai/data_access.py`) — 8 async tool handlers with parameterized queries scoped by user_id
+- [x] AI tool definitions (`ai/tools.py`) — 8 tools in Anthropic tool-use schema format + handler registry
+- [x] System prompt (`ai/prompts.py`) — concise financial assistant persona, dollar formatting, no fabrication, `{current_date}` placeholder
+- [x] Service orchestrator (`ai/service.py`) — tool loop (max 3 rounds), SSE streaming, auto-title generation, 20-message sliding window
+- [x] Schemas (`schemas/ai_chat.py`) — ChatRequest, ConversationOut, MessageOut, response wrappers
+- [x] Router (`routers/ai_chat.py`) — `POST /v1/ai/chat` (SSE), `GET /v1/ai/conversations`, `GET /v1/ai/conversations/{id}`, `DELETE /v1/ai/conversations/{id}`
+- [x] Conversation persistence (chat_conversations + chat_messages tables)
+- [x] Usage tracking (request_count + token_count per billing period in api_usage)
+- [x] Config: `anthropic_api_key`, `anthropic_model` (Haiku for cost-effective dev)
+- [x] Dependency: `anthropic>=0.40.0`
+
+### Mobile
+- [x] SSE streaming client (`api/streaming.ts`) — XHR `onprogress` (fetch ReadableStream unsupported in RN), typed callbacks, abort handle
+- [x] Zustand AI chat store (`stores/aiChat.ts`) — optimistic message append, streaming state, conversation CRUD, abort handle
+- [x] Full chat UI (`ai-chat.tsx`) — message bubbles, markdown rendering, keyboard avoidance, auto-scroll
+- [x] Markdown rendering with `react-native-marked` — custom theme matching app palette, transparent background fix
+- [x] Conversation history modal with load/delete
+- [x] Empty state with 4 suggested prompt chips
+- [x] Tool call indicator with pulse animation and contextual labels per tool
+- [x] React best practices: hoisted non-primitive props, ref-based transient values, explicit ternaries, stable FlatList callbacks
+- [x] Dependency: `react-native-marked`
 
 ### Phase 6 — Monetization + External API
 - [ ] Subscription tier enforcement (free vs. pro feature gating)

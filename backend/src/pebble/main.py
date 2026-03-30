@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from pebble.routers import accounts, assets, auth, budget_plans, budgets, categories, dashboard, plaid, transactions
+from pebble.routers import accounts, ai_chat, assets, auth, budget_plans, budgets, categories, dashboard, plaid, transactions
 
 app = FastAPI(title="Pebble", version="0.1.0")
 
@@ -14,6 +14,7 @@ app.add_middleware(
 )
 
 app.include_router(accounts.router)
+app.include_router(ai_chat.router)
 app.include_router(assets.router)
 app.include_router(auth.router)
 app.include_router(budget_plans.router)
