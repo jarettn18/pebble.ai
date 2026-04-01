@@ -1,0 +1,202 @@
+[
+  {
+    "title": "50/30/20 Budget Rule",
+    "content": "Allocate 50% of after-tax income to needs (housing, groceries, utilities, insurance), 30% to wants (dining out, entertainment, subscriptions), and 20% to savings and debt repayment. This simple framework helps ensure you're covering essentials while building financial security.",
+    "category": "budgeting"
+  },
+  {
+    "title": "Zero-Based Budgeting",
+    "content": "Assign every dollar of income a specific purpose so that income minus expenses equals zero. This method forces intentional spending decisions and eliminates the 'where did my money go?' problem. Start each month by listing all income, then allocate to categories until nothing is unassigned.",
+    "category": "budgeting"
+  },
+  {
+    "title": "Envelope Budgeting Method",
+    "content": "Divide your spending money into category 'envelopes' (physical or digital). When an envelope is empty, you stop spending in that category for the month. This tangible approach works well for discretionary categories like dining out, entertainment, and shopping.",
+    "category": "budgeting"
+  },
+  {
+    "title": "Track Every Expense",
+    "content": "Record all spending for at least one month to understand where your money actually goes. Most people are surprised to find that small recurring charges and impulse purchases add up significantly. Use this awareness to identify areas where you can cut back painlessly.",
+    "category": "budgeting"
+  },
+  {
+    "title": "Build a Starter Emergency Fund",
+    "content": "Before aggressively paying off debt, save $1,000 as a starter emergency fund. This small buffer prevents you from going deeper into debt when unexpected expenses arise, like a car repair or medical bill. Keep it in a separate savings account for easy access.",
+    "category": "saving"
+  },
+  {
+    "title": "Full Emergency Fund Goal",
+    "content": "Aim to save 3-6 months of essential expenses in a high-yield savings account. If you have a variable income, a single income household, or work in an unstable industry, target 6 months. This fund covers job loss, medical emergencies, and major unexpected expenses without touching investments or taking on debt.",
+    "category": "saving"
+  },
+  {
+    "title": "Pay Yourself First",
+    "content": "Set up automatic transfers to savings on payday, before spending on anything else. Treating savings like a non-negotiable bill ensures consistency. Even starting with a small amount like $50 per paycheck builds the habit and compounds over time.",
+    "category": "saving"
+  },
+  {
+    "title": "High-Yield Savings Accounts",
+    "content": "Keep your emergency fund and short-term savings in a high-yield savings account (HYSA) rather than a traditional savings account. HYSAs typically offer 4-5% APY compared to 0.01-0.5% at traditional banks. The difference can mean hundreds of dollars in extra interest per year on a $10,000 balance.",
+    "category": "saving"
+  },
+  {
+    "title": "Automate Your Savings",
+    "content": "Set up automatic recurring transfers from checking to savings accounts. Automation removes the willpower requirement and makes saving effortless. Consider scheduling transfers for the day after payday so the money moves before you're tempted to spend it.",
+    "category": "saving"
+  },
+  {
+    "title": "Debt Snowball Method",
+    "content": "List all debts from smallest to largest balance. Make minimum payments on everything, then throw all extra money at the smallest debt. Once it's paid off, roll that payment into the next smallest debt. This method builds momentum through quick wins that keep you motivated.",
+    "category": "debt"
+  },
+  {
+    "title": "Debt Avalanche Method",
+    "content": "List all debts from highest to lowest interest rate. Make minimum payments on everything, then put all extra money toward the highest-rate debt. This method saves the most money on interest over time. It's mathematically optimal but requires patience since the first debt paid off may take longer.",
+    "category": "debt"
+  },
+  {
+    "title": "Stop Adding New Debt",
+    "content": "While paying off existing debt, avoid taking on new debt. Consider removing saved credit cards from online stores, leaving cards at home, or temporarily freezing cards in water. Breaking the cycle of new debt is essential — otherwise you're filling a bucket with a hole in it.",
+    "category": "debt"
+  },
+  {
+    "title": "Negotiate Lower Interest Rates",
+    "content": "Call your credit card company and ask for a lower interest rate. If you've been a good customer with on-time payments, many issuers will reduce your rate. Even a 2-3% reduction can save hundreds of dollars over the life of your debt repayment.",
+    "category": "debt"
+  },
+  {
+    "title": "Balance Transfer Strategy",
+    "content": "If you have high-interest credit card debt, consider a balance transfer to a card with a 0% introductory APR (typically 12-21 months). This lets you pay down principal without interest accruing. Be mindful of the transfer fee (usually 3-5%) and have a plan to pay off the balance before the intro period ends.",
+    "category": "debt"
+  },
+  {
+    "title": "Subscription Audit",
+    "content": "Review all recurring subscriptions and memberships monthly. Cancel anything you haven't used in the past 30 days. The average American spends over $200/month on subscriptions, and many people underestimate their total by 2-3x. Check bank and credit card statements to find forgotten charges.",
+    "category": "spending"
+  },
+  {
+    "title": "24-Hour Rule for Purchases",
+    "content": "For any non-essential purchase over $50, wait 24 hours before buying. This cooling-off period eliminates most impulse purchases. If you still want the item after a day, it's more likely a considered decision rather than an emotional one.",
+    "category": "spending"
+  },
+  {
+    "title": "Cost Per Use Calculation",
+    "content": "Before making a purchase, estimate how many times you'll use the item and calculate the cost per use. A $200 jacket worn 100 times costs $2 per wear, while a $50 trendy top worn twice costs $25 per wear. This reframes purchases in terms of value rather than sticker price.",
+    "category": "spending"
+  },
+  {
+    "title": "Meal Planning to Reduce Food Costs",
+    "content": "Plan meals for the week before grocery shopping and buy only what's on your list. The average household wastes about 30% of the food they buy. Meal planning reduces waste, prevents expensive last-minute takeout, and can cut grocery bills by 20-30%.",
+    "category": "spending"
+  },
+  {
+    "title": "Use Cash-Back and Rewards Wisely",
+    "content": "If you use credit cards responsibly (paying the full balance monthly), maximize cash-back and rewards for purchases you'd make anyway. But never spend more just to earn rewards — the 1-5% back doesn't offset overspending. Treat rewards as a bonus, not a reason to buy.",
+    "category": "spending"
+  },
+  {
+    "title": "Understanding Your Credit Score",
+    "content": "Your credit score (300-850) is based on five factors: payment history (35%), amounts owed (30%), length of credit history (15%), new credit (10%), and credit mix (10%). Focus on the two biggest factors by always paying on time and keeping credit utilization below 30% of your limit.",
+    "category": "credit"
+  },
+  {
+    "title": "Keep Credit Utilization Low",
+    "content": "Try to use less than 30% of your total available credit, and ideally under 10% for the best score impact. If you have a $10,000 credit limit, keep your balance below $3,000 (ideally below $1,000). High utilization signals risk to lenders even if you pay in full each month — the balance reported is usually your statement balance.",
+    "category": "credit"
+  },
+  {
+    "title": "Never Miss a Payment",
+    "content": "Payment history is the single biggest factor in your credit score. Set up autopay for at least the minimum payment on all accounts. One missed payment can drop your score by 100+ points and stay on your report for 7 years. If you do miss a payment, pay it as soon as possible — it's less damaging if under 30 days late.",
+    "category": "credit"
+  },
+  {
+    "title": "Check Your Credit Report Annually",
+    "content": "Review your free credit report from each bureau at AnnualCreditReport.com at least once a year. Look for errors, unfamiliar accounts, or signs of identity theft. Dispute any inaccuracies — about 25% of reports contain errors that could affect your score.",
+    "category": "credit"
+  },
+  {
+    "title": "Sinking Funds for Planned Expenses",
+    "content": "Create separate savings 'buckets' for predictable irregular expenses: car maintenance, holiday gifts, annual insurance premiums, vacations, etc. Divide the annual cost by 12 and save that amount monthly. This prevents these known expenses from feeling like emergencies when they arrive.",
+    "category": "saving"
+  },
+  {
+    "title": "The Latte Factor",
+    "content": "Small daily expenses compound significantly over time. A $5 daily coffee habit costs $1,825 per year. This isn't about giving up coffee — it's about being intentional. Identify your personal 'latte factor' (any small recurring expense) and decide if it aligns with your priorities or if you'd rather redirect that money.",
+    "category": "spending"
+  },
+  {
+    "title": "Needs vs. Wants Assessment",
+    "content": "Before any purchase, ask: 'Is this a need or a want?' Needs are things required for basic living and work (housing, food, transportation, utilities). Wants are everything else. There's nothing wrong with spending on wants, but being honest about the distinction helps you make intentional choices.",
+    "category": "budgeting"
+  },
+  {
+    "title": "Income Diversification",
+    "content": "Don't rely on a single source of income. Consider building additional income streams: freelancing, part-time work, selling items, rental income, or side projects. Multiple income streams provide security if one source decreases and accelerate progress toward financial goals.",
+    "category": "income"
+  },
+  {
+    "title": "Negotiate Your Salary",
+    "content": "Most employers expect negotiation. Research market rates for your role on sites like Glassdoor and Levels.fyi. When negotiating, focus on the value you bring, not your personal needs. Even a $5,000 increase compounds over your career — over 30 years with typical raises, that's $200,000+ in additional earnings.",
+    "category": "income"
+  },
+  {
+    "title": "Review Bills and Negotiate Rates",
+    "content": "Call your insurance, internet, phone, and other service providers annually to ask for better rates. Mention competitor pricing. Many companies have retention departments authorized to offer discounts. This 30-minute annual habit can save $500-1,000 per year with no lifestyle change.",
+    "category": "spending"
+  },
+  {
+    "title": "Avoid Lifestyle Inflation",
+    "content": "When your income increases, resist the urge to proportionally increase spending. Instead, save or invest the majority of raises and bonuses. If you get a $500/month raise, commit to saving at least $300-400 of it. This is the single most powerful wealth-building habit.",
+    "category": "saving"
+  },
+  {
+    "title": "Know Your Net Worth",
+    "content": "Calculate your net worth monthly: total assets (cash, investments, property) minus total liabilities (debts). Tracking net worth over time gives a clear picture of financial progress that income alone doesn't show. A rising net worth means you're building wealth regardless of income level.",
+    "category": "budgeting"
+  },
+  {
+    "title": "Set Specific Financial Goals",
+    "content": "Replace vague goals like 'save more' with specific ones like 'save $5,000 for an emergency fund by December 2026.' Specific goals with deadlines are measurable, motivating, and actionable. Break big goals into monthly targets to make them manageable.",
+    "category": "budgeting"
+  },
+  {
+    "title": "The Power of Compound Interest",
+    "content": "Money grows exponentially over time when interest earns interest. Starting to save and invest early makes a dramatic difference. $200/month invested starting at age 25 can grow to over $500,000 by age 65, while starting at 35 yields roughly half that. Time in the market matters more than timing the market.",
+    "category": "saving"
+  },
+  {
+    "title": "Employer 401(k) Match",
+    "content": "If your employer offers a 401(k) match, contribute at least enough to get the full match — it's essentially free money. A typical 50% match on 6% of salary means a $60,000 earner gets $1,800/year free. Not taking the match is leaving guaranteed 50-100% returns on the table.",
+    "category": "saving"
+  },
+  {
+    "title": "Build a Financial Calendar",
+    "content": "Mark important financial dates: bill due dates, subscription renewals, insurance open enrollment, tax deadlines, credit card statement dates, and annual rate review reminders. Proactive awareness prevents late fees, missed opportunities, and financial surprises.",
+    "category": "budgeting"
+  },
+  {
+    "title": "Cash-Only Spending Periods",
+    "content": "Try using cash only for discretionary spending for one month. Physical cash makes spending feel more real than digital payments. Studies show people spend 12-18% less when using cash. It's an effective reset if you've been overspending in certain categories.",
+    "category": "spending"
+  },
+  {
+    "title": "Protect Against Identity Theft",
+    "content": "Freeze your credit with all three bureaus (Equifax, Experian, TransUnion) — it's free and prevents unauthorized accounts. Use unique passwords and two-factor authentication for financial accounts. Monitor your accounts regularly for unauthorized transactions. Early detection limits damage.",
+    "category": "credit"
+  },
+  {
+    "title": "Insurance as Financial Protection",
+    "content": "Adequate insurance prevents financial catastrophe. Prioritize health insurance, auto insurance, and renters/homeowners insurance. Consider term life insurance if others depend on your income, and disability insurance to protect your earning power. The cost of insurance is almost always less than the cost of the event it covers.",
+    "category": "spending"
+  },
+  {
+    "title": "Avoid Payday Loans",
+    "content": "Payday loans charge extremely high interest rates, often equivalent to 400% APR or more. They create cycles of debt that are very difficult to escape. If you need emergency cash, consider alternatives: negotiating payment plans with creditors, borrowing from family, credit union personal loans, or local assistance programs.",
+    "category": "debt"
+  },
+  {
+    "title": "Tax-Advantaged Accounts",
+    "content": "Maximize tax-advantaged accounts before taxable investing. Options include 401(k), IRA/Roth IRA, HSA (triple tax advantage), and 529 plans for education. These accounts let your money grow tax-free or tax-deferred, which significantly boosts long-term returns compared to taxable accounts.",
+    "category": "saving"
+  }
+]

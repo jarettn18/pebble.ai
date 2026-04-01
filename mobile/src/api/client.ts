@@ -120,4 +120,47 @@ export async function apiRequest<T = unknown>(
   return res.json();
 }
 
+export async function apiUpload<T = unknown>(
+  path: string,
+  formData: FormData
+): Promise<T> {
+  const requestHeaders: Record<string, string> = {};
+
+  const { access } = await getTokens();
+  if (access) {
+    requestHeaders["Authorization"] = `Bearer ${access}`;
+  }
+
+  let res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: requestHeaders,
+    body: formData,
+  });
+
+  // If 401, try refreshing the token once
+  if (res.status === 401) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      requestHeaders["Authorization"] = `Bearer ${newToken}`;
+      res = await fetch(`${API_URL}${path}`, {
+        method: "POST",
+        headers: requestHeaders,
+        body: formData,
+      });
+    }
+  }
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Upload failed" }));
+    const detail = error.detail;
+    const message =
+      Array.isArray(detail)
+        ? detail.map((e: { msg?: string }) => e.msg).join(", ")
+        : detail || `HTTP ${res.status}`;
+    throw new Error(message);
+  }
+
+  return res.json();
+}
+
 export { saveTokens, clearTokens, getTokens };

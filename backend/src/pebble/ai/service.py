@@ -10,6 +10,7 @@ from anthropic import AsyncAnthropic
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pebble.ai.profile import build_financial_profile
 from pebble.ai.prompts import SYSTEM_PROMPT
 from pebble.ai.tools import TOOL_DEFINITIONS, TOOL_HANDLERS
 from pebble.config import settings
@@ -49,12 +50,17 @@ class AIChatService:
             # 2. Load message history (sliding window)
             history = await self._load_history(conversation.id, db)
 
-            # 3. Build messages for Claude
+            # 3. Build financial profile and system prompt
+            financial_profile = await build_financial_profile(user_id, db)
+            system_prompt = SYSTEM_PROMPT.format(
+                current_date=date.today().isoformat(),
+                financial_profile=financial_profile,
+            )
+
+            # 4. Build messages for Claude
             messages = history + [{"role": "user", "content": message}]
 
-            system_prompt = SYSTEM_PROMPT.format(current_date=date.today().isoformat())
-
-            # 4. Tool execution loop
+            # 5. Tool execution loop
             total_input_tokens = 0
             total_output_tokens = 0
             assistant_text = ""
@@ -95,21 +101,21 @@ class AIChatService:
                             assistant_text += block.text
                     break
 
-            # 5. Stream the final response in chunks for smooth UI
+            # 6. Stream the final response in chunks for smooth UI
             chunk_size = 20
             for i in range(0, len(assistant_text), chunk_size):
                 yield _sse("delta", content=assistant_text[i : i + chunk_size])
 
-            # 6. Persist messages
+            # 7. Persist messages
             await self._save_message(conversation.id, "user", message, db)
             await self._save_message(conversation.id, "assistant", assistant_text, db)
 
-            # 7. Auto-title on first exchange
+            # 8. Auto-title on first exchange
             is_first = len(history) == 0
             if is_first and assistant_text:
                 await self._auto_title(conversation, message, db)
 
-            # 8. Track usage
+            # 9. Track usage
             await self._track_usage(
                 user_id, total_input_tokens + total_output_tokens, db
             )

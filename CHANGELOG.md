@@ -1,5 +1,106 @@
 # Changelog
 
+## 2026-03-31 — CSV Transaction Import + AI Enhancements
+
+### CSV Transaction Import (Full Stack)
+
+Complete CSV import pipeline allowing users to upload bank transaction exports.
+
+#### Backend — CSV Import Service (`services/csv_import.py`)
+- `parse_csv()` — auto-detects delimiter (comma/semicolon/tab) via `csv.Sniffer`, decodes UTF-8/latin-1, strips BOM
+- Column auto-detection via case-insensitive header matching:
+  - Date: `date`, `transaction date`, `posting date`, `posted date`, `settlement date`
+  - Name: `description`, `name`, `memo`, `payee`, `narrative`, `details`
+  - Amount: `amount`, `transaction amount`, `value`
+  - Debit/Credit split: `debit`/`credit`, `withdrawals`/`deposits`, `money out`/`money in`
+  - Category: `category`, `type`, `transaction type`
+- Flexible date parsing (5 formats: ISO, US, short-year US, UK, ISO-slash)
+- Amount parsing handles `$`, commas, and parentheses-as-negative `(50.00)`
+- Debit/credit column merging: debit = positive, credit = negative (Plaid convention)
+- `import_transactions()` — bulk insert with duplicate detection (user_id + account_id + date + name + amount), category resolution via case-insensitive name match
+- Security: name truncation to 255 chars, error message sanitization (50 char limit), 5MB file cap, 5,000 row cap
+
+#### Backend — CSV Import Router (`routers/csv_import.py`)
+- `POST /v1/transactions/import-csv` — multipart form-data (file + account_id)
+- File validation: `.csv` extension required, 5MB max, non-empty
+- Account ownership validation before import
+- Returns `CSVImportResponse(imported, skipped, failed, errors[])`
+
+#### Backend — CSV Import Schemas (`schemas/csv_import.py`)
+- `CSVImportResponse(imported: int, skipped: int, failed: int, errors: list[CSVImportError])`
+- `CSVImportError(row: int, reason: str)`
+
+#### Backend — Test Suite (`tests/test_csv_import.py`)
+- 29 tests across 3 layers:
+  - Unit: `_detect_columns` (4 tests), `_parse_date` (4 tests), `_parse_amount` (5 tests)
+  - Unit: `parse_csv` (9 tests) — standard CSV, debit/credit, empty file, missing columns, BOM, semicolons, blank rows
+  - Integration: API endpoint (7 tests) — successful import, non-CSV rejection, empty file, invalid account, duplicates, bad rows, auth
+- Test fixtures: `fixtures/sample_transactions.csv` (15 rows, standard format), `fixtures/sample_debit_credit.csv` (5 rows, bank export format)
+
+#### Mobile — Import Screen (`app/import-csv.tsx`)
+- Account picker: horizontal chip list from `useAccountsStore`
+- File picker: `expo-document-picker` with CSV type filter
+- Selected file display with clear button
+- Import button with `ActivityIndicator` loading state
+- Results view: imported/skipped/failed counts, expandable error list with row numbers
+- Done button refreshes transactions + dashboard stores, then navigates back
+
+#### Mobile — API Client (`src/api/client.ts`)
+- New `apiUpload<T>(path, formData)` function for multipart form uploads
+- No explicit `Content-Type` header (lets fetch set multipart boundary)
+- Auth token injection + 401 refresh handling (same pattern as `apiRequest`)
+
+#### Mobile — Dashboard Integration
+- "Import Transactions" option added to plus-button dropdown (`app/(tabs)/index.tsx`)
+- Icon: `file-upload-outline`, navigates to `/import-csv`
+- `import-csv` screen registered in `_layout.tsx` with header
+
+#### Mobile — Dependencies
+- Added `expo-document-picker` (SDK 55 compatible)
+
+### AI Enhancements
+
+#### Financial Profile (`ai/profile.py`)
+- Compact financial snapshot injected into every AI chat system prompt
+- Includes: net worth, monthly spending/income, top 5 categories, budget status, trends, top 6 accounts, top 4 assets
+- Cached in Redis with 300s TTL (key: `financial_profile:{user_id}`)
+
+#### RAG Financial Tips (`ai/rag.py`)
+- Semantic search over curated financial education tips using pgvector
+- Embedding model: `all-MiniLM-L6-v2` (384-dim vectors), lazy-loaded
+- Cosine distance search, returns top 3 most relevant tips
+- Seeding script (`ai/rag_seed.py`) + curated tips (`ai/tips_data.json`)
+- `FinancialTip` model with `Vector(384)` column
+
+#### Tool & Prompt Updates
+- 9th tool added: `search_financial_tips` — pgvector semantic search for advisory questions
+- System prompt: `{financial_profile}` placeholder, instruction to use tips tool for general advice
+- `data_access.py`: `search_financial_tips()` handler with disclaimer about general advice
+
+#### Mock Streaming (`api/streaming.ts`)
+- `USE_MOCK` toggle for frontend development without backend
+- Mock responses for spending breakdown, budget tracking, top merchants, period comparisons, income summary
+- Keyword-based mock response picker, simulated tool calls and streamed text chunks
+
+### Infrastructure
+
+#### Docker
+- PostgreSQL image changed from `postgres:16-alpine` to `pgvector/pgvector:pg16` for vector extension support
+
+#### Database Migrations
+- `d1e2f3a4b5c6` — `financial_tips` table with pgvector extension + `Vector(384)` embedding column
+- `cb597e98746b` — merge migration (budget_plans + financial_tips branches)
+
+#### Request Logging (`main.py`)
+- `LoggingMiddleware` — logs all HTTP requests with method, path, status code, duration (ms precision)
+- DEBUG level: sanitized headers (authorization redacted), query params, response size
+- Configurable log level via `LOG_LEVEL` env var
+
+#### .gitignore
+- Added: `llm-pricing-comparison.xlsx`, `pebble-cost-estimate.xlsx`, `system-design.mermaid`, `.~lock.*`
+
+---
+
 ## 2026-03-28 — Phase 5: AI Financial Assistant (Full Stack)
 
 ### Backend — AI Module

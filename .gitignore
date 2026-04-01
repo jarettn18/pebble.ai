@@ -32,3 +32,9 @@ android/
 # OS
 .DS_Store
 Thumbs.db
+
+# Project docs / estimates
+llm-pricing-comparison.xlsx
+pebble-cost-estimate.xlsx
+system-design.mermaid
+.~lock.*

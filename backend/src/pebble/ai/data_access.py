@@ -12,6 +12,8 @@ from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from pebble.ai.rag import search_tips
+
 from pebble.models.account import Account
 from pebble.models.asset import Asset
 from pebble.models.budget import Budget
@@ -440,4 +442,20 @@ async def compare_spending(
         },
         "difference": str(diff),
         "pct_change": pct_change,
+    }
+
+
+# ──────────────────────────────────────────────────────────────
+# 9. search_financial_tips
+# ──────────────────────────────────────────────────────────────
+
+async def search_financial_tips(
+    user_id: str, db: AsyncSession, *, query: str,
+) -> dict:
+    tips = await search_tips(query, db, limit=3)
+    if not tips:
+        return {"tips": [], "note": "No relevant tips found."}
+    return {
+        "tips": tips,
+        "note": "These are general financial education tips, not personalized advice.",
     }

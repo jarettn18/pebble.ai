@@ -114,6 +114,20 @@ TOOL_DEFINITIONS: list[dict] = [
             "required": ["period1_start", "period1_end", "period2_start", "period2_end"],
         },
     },
+    {
+        "name": "search_financial_tips",
+        "description": "Search for general financial tips and strategies. Use when the user asks for advice on budgeting, saving, debt management, or financial planning. Returns relevant tips from a curated knowledge base.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The financial topic or question to search for tips about",
+                },
+            },
+            "required": ["query"],
+        },
+    },
 ]
 
 # Maps tool name → async handler function
@@ -126,4 +140,5 @@ TOOL_HANDLERS = {
     "get_recent_transactions": data_access.get_recent_transactions,
     "get_income_summary": data_access.get_income_summary,
     "compare_spending": data_access.compare_spending,
+    "search_financial_tips": data_access.search_financial_tips,
 }
