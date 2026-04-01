@@ -1,5 +1,221 @@
 # Changelog
 
+## 2026-03-31 — CSV Transaction Import + AI Enhancements
+
+### CSV Transaction Import (Full Stack)
+
+Complete CSV import pipeline allowing users to upload bank transaction exports.
+
+#### Backend — CSV Import Service (`services/csv_import.py`)
+- `parse_csv()` — auto-detects delimiter (comma/semicolon/tab) via `csv.Sniffer`, decodes UTF-8/latin-1, strips BOM
+- Column auto-detection via case-insensitive header matching:
+  - Date: `date`, `transaction date`, `posting date`, `posted date`, `settlement date`
+  - Name: `description`, `name`, `memo`, `payee`, `narrative`, `details`
+  - Amount: `amount`, `transaction amount`, `value`
+  - Debit/Credit split: `debit`/`credit`, `withdrawals`/`deposits`, `money out`/`money in`
+  - Category: `category`, `type`, `transaction type`
+- Flexible date parsing (5 formats: ISO, US, short-year US, UK, ISO-slash)
+- Amount parsing handles `$`, commas, and parentheses-as-negative `(50.00)`
+- Debit/credit column merging: debit = positive, credit = negative (Plaid convention)
+- `import_transactions()` — bulk insert with duplicate detection (user_id + account_id + date + name + amount), category resolution via case-insensitive name match
+- Security: name truncation to 255 chars, error message sanitization (50 char limit), 5MB file cap, 5,000 row cap
+
+#### Backend — CSV Import Router (`routers/csv_import.py`)
+- `POST /v1/transactions/import-csv` — multipart form-data (file + account_id)
+- File validation: `.csv` extension required, 5MB max, non-empty
+- Account ownership validation before import
+- Returns `CSVImportResponse(imported, skipped, failed, errors[])`
+
+#### Backend — CSV Import Schemas (`schemas/csv_import.py`)
+- `CSVImportResponse(imported: int, skipped: int, failed: int, errors: list[CSVImportError])`
+- `CSVImportError(row: int, reason: str)`
+
+#### Backend — Test Suite (`tests/test_csv_import.py`)
+- 29 tests across 3 layers:
+  - Unit: `_detect_columns` (4 tests), `_parse_date` (4 tests), `_parse_amount` (5 tests)
+  - Unit: `parse_csv` (9 tests) — standard CSV, debit/credit, empty file, missing columns, BOM, semicolons, blank rows
+  - Integration: API endpoint (7 tests) — successful import, non-CSV rejection, empty file, invalid account, duplicates, bad rows, auth
+- Test fixtures: `fixtures/sample_transactions.csv` (15 rows, standard format), `fixtures/sample_debit_credit.csv` (5 rows, bank export format)
+
+#### Mobile — Import Screen (`app/import-csv.tsx`)
+- Account picker: horizontal chip list from `useAccountsStore`
+- File picker: `expo-document-picker` with CSV type filter
+- Selected file display with clear button
+- Import button with `ActivityIndicator` loading state
+- Results view: imported/skipped/failed counts, expandable error list with row numbers
+- Done button refreshes transactions + dashboard stores, then navigates back
+
+#### Mobile — API Client (`src/api/client.ts`)
+- New `apiUpload<T>(path, formData)` function for multipart form uploads
+- No explicit `Content-Type` header (lets fetch set multipart boundary)
+- Auth token injection + 401 refresh handling (same pattern as `apiRequest`)
+
+#### Mobile — Dashboard Integration
+- "Import Transactions" option added to plus-button dropdown (`app/(tabs)/index.tsx`)
+- Icon: `file-upload-outline`, navigates to `/import-csv`
+- `import-csv` screen registered in `_layout.tsx` with header
+
+#### Mobile — Dependencies
+- Added `expo-document-picker` (SDK 55 compatible)
+
+### AI Enhancements
+
+#### Financial Profile (`ai/profile.py`)
+- Compact financial snapshot injected into every AI chat system prompt
+- Includes: net worth, monthly spending/income, top 5 categories, budget status, trends, top 6 accounts, top 4 assets
+- Cached in Redis with 300s TTL (key: `financial_profile:{user_id}`)
+
+#### RAG Financial Tips (`ai/rag.py`)
+- Semantic search over curated financial education tips using pgvector
+- Embedding model: `all-MiniLM-L6-v2` (384-dim vectors), lazy-loaded
+- Cosine distance search, returns top 3 most relevant tips
+- Seeding script (`ai/rag_seed.py`) + curated tips (`ai/tips_data.json`)
+- `FinancialTip` model with `Vector(384)` column
+
+#### Tool & Prompt Updates
+- 9th tool added: `search_financial_tips` — pgvector semantic search for advisory questions
+- System prompt: `{financial_profile}` placeholder, instruction to use tips tool for general advice
+- `data_access.py`: `search_financial_tips()` handler with disclaimer about general advice
+
+#### Mock Streaming (`api/streaming.ts`)
+- `USE_MOCK` toggle for frontend development without backend
+- Mock responses for spending breakdown, budget tracking, top merchants, period comparisons, income summary
+- Keyword-based mock response picker, simulated tool calls and streamed text chunks
+
+### Infrastructure
+
+#### Docker
+- PostgreSQL image changed from `postgres:16-alpine` to `pgvector/pgvector:pg16` for vector extension support
+
+#### Database Migrations
+- `d1e2f3a4b5c6` — `financial_tips` table with pgvector extension + `Vector(384)` embedding column
+- `cb597e98746b` — merge migration (budget_plans + financial_tips branches)
+
+#### Request Logging (`main.py`)
+- `LoggingMiddleware` — logs all HTTP requests with method, path, status code, duration (ms precision)
+- DEBUG level: sanitized headers (authorization redacted), query params, response size
+- Configurable log level via `LOG_LEVEL` env var
+
+#### .gitignore
+- Added: `llm-pricing-comparison.xlsx`, `pebble-cost-estimate.xlsx`, `system-design.mermaid`, `.~lock.*`
+
+---
+
+## 2026-03-28 — Phase 5: AI Financial Assistant (Full Stack)
+
+### Backend — AI Module
+
+Built the complete AI backend with Claude tool-use (function-calling) architecture.
+
+#### AI Data Access Layer (`ai/data_access.py`)
+- 8 async tool handler functions, all scoped by `user_id` with parameterized queries:
+  - `get_spending_by_category` — category breakdown with percentages for a date range
+  - `get_spending_over_time` — monthly spending totals (default 6 months, max 12)
+  - `get_top_merchants` — merchants ranked by total spend + transaction count
+  - `get_account_balances` — account names, types, balances + net worth (includes assets)
+  - `get_budget_status` — budget vs actual per category with percentage used
+  - `get_recent_transactions` — filtered transaction list (capped at 25 rows for token efficiency)
+  - `get_income_summary` — income total + breakdown by category
+  - `compare_spending` — side-by-side category spending between two periods with difference + percentage change
+- All return plain dicts with string-formatted dollar amounts, no UUIDs, pre-computed percentages
+
+#### AI Tool Definitions (`ai/tools.py`)
+- `TOOL_DEFINITIONS` — 8 tools in Anthropic tool-use JSON schema format with typed parameters and descriptions
+- `TOOL_HANDLERS` — dict mapping tool name → async handler function in data_access.py
+
+#### AI System Prompt (`ai/prompts.py`)
+- `SYSTEM_PROMPT` with `{current_date}` placeholder for temporal awareness
+- Persona: concise financial assistant, uses dollar formatting, never fabricates numbers, no investment advice
+
+#### AI Service Orchestrator (`ai/service.py`)
+- `AIChatService` class with `AsyncAnthropic` client
+- `stream_chat(user_id, conversation_id, message, db)` → `AsyncGenerator[str, None]`
+- Tool execution loop (max 3 rounds): `client.messages.create()` with tools → execute handlers → feed tool_result back → repeat until text response
+- Final response streamed via `client.messages.stream()` with chunked text deltas (20 chars)
+- SSE event format: `data: {"type":"delta|tool_call|done|error",...}\n\n`
+- Conversation persistence: creates/loads `ChatConversation`, saves user + assistant messages to `chat_messages`
+- Auto-generates conversation title after first exchange (separate small Claude call)
+- Usage tracking: increments `ApiUsage.request_count` and `token_count` per billing period
+- 20-message sliding window for context management
+- Error handling: tool failures returned as `tool_result` so Claude responds gracefully; API errors → SSE error event
+
+#### AI Schemas (`schemas/ai_chat.py`)
+- `ChatRequest(message: str, conversation_id: str | None)`
+- `ConversationOut(id, title, created_at, last_message_preview)`
+- `ConversationListResponse(conversations: list[ConversationOut])`
+- `MessageOut(id, role, content, created_at)`
+- `ConversationDetailResponse(id, title, messages: list[MessageOut])`
+
+#### AI Router (`routers/ai_chat.py`)
+- `POST /v1/ai/chat` — accepts `ChatRequest`, returns `StreamingResponse` (text/event-stream) with `Cache-Control: no-cache` and `X-Accel-Buffering: no`
+- `GET /v1/ai/conversations` — list conversations (most recent first)
+- `GET /v1/ai/conversations/{id}` — get conversation with messages
+- `DELETE /v1/ai/conversations/{id}` — deletes messages + conversation
+- All endpoints use `Depends(get_current_user)` for JWT auth
+
+#### Configuration
+- Added `anthropic_api_key` and `anthropic_model` to `config.py` (currently `claude-haiku-4-5-20251001` for cost-effective development)
+- Added `anthropic>=0.40.0` to `pyproject.toml` dependencies
+- Registered `ai_chat` router in `main.py`
+
+### Mobile — SSE Streaming Client (`api/streaming.ts`)
+- Uses `XMLHttpRequest` with `onprogress` for chunk reading — React Native's `fetch` doesn't support `ReadableStream` (`response.body` is null)
+- Parses SSE `data: {...}\n\n` events, dispatches to typed callbacks: `onDelta`, `onToolCall`, `onDone`, `onError`
+- Returns `{ abort: () => void }` handle for cancellation
+- Reuses auth token logic from `client.ts` (SecureStore on native, sessionStorage on web)
+- 2-minute timeout for tool execution + streaming
+
+### Mobile — Zustand AI Chat Store (`stores/aiChat.ts`)
+- State: `conversations`, `currentConversationId`, `messages`, `isStreaming`, `activeToolCall`, `error`, `abortHandle`
+- `sendMessage(text)` — optimistic append of user + empty assistant message → `streamChat()` → update assistant content on each delta → finalize on done
+- `loadConversations()` — fetches conversation list (silent fail, non-critical)
+- `loadConversation(id)` — loads full conversation with messages
+- `startNewConversation()` — aborts any active stream, resets state
+- `deleteConversation(id)` — deletes via API, removes from local state
+- `stopStreaming()` — aborts XHR, marks streaming messages as complete
+
+### Mobile — Chat UI (`ai-chat.tsx`)
+Full chat screen with streaming markdown rendering, conversation management, and React best practices.
+
+#### Components (all top-level `memo`)
+- **`MessageBubble`** — user messages as plain `<Text>` (right-aligned, primary background), assistant messages as `<Markdown>` from `react-native-marked` (left-aligned, surface background)
+- **`ToolCallPill`** — pulse animation (Animated.loop) showing contextual labels per tool (e.g., "Checking budget status...", "Looking up transactions...")
+- **`ConversationItem`** — history list item with title, preview, and delete button
+
+#### Main Screen
+- Inverted-style `FlatList` for messages with auto-scroll on new content
+- `KeyboardAvoidingView` with iOS padding offset
+- Empty state with robot icon, "Pebble AI" title, and 4 suggested prompt chips
+- Text input with send button (disabled while streaming), 500 char max
+- Header buttons: History (left, opens modal), New Chat (right)
+- Conversation history bottom sheet modal with `FlatList`, close button
+
+#### Markdown Rendering
+- `react-native-marked` (pure JS, no Node stdlib dependencies — replaced `react-native-markdown-display` which required `punycode`)
+- Custom `mdTheme` styles: text, strong, em, h1-h3, li, code, codespan, paragraph, link — all using app's font families and colors
+- `flatListProps` override with `backgroundColor: "transparent"` to prevent white box (library hardcodes `#ffffff` on its internal FlatList)
+- `theme.colors` override for text, code, link, border colors matching primary palette
+
+#### React Best Practices Applied
+- **Hoisted non-primitive props** (`rerender-memo-with-default-value`): `mdFlatListProps`, `mdColorTheme` extracted to module-level constants — prevents `memo` defeat on `MessageBubble`
+- **Ref-based transient values** (`rerender-use-ref-transient-values`): `inputTextRef` for `handleSend` — avoids recreating callback on every keystroke
+- **Removed unused state subscription** (`rerender-defer-reads`): `currentConversationId` removed from destructuring
+- **Explicit ternaries** (`rendering-conditional-render`): replaced `&&` with `? ... : null` for conditional rendering
+- **Stable FlatList callbacks**: `conversationKeyExtractor` and `renderConversation` extracted as `useCallback` refs (was inline in history modal)
+
+### Dependencies
+- Added `anthropic>=0.40.0` (backend)
+- Added `react-native-marked` (mobile) — replaced `react-native-markdown-display` due to Node stdlib incompatibility
+
+### Bug Fixes
+- **Fixed "streaming not supported" error** — React Native's `fetch` doesn't support `ReadableStream`. Rewrote `streaming.ts` from `fetch` + `getReader()` to `XMLHttpRequest` with `onprogress` events. Updated store from `AbortController` to `{ abort: () => void }` return type.
+- **Fixed `react-native-markdown-display` bundling failure** — package depends on `markdown-it` which requires Node's `punycode` stdlib module (unavailable in RN runtime). Replaced with `react-native-marked` (pure JS).
+- **Fixed Docker container not picking up new npm package** — anonymous volume for `node_modules` in docker-compose.yml prevented host-installed packages from appearing. Fixed with `docker compose up --build -V mobile -d`.
+- **Fixed white box around markdown** — `react-native-marked` hardcodes `backgroundColor: "#ffffff"` on its internal `FlatList` (line 43-44 of Markdown.tsx). Fixed by passing `flatListProps={{ style: { backgroundColor: "transparent" } }}` which spreads after the default style.
+- **Fixed markdown text not following theme colors** — `react-native-marked` has a separate `theme` prop with `colors` object for base text/link/code colors; the `styles` prop alone doesn't override them.
+
+---
+
 ## 2026-03-26 — Phase 4 (cont.): React Best Practices Refactor, Animation Fixes & UX Cleanup
 
 ### Mobile — Full React Best Practices Refactor (12 files)

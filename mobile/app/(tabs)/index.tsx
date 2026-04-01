@@ -444,21 +444,10 @@ export default function DashboardScreen() {
                   )
                 }
               >
-                <View style={progressBarStyles.header}>
-                  <View>
-                    <Text style={progressBarStyles.label}>
-                      {b.category_name || "Uncategorized"}
-                    </Text>
-                    <Text style={[progressBarStyles.value, styles.budgetCategoryValue, catOver && styles.negative]}>
-                      {catOver
-                        ? `${formatCurrency(Math.floor(Math.abs(catRemaining)))} over`
-                        : `${formatCurrency(Math.floor(catRemaining))} left`}
-                      {" "}
-                      <Text style={progressBarStyles.valueSub}>
-                        of {formatCurrency(Math.floor(catBudgeted))}
-                      </Text>
-                    </Text>
-                  </View>
+                <View style={[progressBarStyles.header, styles.budgetCategoryHeader]}>
+                  <Text style={styles.budgetCategoryName}>
+                    {b.category_name || "Uncategorized"}
+                  </Text>
                   <TouchableOpacity
                     style={styles.viewTxnBtn}
                     hitSlop={HIT_SLOP_8}
@@ -486,6 +475,15 @@ export default function DashboardScreen() {
                     ]}
                   />
                 </View>
+                <Text style={[styles.budgetCategorySpent, catOver && styles.negative]}>
+                  {catOver
+                    ? `${formatCurrency(Math.floor(Math.abs(catRemaining)))} over`
+                    : `${formatCurrency(Math.floor(catRemaining))} left`}
+                  {" "}
+                  <Text style={styles.budgetCategorySpentSub}>
+                    of {formatCurrency(Math.floor(catBudgeted))}
+                  </Text>
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -622,6 +620,18 @@ export default function DashboardScreen() {
             >
               <MaterialCommunityIcons name="home-outline" size={20} color={colors.primary} />
               <Text style={styles.addMenuText}>Add Property or Vehicle</Text>
+            </TouchableOpacity>
+            <View style={styles.addMenuDivider} />
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              onPress={() => {
+                setShowAddMenu(false);
+                router.push("/import-csv");
+              }}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="file-upload-outline" size={20} color={colors.primary} />
+              <Text style={styles.addMenuText}>Import Transactions</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -796,8 +806,24 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  budgetCategoryValue: {
-    fontSize: 16,
+  budgetCategoryHeader: {
+    alignItems: "center",
+  },
+  budgetCategoryName: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+  },
+  budgetCategorySpent: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+    marginTop: 6,
+  },
+  budgetCategorySpentSub: {
+    fontSize: 13,
+    fontWeight: "400",
+    color: colors.textSecondary,
   },
   viewTxnBtn: {
     padding: 4,

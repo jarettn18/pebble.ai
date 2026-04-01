@@ -101,6 +101,16 @@ function AuthGate() {
           headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
         }}
       />
+      <Stack.Screen
+        name="import-csv"
+        options={{
+          headerShown: true,
+          title: "Import Transactions",
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+        }}
+      />
     </Stack>
   );
 }

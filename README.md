@@ -10,7 +10,7 @@ Mint-like budgeting app with an integrated AI financial assistant. The AI assist
 |-------|-----------|
 | Mobile | Expo (React Native) with Expo Router |
 | Backend | Python 3.13 + FastAPI |
-| Database | PostgreSQL 16 (async via asyncpg + SQLAlchemy 2.0) |
+| Database | PostgreSQL 16 + pgvector (async via asyncpg + SQLAlchemy 2.0) |
 | Migrations | Alembic |
 | Cache/Rate Limit | Redis 7 |
 | Bank Data | Plaid |
@@ -43,6 +43,7 @@ pebble/
 │       │   ├── budget_plan.py       # BudgetPlan + BudgetPlanAllocation (unified plans)
 │       │   ├── asset.py             # Asset (properties + vehicles, net worth)
 │       │   ├── chat.py              # ChatConversation + ChatMessage
+│       │   ├── financial_tip.py     # FinancialTip (pgvector Vector(384) embedding)
 │       │   └── api_usage.py         # API usage metering
 │       ├── schemas/                 # Pydantic request/response
 │       │   ├── auth.py              # Register, Login, Token, User schemas
@@ -51,7 +52,9 @@ pebble/
 │       │   ├── budget.py            # BudgetOut, Create/Update, ListResponse
 │       │   ├── budget_plan.py       # BudgetPlanOut, Create/Update, Allocation schemas
 │       │   ├── category.py          # CategoryOut, CategoryListResponse
+│       │   ├── csv_import.py        # CSVImportResponse, CSVImportError
 │       │   ├── dashboard.py         # DashboardResponse, NetWorthHistory, SpendingByCategory, AssetSummary
+│       │   ├── ai_chat.py            # ChatRequest, ConversationOut, MessageOut schemas
 │       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
 │       │   └── transaction.py       # TransactionOut, Detail, Create, Update, List schemas
 │       ├── routers/
@@ -62,6 +65,8 @@ pebble/
 │       │   ├── budget_plans.py      # /v1/budget-plans (CRUD, recurring generation)
 │       │   ├── categories.py        # /v1/categories (list all, update color)
 │       │   ├── dashboard.py         # /v1/dashboard (aggregated overview + net worth history)
+│       │   ├── ai_chat.py            # /v1/ai/* (chat SSE, conversations CRUD)
+│       │   ├── csv_import.py         # /v1/transactions/import-csv (CSV file upload + parsing)
 │       │   ├── plaid.py             # /v1/plaid/* (link-token, exchange, sync, sync-all)
 │       │   └── transactions.py      # /v1/transactions (list, detail, create, update, delete)
 │       ├── services/
@@ -73,10 +78,20 @@ pebble/
 │       │   ├── categories.py        # Category queries, Plaid category map
 │       │   ├── dashboard.py         # Aggregated dashboard + net worth history
 │       │   ├── plaid.py             # Plaid API integration (link, exchange, sync, balance refresh)
+│       │   ├── csv_import.py         # CSV parsing, column auto-detection, bulk transaction import
 │       │   └── transactions.py      # Transaction queries, detail, create, update, delete
 │       ├── middleware/
 │       │   └── auth.py              # JWT + API key auth dependencies
 │       ├── ai/                      # AI module (Phase 5)
+│       │   ├── __init__.py
+│       │   ├── prompts.py           # System prompt with persona + financial profile placeholder
+│       │   ├── tools.py             # 9 tool definitions + handler registry
+│       │   ├── data_access.py       # Tool handler functions (parameterized queries)
+│       │   ├── service.py           # AIChatService orchestrator (streaming + tool loop)
+│       │   ├── profile.py           # Financial profile builder (cached in Redis, 300s TTL)
+│       │   ├── rag.py               # RAG module — pgvector semantic search for financial tips
+│       │   ├── rag_seed.py          # Seeding script to populate tips with embeddings
+│       │   └── tips_data.json       # Curated financial education tips
 │       └── utils/
 │           └── security.py          # bcrypt, JWT, Fernet, API key utils
 │
@@ -94,7 +109,7 @@ pebble/
 │   │   │   ├── index.tsx            # Dashboard (net worth chart, pie chart, budgets)
 │   │   │   ├── transactions.tsx     # Transaction list with search, filters & FAB
 │   │   │   ├── budgets.tsx          # Budget list with progress bars, expandable plans, swipe-to-delete
-│   │   │   ├── ai-chat.tsx          # AI chat (placeholder)
+│   │   │   ├── ai-chat.tsx          # AI chat (streaming, markdown, conversation history)
 │   │   │   └── settings.tsx         # Settings + logout
 │   │   ├── budget/
 │   │   │   ├── create.tsx           # Multi-step budget plan creation wizard
@@ -109,11 +124,13 @@ pebble/
 │   │   ├── budget-transactions.tsx # Budget category drill-down (transactions for a budget)
 │   │   ├── account-transactions.tsx# Account drill-down (balance + transactions for an account)
 │   │   ├── add-asset.tsx           # Add asset form (properties + vehicles)
+│   │   ├── import-csv.tsx          # CSV transaction import (file picker, account selector, results)
 │   │   └── asset/
 │   │       └── [id].tsx            # Asset detail, edit & delete screen
 │   └── src/
 │       ├── api/
-│       │   └── client.ts            # API client with auto JWT refresh
+│       │   ├── client.ts            # API client with auto JWT refresh
+│       │   └── streaming.ts         # SSE streaming client (XHR onprogress for React Native)
 │       ├── components/
 │       │   ├── CategoryAllocation.tsx # Category allocation list with inline amount inputs
 │       │   ├── ColorPickerModal.tsx   # Bottom-sheet color picker with 16 preset swatches
@@ -132,6 +149,7 @@ pebble/
 │       └── stores/
 │           ├── auth.ts              # Zustand auth store
 │           ├── accounts.ts          # Zustand accounts store (24h cache)
+│           ├── aiChat.ts            # Zustand AI chat store (streaming, conversations)
 │           ├── assets.ts            # Zustand assets store (CRUD)
 │           ├── budgets.ts           # Zustand budgets store
 │           ├── budgetPlans.ts       # Zustand budget plans store
@@ -143,7 +161,7 @@ pebble/
 
 ## Database Schema
 
-12 tables, all with UUID primary keys:
+13 tables, all with UUID primary keys:
 
 | Table | Purpose |
 |-------|---------|
@@ -158,6 +176,7 @@ pebble/
 | `assets` | Properties & vehicles with estimated values (contributes to net worth) |
 | `chat_conversations` | AI chat conversation threads |
 | `chat_messages` | Individual messages (user/assistant roles) |
+| `financial_tips` | Curated tips with pgvector embeddings for RAG semantic search |
 | `api_usage` | Token + request counts per user per billing period |
 
 ---
@@ -175,14 +194,19 @@ pebble/
 
 ## AI Assistant Architecture (Phase 5)
 
-Claude tool-use (function-calling) — not RAG, not direct SQL.
+Claude tool-use (function-calling) + RAG for financial education tips.
 
-**Flow**: User message → Claude picks tools → Backend executes parameterized queries (scoped by user_id) → Results fed back to Claude → Natural language response streamed via SSE
+**Flow**: User message → Financial profile injected into system prompt (cached 300s in Redis) → Claude picks tools → Backend executes parameterized queries (scoped by user_id) → Results fed back to Claude → Natural language response streamed via SSE
 
-**Tools**:
+**Tools** (9):
 - `get_spending_by_category`, `get_spending_over_time`, `get_top_merchants`
 - `get_account_balances`, `get_budget_status`, `get_recent_transactions`
 - `get_income_summary`, `compare_spending`
+- `search_financial_tips` (pgvector semantic search over curated tips)
+
+**RAG**: Financial tips stored with 384-dim embeddings (all-MiniLM-L6-v2), searched via pgvector cosine distance. Returns top 3 relevant tips for advisory questions.
+
+**Financial Profile**: Compact snapshot of user's financial state (net worth, spending/income, budget status, top categories, accounts, assets) injected into every chat for context-aware responses.
 
 **Dual exposure**:
 - Internal: `/v1/ai/chat` (JWT auth, mobile app)
@@ -209,10 +233,10 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 | 1 | Foundation — Docker, FastAPI, models, auth, Expo scaffold | **Done** |
 | 2 | Plaid + Transactions — bank linking, sync, transaction list | **Done** |
 | 3 | Budgets + Polish — CRUD, charts, search, error states | **Done** |
-| 4 | Budget Overhaul — unified budget plans, multi-month, recurring | **In progress** |
-| 5 | AI Assistant — tools, Claude integration, chat UI, SSE | Not started |
+| 4 | Budget Overhaul — unified budget plans, multi-month, recurring | **Done** |
+| 5 | AI Assistant — tools, Claude integration, chat UI, SSE, RAG tips, financial profile | **Done** |
 | 6 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
-| 7 | Iteration — dark mode, data import/export, social auth | Not started |
+| 7 | Iteration — dark mode, data import/export, social auth | **In Progress** |
 
 ---
 
@@ -358,7 +382,7 @@ Claude tool-use (function-calling) — not RAG, not direct SQL.
 
 ### General
 - [ ] Mobile: Add "Report a Bug or Leave Feedback" section with link to GitHub Issues
-- [ ] API: Add logging everywhere
+- [x] API: Add logging everywhere (LoggingMiddleware with request timing, sanitized headers)
 - [ ] Ask Claude about password hashing vulnerabilities
 - [ ] MFA phone authentication
 
@@ -472,16 +496,69 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [x] Verified `useEffect` dependencies in `transaction/create.tsx` and `NetWorthChart.tsx` — all correct, no changes needed
 
 ### Phase 5 — AI Assistant
-- [ ] AI data access layer (`ai/data_access.py`) — parameterized queries scoped by user_id
-- [ ] AI tool definitions (`ai/tools.py`) — 8 tools for Claude function-calling
-- [ ] AI system prompts (`ai/prompts.py`)
-- [ ] AI service orchestrator (`ai/service.py`) — message → tools → Claude → response
-- [ ] SSE streaming endpoint: `POST /v1/ai/chat`
-- [ ] AI schemas (`ai/schemas.py`)
-- [ ] Conversation persistence (save messages to chat_conversations/chat_messages)
-- [ ] Basic usage tracking (request + token counts)
-- [ ] Mobile: Chat UI with message bubbles, input, streaming display
-- [ ] Mobile: Conversation list/history
+- [x] AI data access layer (`ai/data_access.py`) — 8 parameterized query handlers scoped by user_id
+- [x] AI tool definitions (`ai/tools.py`) — 8 tools in Anthropic tool-use schema + handler registry
+- [x] AI system prompts (`ai/prompts.py`) — persona, formatting rules, `{current_date}` placeholder
+- [x] AI service orchestrator (`ai/service.py`) — tool loop (max 3 rounds), SSE streaming, auto-title generation
+- [x] SSE streaming endpoint: `POST /v1/ai/chat` with `StreamingResponse` (text/event-stream)
+- [x] Conversation CRUD endpoints: `GET /v1/ai/conversations`, `GET /v1/ai/conversations/{id}`, `DELETE /v1/ai/conversations/{id}`
+- [x] AI schemas (`schemas/ai_chat.py`) — ChatRequest, ConversationOut, MessageOut, response wrappers
+- [x] Conversation persistence (messages saved to chat_conversations/chat_messages)
+- [x] Usage tracking (request_count + token_count per billing period in api_usage)
+- [x] Mobile: SSE streaming client (`api/streaming.ts`) using XHR onprogress (fetch ReadableStream unsupported in RN)
+- [x] Mobile: Zustand AI chat store (`stores/aiChat.ts`) with optimistic message append, streaming state, abort handle
+- [x] Mobile: Full chat UI with message bubbles, markdown rendering (`react-native-marked`), keyboard avoidance
+- [x] Mobile: Conversation history modal with load/delete
+- [x] Mobile: Empty state with suggested prompt chips
+- [x] Mobile: Tool call indicator with pulse animation
+- [x] Mobile: React best practices audit — hoisted non-primitive props, ref-based transient values, explicit ternaries, stable FlatList callbacks
+
+## Completed (Phase 5)
+
+### Backend
+- [x] AI data access layer (`ai/data_access.py`) — 8 async tool handlers with parameterized queries scoped by user_id
+- [x] AI tool definitions (`ai/tools.py`) — 8 tools in Anthropic tool-use schema format + handler registry
+- [x] System prompt (`ai/prompts.py`) — concise financial assistant persona, dollar formatting, no fabrication, `{current_date}` placeholder
+- [x] Service orchestrator (`ai/service.py`) — tool loop (max 3 rounds), SSE streaming, auto-title generation, 20-message sliding window
+- [x] Schemas (`schemas/ai_chat.py`) — ChatRequest, ConversationOut, MessageOut, response wrappers
+- [x] Router (`routers/ai_chat.py`) — `POST /v1/ai/chat` (SSE), `GET /v1/ai/conversations`, `GET /v1/ai/conversations/{id}`, `DELETE /v1/ai/conversations/{id}`
+- [x] Conversation persistence (chat_conversations + chat_messages tables)
+- [x] Usage tracking (request_count + token_count per billing period in api_usage)
+- [x] Config: `anthropic_api_key`, `anthropic_model` (Haiku for cost-effective dev)
+- [x] Dependency: `anthropic>=0.40.0`
+- [x] Financial profile builder (`ai/profile.py`) — compact financial snapshot cached in Redis (300s TTL)
+- [x] RAG module (`ai/rag.py`) — pgvector semantic search for financial tips (all-MiniLM-L6-v2, 384-dim)
+- [x] Financial tips seeding (`ai/rag_seed.py` + `ai/tips_data.json`) — curated tips with embeddings
+- [x] `FinancialTip` model with pgvector `Vector(384)` column
+- [x] 9th tool: `search_financial_tips` — semantic search over curated financial education content
+- [x] System prompt enhanced with `{financial_profile}` placeholder for context-aware responses
+- [x] Request logging middleware — method, path, status, duration (ms), sanitized headers at DEBUG level
+- [x] Docker: PostgreSQL image upgraded to `pgvector/pgvector:pg16` for vector extension support
+
+### Mobile
+- [x] SSE streaming client (`api/streaming.ts`) — XHR `onprogress` (fetch ReadableStream unsupported in RN), typed callbacks, abort handle
+- [x] Zustand AI chat store (`stores/aiChat.ts`) — optimistic message append, streaming state, conversation CRUD, abort handle
+- [x] Full chat UI (`ai-chat.tsx`) — message bubbles, markdown rendering, keyboard avoidance, auto-scroll
+- [x] Markdown rendering with `react-native-marked` — custom theme matching app palette, transparent background fix
+- [x] Conversation history modal with load/delete
+- [x] Empty state with 4 suggested prompt chips
+- [x] Tool call indicator with pulse animation and contextual labels per tool
+- [x] React best practices: hoisted non-primitive props, ref-based transient values, explicit ternaries, stable FlatList callbacks
+- [x] Dependency: `react-native-marked`
+- [x] Mock AI responses in `streaming.ts` for frontend development without backend (`USE_MOCK` toggle)
+
+### CSV Transaction Import
+- [x] Backend: CSV import service (`services/csv_import.py`) — auto-detect columns, flexible date parsing, debit/credit handling, duplicate detection, bulk insert
+- [x] Backend: `POST /v1/transactions/import-csv` endpoint (multipart form-data: file + account_id)
+- [x] Backend: Response schema with imported/skipped/failed counts + per-row error details
+- [x] Backend: Security hardening — name truncation (255 chars), error message sanitization, 5MB/5K row limits
+- [x] Backend: Test suite (`tests/test_csv_import.py`) — 29 tests covering parsing, validation, edge cases, API integration
+- [x] Backend: Test fixtures — standard CSV and debit/credit format samples
+- [x] Mobile: `expo-document-picker` integration for native file selection
+- [x] Mobile: `apiUpload()` function in API client for multipart form data with auth
+- [x] Mobile: Import screen (`import-csv.tsx`) — account picker, file picker, loading state, results view with expandable errors
+- [x] Mobile: "Import Transactions" option added to dashboard plus-button dropdown
+- [x] Mobile: Post-import refresh of transactions + dashboard stores
 
 ### Phase 6 — Monetization + External API
 - [ ] Subscription tier enforcement (free vs. pro feature gating)
@@ -492,7 +569,6 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [ ] Mobile: Subscription/upgrade screen
 - [ ] Mobile: API key management in settings
 - [ ] API documentation for external consumers
-- [ ] AI: Bill negotiation, Credit optimization
 
 
 ### Phase 7 — Iteration
@@ -501,10 +577,12 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [ ] API: Rate limiting on API calls
 - [ ] Mobile: Support for dark mode
 - [ ] Mobile: Update Transaction Categories to mimic Mint Category Schema
-- [ ] Mobile: Data imports and exports
+- [x] Mobile: Data imports (CSV import with auto-column detection)
+- [ ] Mobile: Data exports
 - [ ] Mobile: Sign in Google/Apple
 - [ ] Mobile: Update Settings screen to support account changes
 - [ ] Mobile: Remove FAB for adding transactions
+- [ ] AI: Bill negotiation, Credit optimization
 ---
 
 ## Running Locally

@@ -405,7 +405,7 @@ const BudgetCategoryRow = memo(function BudgetCategoryRow({
       onPress={() => router.push(transactionUrl)}
       activeOpacity={0.7}
     >
-      <View style={progressBarStyles.header}>
+      <View style={[progressBarStyles.header, styles.categoryHeader]}>
         <View style={styles.labelRow}>
           <TouchableOpacity
             style={[styles.iconCircle, { backgroundColor: iconBg }]}
@@ -421,18 +421,9 @@ const BudgetCategoryRow = memo(function BudgetCategoryRow({
               color={catColor}
             />
           </TouchableOpacity>
-          <View style={styles.labelText}>
-            <Text style={progressBarStyles.label}>{categoryName}</Text>
-            <Text style={[progressBarStyles.value, overBudget && styles.overText]}>
-              {overBudget
-                ? `${formatCurrency(Math.floor(Math.abs(remaining)))} over`
-                : `${formatCurrency(Math.floor(remaining))} left`}
-              {" "}
-              <Text style={progressBarStyles.valueSub}>
-                of {formatCurrency(Math.floor(budgeted))}
-              </Text>
-            </Text>
-          </View>
+          <Text style={styles.labelText}>
+            {categoryName}
+          </Text>
         </View>
         <TouchableOpacity
           hitSlop={HIT_SLOP_8}
@@ -443,7 +434,7 @@ const BudgetCategoryRow = memo(function BudgetCategoryRow({
         >
           <MaterialCommunityIcons
             name="format-list-bulleted"
-            size={22}
+            size={25}
             color={colors.textMuted}
           />
         </TouchableOpacity>
@@ -457,6 +448,15 @@ const BudgetCategoryRow = memo(function BudgetCategoryRow({
           ]}
         />
       </View>
+      <Text style={[styles.spentText, overBudget && styles.overText]}>
+        {overBudget
+          ? `${formatCurrency(Math.floor(Math.abs(remaining)))} over`
+          : `${formatCurrency(Math.floor(remaining))} left`}
+        {" "}
+        <Text style={styles.spentTextSub}>
+          of {formatCurrency(Math.floor(budgeted))}
+        </Text>
+      </Text>
     </TouchableOpacity>
   );
 });
@@ -943,6 +943,9 @@ const styles = StyleSheet.create({
   budgetCard: {
     marginHorizontal: 24,
   },
+  categoryHeader: {
+    alignItems: "center",
+  },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -950,6 +953,9 @@ const styles = StyleSheet.create({
   },
   labelText: {
     flex: 1,
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
   },
   iconCircle: {
     width: 48,
@@ -981,6 +987,17 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 8,
     textAlign: "center",
+  },
+  spentText: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+    marginTop: 6,
+  },
+  spentTextSub: {
+    fontSize: 13,
+    fontWeight: "400",
+    color: colors.textSecondary,
   },
   overText: {
     color: colors.error,
