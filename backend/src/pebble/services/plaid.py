@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from datetime import date as date_type, datetime, timezone
@@ -13,6 +14,7 @@ from pebble.config import settings
 from pebble.models.account import Account, PlaidItem
 from pebble.models.transaction import Transaction
 from pebble.services.categories import get_category_id_by_name, get_plaid_category_map
+from pebble.services.rate_limiter import AsyncRateLimiter
 from pebble.utils.security import decrypt_value, encrypt_value
 
 PLAID_ENV_URLS = {
@@ -22,35 +24,27 @@ PLAID_ENV_URLS = {
 }
 
 
+_plaid_limiter = AsyncRateLimiter(rate=5, period=1.0)
+
+PLAID_MAX_RETRIES = 3
+PLAID_BACKOFF_BASE = 1.0  # seconds
+
+
 def _base_url() -> str:
     return PLAID_ENV_URLS[settings.plaid_env]
 
 
 async def create_link_token(user_id: str) -> dict:
-    url = f"{_base_url()}/link/token/create"
-    payload = {
-        "client_id": settings.plaid_client_id,
-        "secret": settings.plaid_secret,
-        "client_name": "Pebble",
-        "language": "en",
-        "country_codes": ["US"],
-        "products": ["transactions"],
-        "user": {
-            "client_user_id": user_id,
+    data = await _plaid_post(
+        "/link/token/create",
+        {
+            "client_name": "Pebble",
+            "language": "en",
+            "country_codes": ["US"],
+            "products": ["transactions"],
+            "user": {"client_user_id": user_id},
         },
-    }
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(url, json=payload, timeout=90)
-
-    if resp.status_code != 200:
-        detail = resp.json().get("error_message", "Failed to create link token")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=detail,
-        )
-
-    data = resp.json()
+    )
     return {"link_token": data["link_token"], "expiration": data["expiration"]}
 
 
@@ -58,14 +52,34 @@ async def _plaid_post(path: str, payload: dict) -> dict:
     url = f"{_base_url()}{path}"
     payload = {"client_id": settings.plaid_client_id, "secret": settings.plaid_secret, **payload}
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(url, json=payload, timeout=90)
+    await _plaid_limiter.acquire()
 
-    if resp.status_code != 200:
-        detail = resp.json().get("error_message", f"Plaid error on {path}")
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+    for attempt in range(1, PLAID_MAX_RETRIES + 1):
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, json=payload, timeout=90)
 
-    return resp.json()
+        if resp.status_code == 429:
+            if attempt == PLAID_MAX_RETRIES:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Plaid rate limit exceeded, please try again later",
+                )
+            retry_after = resp.headers.get("Retry-After")
+            if retry_after:
+                wait = float(retry_after)
+            else:
+                wait = PLAID_BACKOFF_BASE * (2 ** (attempt - 1))
+            logger.warning("Plaid 429 on %s, retrying in %.1fs (attempt %d/%d)", path, wait, attempt, PLAID_MAX_RETRIES)
+            await asyncio.sleep(wait)
+            continue
+
+        if resp.status_code != 200:
+            detail = resp.json().get("error_message", f"Plaid error on {path}")
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+
+        return resp.json()
+
+    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Plaid error on {path}")
 
 
 async def exchange_public_token(

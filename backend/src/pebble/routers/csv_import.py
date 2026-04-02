@@ -6,13 +6,21 @@ from pebble.middleware.auth import get_current_user
 from pebble.models.user import User
 from pebble.schemas.csv_import import CSVImportResponse
 from pebble.services.csv_import import import_transactions, parse_csv, validate_account
+from pebble.services.rate_limiter import RateLimitDependency
 
 router = APIRouter(prefix="/v1/transactions", tags=["transactions"])
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 
+_import_limiter = RateLimitDependency(max_requests=3, window_seconds=60)
 
-@router.post("/import-csv", response_model=CSVImportResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/import-csv",
+    response_model=CSVImportResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(_import_limiter)],
+)
 async def import_csv_endpoint(
     file: UploadFile = File(...),
     account_id: str = Form(...),

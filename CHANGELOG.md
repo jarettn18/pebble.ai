@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-04-01 — Rate Limiting
+
+### Plaid API Rate Limiting (`services/plaid.py`)
+- Token-bucket outbound throttle: 5 requests/second to Plaid API via `AsyncRateLimiter`
+- Retry with exponential backoff on 429 responses (up to 3 attempts, 1s/2s/4s delays)
+- Respects Plaid `Retry-After` header when present
+- Refactored `create_link_token()` to use shared `_plaid_post()` helper (was duplicating HTTP logic)
+
+### Per-Endpoint Rate Limiting (`services/rate_limiter.py`)
+- New `RateLimitDependency` class: sliding-window per-key rate limiter as a FastAPI dependency
+- Identifies callers by user ID (decoded from JWT) for authenticated endpoints, IP address for public endpoints
+
+#### Rate Limits Applied
+| Endpoint | Limit | Key |
+|----------|-------|-----|
+| `POST /v1/auth/login` | 5/min | IP |
+| `POST /v1/auth/register` | 3/min | IP |
+| `POST /v1/ai/chat` | 10/min | User ID |
+| `POST /v1/transactions/import-csv` | 3/min | User ID |
+
+- All rate-limited endpoints return `429 Too Many Requests` when exceeded
+
+### Test Fixes
+- Fixed pre-existing sync transaction test failures (missing mock results for `get_category_id_by_name` calls)
+- Added `_reset_rate_limiters` autouse fixture in `conftest.py` to clear limiter state between tests
+- Updated `_mock_plaid_client` helper to work with retry loop context managers
+- All 41 backend tests passing
+
 ## 2026-03-31 — CSV Transaction Import + AI Enhancements
 
 ### CSV Transaction Import (Full Stack)

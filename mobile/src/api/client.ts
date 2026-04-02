@@ -163,4 +163,4 @@ export async function apiUpload<T = unknown>(
   return res.json();
 }
 
-export { saveTokens, clearTokens, getTokens };
+export { saveTokens, clearTokens, getTokens, refreshAccessToken };

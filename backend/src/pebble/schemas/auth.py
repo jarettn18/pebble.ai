@@ -1,3 +1,4 @@
+import datetime
 import re
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -40,5 +41,66 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     subscription_tier: str
+    date_of_birth: datetime.date | None = None
+    occupation: str | None = None
+    annual_income: int | None = None
+    state: str | None = None
+    marital_status: str | None = None
+    dependents: int | None = None
+    financial_goals: list[str] | None = None
 
     model_config = {"from_attributes": True}
+
+
+US_STATES = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+    "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+    "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+    "DC",
+}
+
+MARITAL_STATUSES = {"single", "married", "divorced", "widowed", "separated"}
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: str | None = Field(None, min_length=1, max_length=255)
+    date_of_birth: datetime.date | None = None
+    occupation: str | None = Field(None, max_length=100)
+    annual_income: int | None = Field(None, ge=0)
+    state: str | None = Field(None, min_length=2, max_length=2)
+    marital_status: str | None = None
+    dependents: int | None = Field(None, ge=0)
+    financial_goals: list[str] | None = None
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def validate_dob(cls, v: datetime.date | None) -> datetime.date | None:
+        if v is None:
+            return v
+        if v > datetime.date.today():
+            raise ValueError("Date of birth cannot be in the future")
+        if v.year < 1900:
+            raise ValueError("Date of birth must be after 1900")
+        return v
+
+    @field_validator("state")
+    @classmethod
+    def validate_state(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        upper = v.upper()
+        if upper not in US_STATES:
+            raise ValueError(f"Invalid US state abbreviation: {v}")
+        return upper
+
+    @field_validator("marital_status")
+    @classmethod
+    def validate_marital_status(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        lower = v.lower()
+        if lower not in MARITAL_STATUSES:
+            raise ValueError(f"Must be one of: {', '.join(sorted(MARITAL_STATUSES))}")
+        return lower

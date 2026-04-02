@@ -1,7 +1,9 @@
+import datetime
 import enum
 import uuid
 
-from sqlalchemy import Enum, String
+from sqlalchemy import Date, Enum, Integer, String
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from pebble.models.base import Base, TimestampMixin, gen_uuid
@@ -24,6 +26,15 @@ class User(Base, TimestampMixin):
         Enum(SubscriptionTier), default=SubscriptionTier.free
     )
     api_key_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+
+    # Profile fields
+    date_of_birth: Mapped[datetime.date | None] = mapped_column(Date)
+    occupation: Mapped[str | None] = mapped_column(String(100))
+    annual_income: Mapped[int | None] = mapped_column(Integer)
+    state: Mapped[str | None] = mapped_column(String(2))
+    marital_status: Mapped[str | None] = mapped_column(String(20))
+    dependents: Mapped[int | None] = mapped_column(Integer, default=0)
+    financial_goals: Mapped[list[str] | None] = mapped_column(ARRAY(String))
 
     plaid_items: Mapped[list["PlaidItem"]] = relationship(back_populates="user")  # noqa: F821
     accounts: Mapped[list["Account"]] = relationship(back_populates="user")  # noqa: F821

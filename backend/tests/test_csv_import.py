@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
+from pebble.main import app
 from pebble.services.csv_import import parse_csv, _detect_columns, _parse_date, _parse_amount
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -103,26 +106,22 @@ class TestParseCSV:
         assert rows[2]["amount_raw"] == "-3200.00"
 
     def test_empty_csv_raises(self):
-        from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc:
             parse_csv(b"")
         assert exc.value.status_code == 400
 
     def test_headers_only_raises(self):
-        from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc:
             parse_csv(b"Date,Description,Amount\n")
         assert exc.value.status_code == 400
 
     def test_missing_date_column_raises(self):
-        from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc:
             parse_csv(b"Name,Amount\nTest,100\n")
         assert exc.value.status_code == 400
         assert "date" in exc.value.detail.lower()
 
     def test_missing_amount_column_raises(self):
-        from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc:
             parse_csv(b"Date,Name\n2026-01-01,Test\n")
         assert exc.value.status_code == 400
@@ -305,9 +304,6 @@ class TestImportCSVEndpoint:
         assert data["errors"][0]["row"] == 2
 
     def test_requires_auth(self):
-        from fastapi.testclient import TestClient
-        from pebble.main import app
-
         app.dependency_overrides.clear()
         with TestClient(app) as client:
             resp = client.post(
