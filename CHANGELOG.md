@@ -1,5 +1,90 @@
 # Changelog
 
+## 2026-04-02 — Financial Health Score + Demographic Benchmarks
+
+### Financial Health Score (Full Stack)
+
+Deterministic 0-100 score that distills a user's financial profile into a single actionable metric with letter grade (A-F). Score is computed server-side, cached in Redis (1hr TTL), and stored as daily snapshots in PostgreSQL for historical charting.
+
+#### Score Components & Weights
+
+| Component | Weight | Scoring Logic |
+|-----------|--------|---------------|
+| Savings Rate | 0.25 | `(income - spending) / income`. 20%+ = 100, 0% = 40, negative = 0 |
+| Debt-to-Income | 0.20 | `total_debt / annual_income`. 0 DTI = 100, 0.36+ = 0 |
+| Emergency Fund | 0.20 | `liquid_assets / avg_monthly_spending`. 6+ months = 100, 0 = 0 |
+| Budget Adherence | 0.15 | % of budgets on-track. All on track = 100, all over = 0 |
+| Net Worth Trend | 0.10 | 3-month lookback. Positive growth → up to 100, flat = 60, declining → lower |
+| Diversification | 0.10 | Variety of account subtypes + asset ownership. 5+ types = 100 |
+
+- **Weight redistribution**: Components lacking data have their weight redistributed proportionally to active components
+- **`data_completeness`** field (0.0-1.0) tells the frontend how much data informed the score
+- **Credit score slot reserved**: `credit_score_component` column exists (nullable), weight 0.0 — ready for future activation
+
+#### Backend — Database Model (`models/health_score.py`)
+- `FinancialHealthScore` table: `overall_score`, `grade`, 6 component score columns, `credit_score_component` (nullable), `data_completeness`, `component_details` (JSON), `calculated_at`
+- Daily snapshots: new row written only if last snapshot is >24 hours old
+- Alembic migration: `a1b2c3d4e5f6_add_financial_health_scores_table`
+
+#### Backend — Scoring Service (`services/health_score.py`)
+- `get_health_score(user_id, db)` — main entry, checks Redis cache → computes if miss → stores snapshot
+- `calculate_health_score(user_id, db)` — orchestrates 6 sub-calculators + benchmark insights
+- 6 pure calculation functions (`_calc_savings_rate`, `_calc_debt_to_income`, `_calc_emergency_fund`, `_calc_budget_adherence`, `_calc_net_worth_trend`, `_calc_diversification`)
+- Reuses `get_dashboard()` and `get_net_worth_history()` for raw data — no duplicate queries
+- Income handling: uses `max(transaction_income, profile_income / 12)` to avoid penalizing irregular earners
+- `invalidate_health_score_cache(user_id)` for cache busting on data changes
+
+#### Backend — Schemas (`schemas/health_score.py`)
+- `ComponentScore` — name, label, score, weight, detail text, status, has_data
+- `BenchmarkInsight` — category, title, description, percentile, comparison, source, age_bracket_label
+- `HealthScoreResponse` — overall_score, grade, components[], insights[], data_completeness, missing_data[], calculated_at
+- `HealthScoreHistoryResponse` — period, scores[{date, score, grade}]
+
+#### Backend — Router (`routers/health_score.py`)
+- `GET /v1/health-score` — returns current score (from cache or freshly computed)
+- `GET /v1/health-score/history?period=3M` — returns historical score snapshots for charting
+
+#### Mobile — Health Score Detail Screen (`app/health-score.tsx`)
+- Score ring: circular gauge with overall score + letter grade, color-coded (green A → red F)
+- Component breakdown: horizontal progress bars per component with score, status color, detail text
+- "How You Compare" section: demographic benchmark insights with percentile bars and source citations
+- "Improve Your Score" section: actionable hints for components with missing data
+- Score history: vertical bar chart of historical snapshots
+- "Ask AI for Tips" button: navigates to AI chat with prefilled prompt
+
+#### Mobile — Dashboard Card (`app/(tabs)/index.tsx`)
+- Compact health score card between budget summary and accounts section
+- Shows score number + letter grade, color-coded
+- Data completeness hint when <100%
+- Tappable → navigates to health score detail screen
+
+#### Mobile — Zustand Store (`stores/healthScore.ts`)
+- State: `overallScore`, `grade`, `components`, `dataCompleteness`, `missingData`, `insights`, `history`
+- Actions: `load()` (fetches score), `loadHistory(period)` (fetches historical snapshots)
+
+### Demographic Benchmark Insights
+
+Static benchmark module comparing users to their age group using public government data.
+
+#### Backend — Benchmarks Module (`services/benchmarks.py`)
+- **Income percentiles by age** (7 brackets, U.S. Census Bureau CPS 2023): e.g., "Your $80K income puts you at the 85th percentile among 25-29 year olds"
+- **Net worth percentiles by age** (6 brackets, Federal Reserve SCF 2022): e.g., "Your $45K net worth is above the median of $39K for households under 35"
+- **Savings rate by age** (6 brackets, BLS Consumer Expenditure Survey 2023): e.g., "Your 18% savings rate beats the median of 8% for your age group"
+- Linear interpolation between percentile thresholds (p10/p25/p50/p75/p90/p95) for precise ranking
+- All insights include data source citation
+- `get_all_insights(age, annual_income, net_worth, savings_rate_pct)` → list of serializable dicts
+- Requires `date_of_birth` in user profile; gracefully returns empty list if missing
+
+### AI Integration
+
+#### New Tool: `get_financial_health_score`
+- 10th tool added to `ai/tools.py` — no parameters, returns full score breakdown + demographic insights
+- Handler in `data_access.py` returns simplified view: components (label, score, status, detail) + `demographic_insights` (description, percentile, comparison, source)
+- System prompt updated: Claude narrates score components, identifies weak areas, provides actionable tips, weaves in demographic comparisons with source citations
+- Financial profile (`ai/profile.py`): health score summary line appended (e.g., "HEALTH SCORE: 74/100 (C)")
+
+---
+
 ## 2026-04-01 — Rate Limiting
 
 ### Plaid API Rate Limiting (`services/plaid.py`)

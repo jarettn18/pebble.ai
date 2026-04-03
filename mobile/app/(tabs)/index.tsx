@@ -27,6 +27,7 @@ import PieChart from "../../src/components/PieChart";
 import NetWorthChart from "../../src/components/NetWorthChart";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useBudgetPlansStore } from "../../src/stores/budgetPlans";
+import { useHealthScoreStore } from "../../src/stores/healthScore";
 import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../../src/theme";
 
 const PIE_COLORS = colors.spendingPalette;
@@ -117,6 +118,13 @@ export default function DashboardScreen() {
   } = useDashboardStore();
 
   const { plans } = useBudgetPlansStore();
+  const {
+    overallScore: healthScore,
+    grade: healthGrade,
+    dataCompleteness: healthCompleteness,
+    isLoading: healthLoading,
+    load: loadHealthScore,
+  } = useHealthScoreStore();
   const refreshAccounts = useAccountsStore((s) => s.refresh);
   const syncTransactions = useTransactionsStore((s) => s.syncAndRefresh);
 
@@ -128,6 +136,8 @@ export default function DashboardScreen() {
     useCallback(() => {
       // Refresh dashboard data (picks up color changes, new transactions, etc.)
       loadDashboard(undefined, undefined, true);
+      // Load health score in background
+      loadHealthScore();
       // Refresh Plaid balances in background (doesn't block render)
       apiRequest("/v1/plaid/refresh-balances", { method: "POST" }).catch(() => {});
     }, [])
@@ -504,6 +514,64 @@ export default function DashboardScreen() {
             />
           </TouchableOpacity>
         </View>
+      )}
+
+      {/* Health Score Card */}
+      {healthScore !== null && (
+        <TouchableOpacity
+          style={styles.healthScoreCard}
+          onPress={() => router.push("/health-score")}
+          activeOpacity={0.7}
+        >
+          <View style={styles.healthScoreLeft}>
+            <Text style={styles.healthScoreLabel}>FINANCIAL HEALTH</Text>
+            <Text style={styles.healthScoreDetail}>
+              {healthCompleteness < 1
+                ? `Based on ${Math.round(healthCompleteness * 100)}% of data`
+                : "Tap to see full breakdown"}
+            </Text>
+          </View>
+          <View style={styles.healthScoreRight}>
+            <Text
+              style={[
+                styles.healthScoreValue,
+                {
+                  color:
+                    healthGrade === "A"
+                      ? "#2e7d32"
+                      : healthGrade === "B"
+                        ? "#45655a"
+                        : healthGrade === "C"
+                          ? "#d99e33"
+                          : healthGrade === "D"
+                            ? "#e67e66"
+                            : "#ba1a1a",
+                },
+              ]}
+            >
+              {healthScore}
+            </Text>
+            <Text
+              style={[
+                styles.healthScoreGrade,
+                {
+                  color:
+                    healthGrade === "A"
+                      ? "#2e7d32"
+                      : healthGrade === "B"
+                        ? "#45655a"
+                        : healthGrade === "C"
+                          ? "#d99e33"
+                          : healthGrade === "D"
+                            ? "#e67e66"
+                            : "#ba1a1a",
+                },
+              ]}
+            >
+              {healthGrade}
+            </Text>
+          </View>
+        </TouchableOpacity>
       )}
 
       {/* Accounts */}
@@ -1034,5 +1102,46 @@ const styles = StyleSheet.create({
   },
   accountsWidgetBalanceDebt: {
     color: "#adeef0",
+  },
+  healthScoreCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 20,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}1A`,
+    ...shadows.card,
+  },
+  healthScoreLeft: {
+    flex: 1,
+    marginRight: 16,
+  },
+  healthScoreLabel: {
+    fontSize: 12,
+    fontFamily: fonts.labelMedium,
+    color: colors.textSecondary,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  healthScoreDetail: {
+    fontSize: 12,
+    fontFamily: fonts.medium,
+    color: colors.textMuted,
+  },
+  healthScoreRight: {
+    alignItems: "center",
+  },
+  healthScoreValue: {
+    fontSize: 32,
+    fontFamily: fonts.bold,
+  },
+  healthScoreGrade: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    marginTop: -2,
   },
 });

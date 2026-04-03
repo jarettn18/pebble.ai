@@ -139,6 +139,16 @@ async def build_financial_profile(user_id: str, db: AsyncSession) -> str:
     data = await get_dashboard(user_id, month=today.month, year=today.year, db=db)
     profile = _format_profile(data, today.month, today.year)
 
+    # Append health score if available
+    try:
+        from pebble.services.health_score import calculate_health_score
+
+        score_result = await calculate_health_score(user_id, db)
+        score_line = f"HEALTH SCORE: {score_result['overall_score']}/100 ({score_result['grade']})"
+        profile = f"{profile}\n{score_line}" if profile else score_line
+    except Exception:
+        logger.debug("Could not compute health score for profile", exc_info=True)
+
     # Append demographic context if available
     demographics = await _build_demographics(user_id, db, today)
     if demographics:
