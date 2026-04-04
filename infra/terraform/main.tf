@@ -1,0 +1,498 @@
+terraform {
+  required_version = ">= 1.5"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
+  # After initial setup, move state to S3:
+  # backend "s3" {
+  #   bucket         = "pebble-terraform-state"
+  #   key            = "staging/terraform.tfstate"
+  #   region         = "us-east-1"
+  #   dynamodb_table = "pebble-terraform-locks"
+  #   encrypt        = true
+  # }
+}
+
+provider "aws" {
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = "pebble"
+      Environment = var.environment
+      ManagedBy   = "terraform"
+    }
+  }
+}
+
+# ---------- Variables ----------
+
+variable "aws_region" {
+  default = "us-east-1"
+}
+
+variable "environment" {
+  default = "staging"
+}
+
+variable "db_password" {
+  type      = string
+  sensitive = true
+}
+
+variable "backend_image" {
+  description = "Full ECR image URI for the backend"
+  type        = string
+  default     = "placeholder" # Set real value after first ECR push
+}
+
+variable "jwt_secret_key" {
+  type      = string
+  sensitive = true
+}
+
+variable "plaid_client_id" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "plaid_secret" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "plaid_env" {
+  type    = string
+  default = "sandbox"
+}
+
+variable "anthropic_api_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "encryption_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+# ---------- Networking (VPC) ----------
+
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 5.0"
+
+  name = "pebble-${var.environment}"
+  cidr = "10.0.0.0/16"
+
+  azs              = ["${var.aws_region}a", "${var.aws_region}b"]
+  public_subnets   = ["10.0.1.0/24", "10.0.2.0/24"]
+  private_subnets  = ["10.0.10.0/24", "10.0.11.0/24"]
+  database_subnets = ["10.0.20.0/24", "10.0.21.0/24"]
+
+  enable_nat_gateway   = true
+  single_nat_gateway   = true          # cost-saving for staging
+  enable_dns_hostnames = true
+
+  create_database_subnet_group = true
+}
+
+# ---------- Security Groups ----------
+
+resource "aws_security_group" "alb" {
+  name_prefix = "pebble-alb-"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "backend" {
+  name_prefix = "pebble-backend-"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port       = 8000
+    to_port         = 8000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "db" {
+  name_prefix = "pebble-db-"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.backend.id]
+  }
+}
+
+resource "aws_security_group" "redis" {
+  name_prefix = "pebble-redis-"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.backend.id]
+  }
+}
+
+# ---------- RDS (PostgreSQL 16) ----------
+
+resource "aws_db_instance" "postgres" {
+  identifier = "pebble-${var.environment}"
+
+  engine         = "postgres"
+  engine_version = "16"
+  instance_class = "db.t4g.micro" # staging-sized
+
+  allocated_storage     = 20
+  max_allocated_storage = 50
+  storage_encrypted     = true
+
+  db_name  = "pebble"
+  username = "pebble"
+  password = var.db_password
+
+  db_subnet_group_name   = module.vpc.database_subnet_group_name
+  vpc_security_group_ids = [aws_security_group.db.id]
+
+  skip_final_snapshot = true # ok for staging
+  multi_az            = false
+
+  tags = { Name = "pebble-${var.environment}" }
+}
+
+# ---------- ElastiCache (Redis 7) ----------
+
+resource "aws_elasticache_subnet_group" "redis" {
+  name       = "pebble-${var.environment}-redis"
+  subnet_ids = module.vpc.private_subnets
+}
+
+resource "aws_elasticache_cluster" "redis" {
+  cluster_id      = "pebble-${var.environment}"
+  engine          = "redis"
+  engine_version  = "7.1"
+  node_type       = "cache.t4g.micro" # staging-sized
+  num_cache_nodes = 1
+
+  subnet_group_name  = aws_elasticache_subnet_group.redis.name
+  security_group_ids = [aws_security_group.redis.id]
+}
+
+# ---------- ECR Repository ----------
+
+resource "aws_ecr_repository" "backend" {
+  name                 = "pebble/backend"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true # ok for staging
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "backend" {
+  repository = aws_ecr_repository.backend.name
+
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep last 10 images"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 10
+      }
+      action = { type = "expire" }
+    }]
+  })
+}
+
+# ---------- ECS Cluster + Fargate Service ----------
+
+resource "aws_ecs_cluster" "main" {
+  name = "pebble-${var.environment}"
+
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "backend" {
+  name              = "/ecs/pebble-${var.environment}/backend"
+  retention_in_days = 14
+}
+
+resource "aws_iam_role" "ecs_task_execution" {
+  name = "pebble-${var.environment}-ecs-execution"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
+  role       = aws_iam_role.ecs_task_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+resource "aws_iam_role" "ecs_task" {
+  name = "pebble-${var.environment}-ecs-task"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_ecs_task_definition" "backend" {
+  family                   = "pebble-${var.environment}-backend"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 512
+  memory                   = 1024
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([{
+    name  = "backend"
+    image = var.backend_image
+    portMappings = [{ containerPort = 8000, protocol = "tcp" }]
+
+    environment = [
+      { name = "DATABASE_URL", value = "postgresql+asyncpg://pebble:${var.db_password}@${aws_db_instance.postgres.endpoint}/pebble" },
+      { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379/0" },
+      { name = "ENVIRONMENT", value = var.environment },
+      { name = "JWT_SECRET_KEY", value = var.jwt_secret_key },
+      { name = "PLAID_CLIENT_ID", value = var.plaid_client_id },
+      { name = "PLAID_SECRET", value = var.plaid_secret },
+      { name = "PLAID_ENV", value = var.plaid_env },
+      { name = "ANTHROPIC_API_KEY", value = var.anthropic_api_key },
+      { name = "ENCRYPTION_KEY", value = var.encryption_key },
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.backend.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "backend"
+      }
+    }
+
+    healthCheck = {
+      command     = ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval    = 30
+      timeout     = 5
+      retries     = 3
+      startPeriod = 60
+    }
+  }])
+}
+
+# ---------- ALB ----------
+
+resource "aws_lb" "main" {
+  name               = "pebble-${var.environment}"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = module.vpc.public_subnets
+}
+
+resource "aws_lb_target_group" "backend" {
+  name        = "pebble-${var.environment}-api"
+  port        = 8000
+  protocol    = "HTTP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 30
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+}
+
+resource "aws_ecs_service" "backend" {
+  name            = "backend"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.backend.arn
+  desired_count   = 1 # staging only needs 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets         = module.vpc.private_subnets
+    security_groups = [aws_security_group.backend.id]
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.backend.arn
+    container_name   = "backend"
+    container_port   = 8000
+  }
+
+  depends_on = [aws_lb_listener.http]
+}
+
+# ---------- GitHub Actions OIDC ----------
+
+resource "aws_iam_openid_connect_provider" "github" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+}
+
+resource "aws_iam_role" "github_actions" {
+  name = "pebble-${var.environment}-github-actions"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        }
+        StringLike = {
+          "token.actions.githubusercontent.com:sub" = "repo:jarettn18/pebble.ai:*"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "github_actions" {
+  name = "pebble-${var.environment}-deploy"
+  role = aws_iam_role.github_actions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+        ]
+        Resource = aws_ecr_repository.backend.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeServices",
+          "ecs:UpdateService",
+          "ecs:DescribeTaskDefinition",
+          "ecs:RegisterTaskDefinition",
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole",
+        ]
+        Resource = [
+          aws_iam_role.ecs_task_execution.arn,
+          aws_iam_role.ecs_task.arn,
+        ]
+      },
+    ]
+  })
+}
+
+# ---------- Outputs ----------
+
+output "api_url" {
+  value = "http://${aws_lb.main.dns_name}"
+}
+
+output "ecr_repository_url" {
+  value = aws_ecr_repository.backend.repository_url
+}
+
+output "rds_endpoint" {
+  value = aws_db_instance.postgres.endpoint
+}
+
+output "github_actions_role_arn" {
+  value = aws_iam_role.github_actions.arn
+}

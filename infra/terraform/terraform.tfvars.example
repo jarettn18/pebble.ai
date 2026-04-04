@@ -1,0 +1,20 @@
+aws_region  = "us-east-1"
+environment = "staging"
+db_password = "CHANGE_ME_use_a_strong_password"
+
+# Set after first `terraform apply` (ECR must exist first):
+# backend_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/pebble/backend:latest"
+
+# --- Auth ---
+jwt_secret_key = "CHANGE_ME_generate_a_strong_random_secret"
+
+# --- Plaid ---
+# plaid_client_id = ""
+# plaid_secret    = ""
+# plaid_env       = "sandbox"
+
+# --- Anthropic (AI assistant) ---
+# anthropic_api_key = ""
+
+# --- Encryption ---
+# encryption_key = ""

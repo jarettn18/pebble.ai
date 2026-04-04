@@ -1,0 +1,123 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch: # allow manual triggers
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: pebble/backend
+  ECS_CLUSTER: pebble-staging
+  ECS_SERVICE: backend
+  TASK_FAMILY: pebble-staging-backend
+
+permissions:
+  id-token: write   # for OIDC
+  contents: read
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: pebble
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: pebble_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U pebble"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install ".[dev]"
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://pebble:test_password@localhost:5432/pebble_test
+          REDIS_URL: redis://localhost:6379/0
+          JWT_SECRET_KEY: test-secret-key
+          ENVIRONMENT: test
+        run: pytest -v
+
+  deploy:
+    name: Build & Deploy
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        id: build
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f backend/Dockerfile.staging -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG backend/
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition $TASK_FAMILY \
+            --query taskDefinition \
+            > task-def.json
+
+      - name: Update task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: backend
+          image: ${{ steps.build.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Summary
+        run: |
+          echo "### Staging Deploy Complete :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ steps.build.outputs.image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

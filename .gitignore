@@ -6,6 +6,13 @@
 *.key
 credentials.json
 
+# Terraform
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate*
+
 # Python
 __pycache__/
 *.py[cod]
