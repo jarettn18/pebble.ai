@@ -449,6 +449,41 @@ async def compare_spending(
 # 9. search_financial_tips
 # ──────────────────────────────────────────────────────────────
 
+async def get_financial_health_score(user_id: str, db: AsyncSession) -> dict:
+    from pebble.services.health_score import get_health_score
+
+    result = await get_health_score(user_id, db)
+    # Return a simplified view for the AI
+    components_summary = []
+    for c in result["components"]:
+        components_summary.append({
+            "name": c["label"],
+            "score": c["score"],
+            "status": c["status"],
+            "detail": c["detail"],
+        })
+
+    # Include demographic insights for the AI to narrate
+    insights_summary = []
+    for ins in result.get("insights", []):
+        insights_summary.append({
+            "category": ins["category"],
+            "description": ins["description"],
+            "percentile": ins["percentile"],
+            "comparison": ins["comparison"],
+            "source": ins["source"],
+        })
+
+    return {
+        "overall_score": result["overall_score"],
+        "grade": result["grade"],
+        "components": components_summary,
+        "data_completeness": result["data_completeness"],
+        "missing_data": result["missing_data"],
+        "demographic_insights": insights_summary,
+    }
+
+
 async def search_financial_tips(
     user_id: str, db: AsyncSession, *, query: str,
 ) -> dict:

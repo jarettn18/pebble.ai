@@ -18,13 +18,15 @@ from pebble.schemas.ai_chat import (
     ConversationOut,
     MessageOut,
 )
+from pebble.services.rate_limiter import RateLimitDependency
 
 router = APIRouter(prefix="/v1/ai", tags=["ai-chat"])
 
 _service = AIChatService()
+_chat_limiter = RateLimitDependency(max_requests=10, window_seconds=60)
 
 
-@router.post("/chat")
+@router.post("/chat", dependencies=[Depends(_chat_limiter)])
 async def chat(
     req: ChatRequest,
     user: User = Depends(get_current_user),

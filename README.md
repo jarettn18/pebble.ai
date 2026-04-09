@@ -44,6 +44,7 @@ pebble/
 │       │   ├── asset.py             # Asset (properties + vehicles, net worth)
 │       │   ├── chat.py              # ChatConversation + ChatMessage
 │       │   ├── financial_tip.py     # FinancialTip (pgvector Vector(384) embedding)
+│       │   ├── health_score.py     # FinancialHealthScore (0-100 score snapshots with component breakdown)
 │       │   └── api_usage.py         # API usage metering
 │       ├── schemas/                 # Pydantic request/response
 │       │   ├── auth.py              # Register, Login, Token, User schemas
@@ -54,6 +55,7 @@ pebble/
 │       │   ├── category.py          # CategoryOut, CategoryListResponse
 │       │   ├── csv_import.py        # CSVImportResponse, CSVImportError
 │       │   ├── dashboard.py         # DashboardResponse, NetWorthHistory, SpendingByCategory, AssetSummary
+│       │   ├── health_score.py      # HealthScoreResponse, ComponentScore, BenchmarkInsight, HistoryResponse
 │       │   ├── ai_chat.py            # ChatRequest, ConversationOut, MessageOut schemas
 │       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
 │       │   └── transaction.py       # TransactionOut, Detail, Create, Update, List schemas
@@ -65,6 +67,7 @@ pebble/
 │       │   ├── budget_plans.py      # /v1/budget-plans (CRUD, recurring generation)
 │       │   ├── categories.py        # /v1/categories (list all, update color)
 │       │   ├── dashboard.py         # /v1/dashboard (aggregated overview + net worth history)
+│       │   ├── health_score.py      # /v1/health-score (score + history endpoints)
 │       │   ├── ai_chat.py            # /v1/ai/* (chat SSE, conversations CRUD)
 │       │   ├── csv_import.py         # /v1/transactions/import-csv (CSV file upload + parsing)
 │       │   ├── plaid.py             # /v1/plaid/* (link-token, exchange, sync, sync-all)
@@ -77,7 +80,10 @@ pebble/
 │       │   ├── budget_plans.py      # Budget plan CRUD, allocation management, recurring generation
 │       │   ├── categories.py        # Category queries, Plaid category map
 │       │   ├── dashboard.py         # Aggregated dashboard + net worth history
+│       │   ├── health_score.py     # Financial Health Score calculation + caching + snapshots
+│       │   ├── benchmarks.py       # Static demographic benchmarks (Census/BLS/Fed SCF percentile data)
 │       │   ├── plaid.py             # Plaid API integration (link, exchange, sync, balance refresh)
+│       │   ├── rate_limiter.py      # AsyncRateLimiter (token-bucket for Plaid) + RateLimitDependency (per-endpoint sliding window)
 │       │   ├── csv_import.py         # CSV parsing, column auto-detection, bulk transaction import
 │       │   └── transactions.py      # Transaction queries, detail, create, update, delete
 │       ├── middleware/
@@ -85,7 +91,7 @@ pebble/
 │       ├── ai/                      # AI module (Phase 5)
 │       │   ├── __init__.py
 │       │   ├── prompts.py           # System prompt with persona + financial profile placeholder
-│       │   ├── tools.py             # 9 tool definitions + handler registry
+│       │   ├── tools.py             # 10 tool definitions + handler registry
 │       │   ├── data_access.py       # Tool handler functions (parameterized queries)
 │       │   ├── service.py           # AIChatService orchestrator (streaming + tool loop)
 │       │   ├── profile.py           # Financial profile builder (cached in Redis, 300s TTL)
@@ -121,6 +127,7 @@ pebble/
 │   │   │   └── [id].tsx             # Transaction detail, edit & delete screen
 │   │   ├── spending.tsx             # Spending summary (trend chart, category bars)
 │   │   ├── income.tsx              # Income summary (trend chart, category bars)
+│   │   ├── health-score.tsx        # Financial Health Score detail (gauge, breakdown bars, insights, history)
 │   │   ├── budget-transactions.tsx # Budget category drill-down (transactions for a budget)
 │   │   ├── account-transactions.tsx# Account drill-down (balance + transactions for an account)
 │   │   ├── add-asset.tsx           # Add asset form (properties + vehicles)
@@ -154,6 +161,7 @@ pebble/
 │           ├── budgets.ts           # Zustand budgets store
 │           ├── budgetPlans.ts       # Zustand budget plans store
 │           ├── dashboard.ts         # Zustand dashboard store (server-side aggregation)
+│           ├── healthScore.ts      # Zustand health score store (score + insights + history)
 │           └── transactions.ts      # Zustand transactions store (24h cache)
 ```
 
@@ -161,7 +169,7 @@ pebble/
 
 ## Database Schema
 
-13 tables, all with UUID primary keys:
+14 tables, all with UUID primary keys:
 
 | Table | Purpose |
 |-------|---------|
@@ -177,6 +185,7 @@ pebble/
 | `chat_conversations` | AI chat conversation threads |
 | `chat_messages` | Individual messages (user/assistant roles) |
 | `financial_tips` | Curated tips with pgvector embeddings for RAG semantic search |
+| `financial_health_scores` | Health score snapshots (0-100, component scores, grade, details JSON) |
 | `api_usage` | Token + request counts per user per billing period |
 
 ---
@@ -198,11 +207,12 @@ Claude tool-use (function-calling) + RAG for financial education tips.
 
 **Flow**: User message → Financial profile injected into system prompt (cached 300s in Redis) → Claude picks tools → Backend executes parameterized queries (scoped by user_id) → Results fed back to Claude → Natural language response streamed via SSE
 
-**Tools** (9):
+**Tools** (10):
 - `get_spending_by_category`, `get_spending_over_time`, `get_top_merchants`
 - `get_account_balances`, `get_budget_status`, `get_recent_transactions`
 - `get_income_summary`, `compare_spending`
 - `search_financial_tips` (pgvector semantic search over curated tips)
+- `get_financial_health_score` (0-100 score breakdown + demographic benchmark insights)
 
 **RAG**: Financial tips stored with 384-dim embeddings (all-MiniLM-L6-v2), searched via pgvector cosine distance. Returns top 3 relevant tips for advisory questions.
 
@@ -222,7 +232,25 @@ Claude tool-use (function-calling) + RAG for financial education tips.
 4. Sync via `transactions/sync` (cursor-based)
 5. Balance refresh via `accounts/get` with 15-minute staleness TTL (avoids excessive API calls)
 6. Auto-categorization maps Plaid categories to internal categories on sync
-7. MVP: sync on app open. Later: Plaid webhooks
+7. Outbound rate limiting: token-bucket throttle (5 req/s) + retry with exponential backoff on 429s (up to 3 attempts)
+8. MVP: sync on app open. Later: Plaid webhooks
+
+---
+
+## Rate Limiting
+
+Two layers of rate limiting protect the backend:
+
+**Outbound (Plaid API)**: Token-bucket throttle at 5 requests/second. Automatic retry with exponential backoff (1s/2s/4s) on 429 responses, respects `Retry-After` header.
+
+**Inbound (per-endpoint)**: Sliding-window counters keyed by user ID (authenticated) or IP (public). Returns `429 Too Many Requests` when exceeded.
+
+| Endpoint | Limit | Key |
+|----------|-------|-----|
+| `POST /v1/auth/login` | 5/min | IP |
+| `POST /v1/auth/register` | 3/min | IP |
+| `POST /v1/ai/chat` | 10/min | User ID |
+| `POST /v1/transactions/import-csv` | 3/min | User ID |
 
 ---
 
@@ -235,8 +263,9 @@ Claude tool-use (function-calling) + RAG for financial education tips.
 | 3 | Budgets + Polish — CRUD, charts, search, error states | **Done** |
 | 4 | Budget Overhaul — unified budget plans, multi-month, recurring | **Done** |
 | 5 | AI Assistant — tools, Claude integration, chat UI, SSE, RAG tips, financial profile | **Done** |
-| 6 | Monetization — subscriptions, API keys, external API, rate limits | Not started |
-| 7 | Iteration — dark mode, data import/export, social auth | **In Progress** |
+| 6 | Monetization — subscriptions, API keys, external API, rate limits | **In Progress** (rate limiting done) |
+| 7 | Financial Health Score — deterministic 0-100 score, demographic benchmarks, AI insights | **Done** |
+| 8 | Iteration — dark mode, data import/export, social auth | **In Progress** |
 
 ---
 

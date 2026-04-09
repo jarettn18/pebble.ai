@@ -34,6 +34,20 @@ def _make_fake_db():
     return db
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters():
+    """Clear all per-endpoint rate limiter state between tests."""
+    from pebble.routers import auth, ai_chat, csv_import
+
+    for limiter in (
+        auth._login_limiter,
+        auth._register_limiter,
+        ai_chat._chat_limiter,
+        csv_import._import_limiter,
+    ):
+        limiter._requests.clear()
+
+
 @pytest.fixture()
 def fake_user():
     return _make_fake_user()

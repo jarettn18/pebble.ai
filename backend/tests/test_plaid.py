@@ -4,13 +4,32 @@ from uuid import uuid4
 import httpx
 
 
+def _noop_limiter():
+    """Patch target for the module-level rate limiter."""
+    limiter = MagicMock()
+    limiter.acquire = AsyncMock()
+    return limiter
+
+
 def _mock_plaid_client(responses: list[httpx.Response]):
-    """Helper: patch httpx.AsyncClient to return a sequence of responses."""
-    mock_client_cls = MagicMock()
+    """Helper: patch httpx.AsyncClient to return a sequence of responses.
+
+    Each call creates a fresh async-context-manager that shares the same
+    underlying ``mock_client``, so ``post.side_effect`` iterates through
+    *responses* across successive ``async with`` blocks (one per retry-loop
+    iteration).
+    """
     mock_client = AsyncMock()
     mock_client.post.side_effect = responses
-    mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    # Each `async with httpx.AsyncClient() as c` must produce the same mock_client
+    def _make_cm(*_args, **_kwargs):
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=mock_client)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    mock_client_cls = MagicMock(side_effect=_make_cm)
     return mock_client_cls, mock_client
 
 
@@ -25,12 +44,12 @@ class TestCreateLinkToken:
             },
         )
 
-        with patch("pebble.services.plaid.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.post.return_value = mock_response
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_cls, mock_client = _mock_plaid_client([mock_response])
 
+        with (
+            patch("pebble.services.plaid.httpx.AsyncClient", mock_cls),
+            patch("pebble.services.plaid._plaid_limiter", _noop_limiter()),
+        ):
             resp = authed_client.post("/v1/plaid/link-token")
 
         assert resp.status_code == 200
@@ -55,12 +74,12 @@ class TestCreateLinkToken:
             },
         )
 
-        with patch("pebble.services.plaid.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.post.return_value = mock_response
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_cls, _ = _mock_plaid_client([mock_response])
 
+        with (
+            patch("pebble.services.plaid.httpx.AsyncClient", mock_cls),
+            patch("pebble.services.plaid._plaid_limiter", _noop_limiter()),
+        ):
             resp = authed_client.post("/v1/plaid/link-token")
 
         assert resp.status_code == 502
@@ -130,6 +149,7 @@ class TestExchangePublicToken:
         with (
             patch("pebble.services.plaid.httpx.AsyncClient", mock_cls),
             patch("pebble.services.plaid.encrypt_value", return_value="encrypted"),
+            patch("pebble.services.plaid._plaid_limiter", _noop_limiter()),
         ):
             resp = authed_client.post(
                 "/v1/plaid/exchange",
@@ -161,7 +181,10 @@ class TestExchangePublicToken:
         )
         mock_cls, _ = _mock_plaid_client([error_response])
 
-        with patch("pebble.services.plaid.httpx.AsyncClient", mock_cls):
+        with (
+            patch("pebble.services.plaid.httpx.AsyncClient", mock_cls),
+            patch("pebble.services.plaid._plaid_limiter", _noop_limiter()),
+        ):
             resp = authed_client.post(
                 "/v1/plaid/exchange",
                 json={"public_token": "bad-token"},
@@ -181,6 +204,7 @@ class TestExchangePublicToken:
         with (
             patch("pebble.services.plaid.httpx.AsyncClient", mock_cls),
             patch("pebble.services.plaid.encrypt_value", return_value="encrypted"),
+            patch("pebble.services.plaid._plaid_limiter", _noop_limiter()),
         ):
             resp = authed_client.post(
                 "/v1/plaid/exchange",
@@ -207,6 +231,14 @@ def _empty_category_result():
     """Mock result for get_plaid_category_map query (returns no rows)."""
     result = MagicMock()
     result.all.return_value = []
+    return result
+
+
+def _empty_scalar_result():
+    """Mock result for queries that return no rows (e.g. get_category_id_by_name)."""
+    result = MagicMock()
+    result.first.return_value = None
+    result.scalar_one_or_none.return_value = None
     return result
 
 
@@ -279,13 +311,17 @@ class TestSyncTransactions:
         acct_scalars.all.return_value = [account]
         acct_result.scalars.return_value = acct_scalars
 
-        fake_db.execute.side_effect = [item_result, acct_result, _empty_category_result()]
+        fake_db.execute.side_effect = [
+            item_result, acct_result, _empty_category_result(),
+            _empty_scalar_result(), _empty_scalar_result(),  # get_category_id_by_name x2
+        ]
 
         mock_cls, _ = _mock_plaid_client([self.SYNC_RESPONSE])
 
         with (
             patch("pebble.services.plaid.httpx.AsyncClient", mock_cls),
             patch("pebble.services.plaid.decrypt_value", return_value="access-sandbox"),
+            patch("pebble.services.plaid._plaid_limiter", _noop_limiter()),
         ):
             resp = authed_client.post(
                 "/v1/plaid/sync",
@@ -342,13 +378,18 @@ class TestSyncTransactions:
         txn_result = MagicMock()
         txn_result.scalar_one_or_none.return_value = existing_txn
 
-        fake_db.execute.side_effect = [item_result, acct_result, _empty_category_result(), txn_result]
+        fake_db.execute.side_effect = [
+            item_result, acct_result, _empty_category_result(),
+            _empty_scalar_result(), _empty_scalar_result(),  # get_category_id_by_name x2
+            txn_result,
+        ]
 
         mock_cls, _ = _mock_plaid_client([sync_response])
 
         with (
             patch("pebble.services.plaid.httpx.AsyncClient", mock_cls),
             patch("pebble.services.plaid.decrypt_value", return_value="access-sandbox"),
+            patch("pebble.services.plaid._plaid_limiter", _noop_limiter()),
         ):
             resp = authed_client.post(
                 "/v1/plaid/sync",
@@ -385,13 +426,18 @@ class TestSyncTransactions:
         acct_scalars.all.return_value = [account]
         acct_result.scalars.return_value = acct_scalars
 
-        fake_db.execute.side_effect = [item_result, acct_result, _empty_category_result(), MagicMock()]
+        fake_db.execute.side_effect = [
+            item_result, acct_result, _empty_category_result(),
+            _empty_scalar_result(), _empty_scalar_result(),  # get_category_id_by_name x2
+            MagicMock(),  # delete for removed transactions
+        ]
 
         mock_cls, _ = _mock_plaid_client([sync_response])
 
         with (
             patch("pebble.services.plaid.httpx.AsyncClient", mock_cls),
             patch("pebble.services.plaid.decrypt_value", return_value="access-sandbox"),
+            patch("pebble.services.plaid._plaid_limiter", _noop_limiter()),
         ):
             resp = authed_client.post(
                 "/v1/plaid/sync",

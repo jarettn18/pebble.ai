@@ -128,6 +128,14 @@ TOOL_DEFINITIONS: list[dict] = [
             "required": ["query"],
         },
     },
+    {
+        "name": "get_financial_health_score",
+        "description": "Get the user's Financial Health Score (0-100) with breakdown by component: savings rate, debt-to-income, emergency fund, budget adherence, net worth trend, and diversification. Use when the user asks about their financial health, score, or overall financial standing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
 ]
 
 # Maps tool name → async handler function
@@ -141,4 +149,5 @@ TOOL_HANDLERS = {
     "get_income_summary": data_access.get_income_summary,
     "compare_spending": data_access.compare_spending,
     "search_financial_tips": data_access.search_financial_tips,
+    "get_financial_health_score": data_access.get_financial_health_score,
 }

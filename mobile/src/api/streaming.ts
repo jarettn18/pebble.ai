@@ -6,11 +6,10 @@
  * Set USE_MOCK = true to simulate AI responses without hitting the backend.
  */
 
-import { Platform } from "react-native";
-import * as SecureStore from "expo-secure-store";
+import { getTokens, refreshAccessToken } from "./client";
 
 /** Toggle this to skip real API calls during frontend development. */
-const USE_MOCK = __DEV__ && true;
+const USE_MOCK = __DEV__ && false;
 
 const API_URL = __DEV__
   ? "http://localhost:8000"
@@ -24,10 +23,8 @@ type StreamCallbacks = {
 };
 
 async function getAccessToken(): Promise<string | null> {
-  if (Platform.OS === "web") {
-    return sessionStorage.getItem("access_token");
-  }
-  return SecureStore.getItemAsync("access_token");
+  const { access } = await getTokens();
+  return access;
 }
 
 function parseSSEChunk(raw: string, callbacks: StreamCallbacks) {
@@ -153,7 +150,11 @@ export async function streamChat(
     return streamChatMock(message, conversationId, callbacks);
   }
 
-  const token = await getAccessToken();
+  // Ensure a fresh token — refresh proactively since XHR can't retry mid-stream
+  let token = await getAccessToken();
+  if (!token) {
+    token = await refreshAccessToken();
+  }
 
   const xhr = new XMLHttpRequest();
   xhr.open("POST", `${API_URL}/v1/ai/chat`);
@@ -163,6 +164,7 @@ export async function streamChat(
   }
 
   let lastIndex = 0;
+  let retryAbort: (() => void) | null = null;
 
   xhr.onprogress = () => {
     const newData = xhr.responseText.slice(lastIndex);
@@ -172,7 +174,18 @@ export async function streamChat(
     }
   };
 
-  xhr.onload = () => {
+  xhr.onload = async () => {
+    // If 401, try refreshing and retrying once
+    if (xhr.status === 401) {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        // Retry with fresh token
+        const retryResult = await streamChat(message, conversationId, callbacks);
+        retryAbort = retryResult.abort;
+        return;
+      }
+    }
+
     // Process any remaining data not caught by onprogress
     const remaining = xhr.responseText.slice(lastIndex);
     if (remaining) {
@@ -206,6 +219,9 @@ export async function streamChat(
   );
 
   return {
-    abort: () => xhr.abort(),
+    abort: () => {
+      xhr.abort();
+      retryAbort?.();
+    },
   };
 }
