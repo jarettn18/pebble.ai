@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-04-08 — Staging Environment + Native Build Migration
+
+### Staging Environment
+- Configured AWS staging backend accessible via ELB (`pebble-staging-710423421.us-east-1.elb.amazonaws.com`)
+- Added `EXPO_PUBLIC_API_URL` support in `mobile/.env` to point the mobile app at the staging server
+- API client (`src/api/client.ts`) already reads `process.env.EXPO_PUBLIC_API_URL` with fallback to `localhost:8000` (dev) or `api.pebble.app` (prod)
+
+### Expo Go → Development Build Migration
+- Plaid Link (`react-native-plaid-link-sdk`) requires native modules not available in Expo Go — `create()` and `open()` silently no-op when native modules are null
+- Migrated to Expo development build using `npx expo prebuild` + `npx expo run:ios` for full native module support
+- Add account flow now functional: Plaid Link modal opens, `onSuccess` callback fires, exchange + account refresh completes
+
+### iOS App Transport Security (ATS)
+- iOS blocks plain HTTP by default; staging ELB uses HTTP
+- Added `NSExceptionDomains` entry in `ios/Pebble/Info.plist` for `us-east-1.elb.amazonaws.com` with `NSIncludesSubdomains: true` and `NSExceptionAllowsInsecureHTTPLoads: true`
+
+### Physical Device Deployment
+- `npx expo run:ios --device` deploys dev client directly to a USB-connected iPhone
+- Requires Apple Developer account (free tier works) and trusting the developer certificate on-device
+
+---
+
 ## 2026-04-02 — Financial Health Score + Demographic Benchmarks
 
 ### Financial Health Score (Full Stack)

@@ -11,9 +11,9 @@ import { getTokens, refreshAccessToken } from "./client";
 /** Toggle this to skip real API calls during frontend development. */
 const USE_MOCK = __DEV__ && false;
 
-const API_URL = __DEV__
-  ? "http://localhost:8000"
-  : "https://api.pebble.app";
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (__DEV__ ? "http://localhost:8000" : "https://api.pebble.app");
 
 type StreamCallbacks = {
   onDelta: (text: string) => void;
