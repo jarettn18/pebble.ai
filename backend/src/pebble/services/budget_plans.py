@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -153,8 +153,13 @@ async def create_budget_plan(
     return _plan_to_dict(plan)
 
 
-async def get_budget_plans(user_id: str, db: AsyncSession) -> dict:
-    result = await db.execute(
+async def get_budget_plans(
+    user_id: str,
+    db: AsyncSession,
+    month: int | None = None,
+    year: int | None = None,
+) -> dict:
+    query = (
         select(BudgetPlan)
         .where(BudgetPlan.user_id == user_id)
         .options(
@@ -164,6 +169,19 @@ async def get_budget_plans(user_id: str, db: AsyncSession) -> dict:
         )
         .order_by(BudgetPlan.created_at.desc())
     )
+
+    if month is not None and year is not None:
+        query = query.where(
+            exists(
+                select(Budget.id).where(
+                    Budget.budget_plan_id == BudgetPlan.id,
+                    Budget.month == month,
+                    Budget.year == year,
+                )
+            )
+        )
+
+    result = await db.execute(query)
     plans = result.scalars().unique().all()
     return {"budget_plans": [_plan_to_dict(p) for p in plans]}
 

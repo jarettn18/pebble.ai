@@ -266,6 +266,7 @@ Two layers of rate limiting protect the backend:
 | 6 | Monetization — subscriptions, API keys, external API, rate limits | **In Progress** (rate limiting done) |
 | 7 | Financial Health Score — deterministic 0-100 score, demographic benchmarks, AI insights | **Done** |
 | 8 | Iteration — dark mode, data import/export, social auth | **In Progress** |
+| 9 | Staging & Native Build — staging env, dev client, ATS config | **Done** |
 
 ---
 
@@ -600,6 +601,15 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [ ] API documentation for external consumers
 
 
+### Phase 9 — Staging & Native Build
+- [x] Staging environment configured on AWS (ELB + backend services)
+- [x] `EXPO_PUBLIC_API_URL` environment variable for pointing mobile app to staging server
+- [x] `mobile/.env` file with staging ELB endpoint
+- [x] Migrated from Expo Go to Expo development build (`npx expo prebuild` + `npx expo run:ios`)
+- [x] iOS App Transport Security exception for staging ELB domain (`us-east-1.elb.amazonaws.com` allows HTTP)
+- [x] Plaid Link native module now functional (requires dev client, silently no-ops in Expo Go)
+- [x] Physical device deployment via `npx expo run:ios --device`
+
 ### Phase 7 — Iteration
 - [ ] AI System: Allow asset optimization/Balance Transfers
 - [ ] AI System: Debt Restructuring/Credit Optimization
@@ -640,16 +650,25 @@ docker exec -it pebble-postgres-1 psql -U pebble -d pebble
 cd mobile
 npm install
 npx expo run:ios
+
+# Run iOS dev client pointing to staging
+cd mobile
+echo 'EXPO_PUBLIC_API_URL=http://pebble-staging-710423421.us-east-1.elb.amazonaws.com' > .env
+npx expo prebuild
+npx expo run:ios
+
+# Install on physical iPhone (connect via USB)
+npx expo run:ios --device
 ```
 
 ---
 
 ## Infrastructure Targets
 
-| Service | Local | Production |
-|---------|-------|-----------|
-| PostgreSQL | Docker (port 5432) | Neon |
-| Redis | Docker (port 6379) | Upstash |
-| Backend | Docker (port 8000) | Railway or Render |
-| Mobile (web) | Docker (port 8081) | Static deploy |
-| Mobile (iOS) | `npx expo run:ios` | EAS Build + TestFlight |
+| Service | Local | Staging | Production |
+|---------|-------|---------|-----------|
+| PostgreSQL | Docker (port 5432) | AWS RDS | Neon |
+| Redis | Docker (port 6379) | AWS ElastiCache | Upstash |
+| Backend | Docker (port 8000) | AWS ELB (`pebble-staging-*.us-east-1.elb.amazonaws.com`) | Railway or Render |
+| Mobile (web) | Docker (port 8081) | — | Static deploy |
+| Mobile (iOS) | `npx expo run:ios` | Dev client → staging ELB | EAS Build + TestFlight |

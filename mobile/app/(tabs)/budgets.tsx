@@ -484,7 +484,7 @@ export default function BudgetsScreen() {
     useCallback(() => {
       shouldResort.current = true;
       load(period.month, period.year);
-      loadPlans();
+      loadPlans(period.month, period.year);
     }, [period.month, period.year])
   );
 

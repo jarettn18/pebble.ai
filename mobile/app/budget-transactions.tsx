@@ -92,7 +92,7 @@ export default function BudgetTransactionsScreen() {
         method: "PATCH",
         body: { color },
       });
-      await Promise.all([refreshBudgets(), refreshPlans(), refreshDashboard()]);
+      await Promise.all([refreshBudgets(), refreshPlans(month, year), refreshDashboard()]);
     } catch {
       // Silently fail — old color remains
     }
