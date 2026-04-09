@@ -1,0 +1,19 @@
+name: Protect Main Branch
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-source-branch:
+    name: Verify source branch is staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch
+        if: github.head_ref != 'staging'
+        run: |
+          echo "::error::Only the 'staging' branch can merge into 'main'. Source branch: '${{ github.head_ref }}'"
+          exit 1
+      - name: Approved
+        if: github.head_ref == 'staging'
+        run: echo "Source branch is 'staging' — merge allowed."

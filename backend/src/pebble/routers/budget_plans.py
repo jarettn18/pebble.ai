@@ -24,10 +24,12 @@ router = APIRouter(prefix="/v1/budget-plans", tags=["budget-plans"])
 
 @router.get("", response_model=BudgetPlanListResponse)
 async def list_budget_plans(
+    month: int | None = Query(None),
+    year: int | None = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_budget_plans(str(user.id), db)
+    return await get_budget_plans(str(user.id), db, month=month, year=year)
 
 
 @router.get("/{plan_id}", response_model=BudgetPlanOut)

@@ -30,22 +30,27 @@ type BudgetPlansState = {
   isLoading: boolean;
   error: string | null;
 
-  load: () => Promise<void>;
+  load: (month: number, year: number) => Promise<void>;
   refresh: () => Promise<void>;
   removePlan: (id: string) => void;
 };
+
+let lastMonth = 0;
+let lastYear = 0;
 
 export const useBudgetPlansStore = create<BudgetPlansState>((set, get) => ({
   plans: [],
   isLoading: false,
   error: null,
 
-  load: async () => {
+  load: async (month, year) => {
+    lastMonth = month;
+    lastYear = year;
     const silent = get().plans.length > 0;
     if (!silent) set({ isLoading: true, error: null });
     try {
       const data = await apiRequest<BudgetPlanListResponse>(
-        "/v1/budget-plans"
+        `/v1/budget-plans?month=${month}&year=${year}`
       );
       set({ plans: data.budget_plans });
     } catch (err) {
@@ -59,7 +64,9 @@ export const useBudgetPlansStore = create<BudgetPlansState>((set, get) => ({
   },
 
   refresh: async () => {
-    await get().load();
+    if (lastMonth && lastYear) {
+      await get().load(lastMonth, lastYear);
+    }
   },
 
   removePlan: (id) => {
