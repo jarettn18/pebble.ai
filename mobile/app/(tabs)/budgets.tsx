@@ -18,7 +18,7 @@ import { useBudgetsStore, type Budget } from "../../src/stores/budgets";
 import { useBudgetPlansStore, type BudgetPlan } from "../../src/stores/budgetPlans";
 import { useDashboardStore } from "../../src/stores/dashboard";
 import { formatCurrency } from "../../src/utils/dashboard";
-import { withOpacity } from "../../src/utils/color";
+import { withOpacity, getCategoryColor } from "../../src/utils/color";
 import { apiRequest } from "../../src/api/client";
 import { colors, fonts, progressBarStyles } from "../../src/theme";
 import { getCategoryIcon } from "../../src/utils/categoryIcons";
@@ -213,6 +213,8 @@ const PlanCard = memo(function PlanCard({
               e.stopPropagation();
               onToggle(p.id);
             }}
+            accessibilityLabel={isExpanded ? "Collapse plan" : "Expand plan"}
+            accessibilityRole="button"
           >
             <MaterialCommunityIcons
               name={isExpanded ? "chevron-up" : "chevron-down"}
@@ -280,6 +282,7 @@ const PlanCard = memo(function PlanCard({
 // This prevents PlanCard remounts when parent data (budgets, period) changes.
 // Module-level ref so expanded state survives component remounts (tab focus)
 let persistedExpandedIds = new Set<string>();
+const EMPTY_BUDGETS: Budget[] = [];
 
 interface PlansSectionProps {
   plans: BudgetPlan[];
@@ -339,12 +342,32 @@ const PlansSection = memo(function PlansSection({ plans }: PlansSectionProps) {
         load(now.getMonth() + 1, now.getFullYear()),
         refreshDashboard(),
       ]);
-    } catch {
-      // Silently fail
+    } catch (err) {
+      if (__DEV__) console.warn("Failed to delete plan:", err);
     }
   }
 
-  if (plans.length === 0) return null;
+  if (plans.length === 0) {
+    return (
+      <View style={styles.plansSection}>
+        <View style={styles.plansSectionHeader}>
+          <Text style={styles.plansSectionTitle}>Budget Plans</Text>
+        </View>
+        <View style={styles.emptyPlanCard}>
+          <Text style={styles.emptyPlanText}>No budget plans yet</Text>
+          <Text style={styles.emptyPlanHint}>
+            Create a plan to automatically manage your monthly budgets
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyPlanButton}
+            onPress={() => router.push("/budget/create")}
+          >
+            <Text style={styles.emptyPlanButtonText}>+ Create New</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.plansSection}>
@@ -394,7 +417,7 @@ const BudgetCategoryRow = memo(function BudgetCategoryRow({
   const clampedPct = Math.min(pct, 100);
   const overBudget = spent > budgeted;
   const categoryName = item.category_name || "Uncategorized";
-  const catColor = item.category_color || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  const catColor = getCategoryColor(item.category_color, FALLBACK_COLORS, index);
   const iconBg = withOpacity(catColor, 0.2);
 
   const transactionUrl = `/budget-transactions?category_id=${item.category_id}&category_name=${encodeURIComponent(categoryName)}&category_color=${encodeURIComponent(item.category_color || '')}&budget_amount=${item.amount}&spent=${item.spent}&month=${period.month}&year=${period.year}`;
@@ -577,8 +600,8 @@ export default function BudgetsScreen() {
         load(period.month, period.year),
         refreshDashboard(),
       ]);
-    } catch {
-      // Silently fail — the old color remains
+    } catch (err) {
+      if (__DEV__) console.warn("Failed to update category color:", err);
     }
   }
 
@@ -636,7 +659,7 @@ export default function BudgetsScreen() {
                 const widthPct = (spent / totalBudgeted) * 100 * scale;
                 const catColor = isOverBudget
                   ? colors.error
-                  : item.category_color || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+                  : getCategoryColor(item.category_color, FALLBACK_COLORS, idx);
                 return (
                   <View
                     key={item.category_id}
@@ -655,9 +678,11 @@ export default function BudgetsScreen() {
 
       <PlansSection plans={plans} />
 
-      <View style={styles.categoriesHeader}>
-        <Text style={styles.categoriesTitle}>Categories</Text>
-      </View>
+      {plans.length > 0 && (
+        <View style={styles.categoriesHeader}>
+          <Text style={styles.categoriesTitle}>Categories</Text>
+        </View>
+      )}
     </>
   ), [period, aggregatedBudgets, plans, totalSpent, totalBudgeted, budgetPct, budgetRemaining, isOverBudget, router]);
 
@@ -706,7 +731,7 @@ export default function BudgetsScreen() {
         </>
       ) : (
         <FlatList
-          data={aggregatedBudgets}
+          data={plans.length > 0 ? aggregatedBudgets : EMPTY_BUDGETS}
           keyExtractor={keyExtractor}
           ListHeaderComponent={renderHeader}
           refreshControl={refreshControl}
@@ -934,6 +959,36 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semiBold,
     color: colors.primary,
     marginBottom: 5,
+  },
+  emptyPlanCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 32,
+    alignItems: "center" as const,
+  },
+  emptyPlanText: {
+    fontSize: 18,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+    marginBottom: 8,
+  },
+  emptyPlanHint: {
+    fontSize: 14,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    textAlign: "center" as const,
+    marginBottom: 20,
+  },
+  emptyPlanButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  emptyPlanButtonText: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: "#FFFFFF",
   },
 
   // Budget Cards

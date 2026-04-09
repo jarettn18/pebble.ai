@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, memo } from "react";
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useBudgetPlansStore } from "../../src/stores/budgetPlans";
 import { useHealthScoreStore } from "../../src/stores/healthScore";
 import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../../src/theme";
+import { getCategoryColor } from "../../src/utils/color";
 
 const PIE_COLORS = colors.spendingPalette;
 const INCOME_COLORS = colors.incomePalette;
@@ -67,6 +68,51 @@ const ASSET_TYPE_ICONS: Record<string, string> = {
   other: "package-variant-closed",
 };
 
+
+function gradeColor(grade: string | null): string {
+  switch (grade) {
+    case "A": return colors.gradeA;
+    case "B": return colors.gradeB;
+    case "C": return colors.gradeC;
+    case "D": return colors.gradeD;
+    default: return colors.gradeF;
+  }
+}
+
+const HealthScoreCard = memo(function HealthScoreCard({
+  score,
+  grade,
+  completeness,
+}: {
+  score: number;
+  grade: string;
+  completeness: number;
+}) {
+  const router = useRouter();
+  const color = gradeColor(grade);
+  return (
+    <TouchableOpacity
+      style={styles.healthScoreCard}
+      onPress={() => router.push("/health-score")}
+      activeOpacity={0.7}
+      accessibilityLabel={`Financial health score ${score}, grade ${grade}`}
+      accessibilityRole="button"
+    >
+      <View style={styles.healthScoreLeft}>
+        <Text style={styles.healthScoreLabel}>FINANCIAL HEALTH</Text>
+        <Text style={styles.healthScoreDetail}>
+          {completeness < 1
+            ? `Based on ${Math.round(completeness * 100)}% of data`
+            : "Tap to see full breakdown"}
+        </Text>
+      </View>
+      <View style={styles.healthScoreRight}>
+        <Text style={[styles.healthScoreValue, { color }]}>{score}</Text>
+        <Text style={[styles.healthScoreGrade, { color }]}>{grade}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 function AssetRow({ asset, onPress }: { asset: AssetSummary; onPress: () => void }) {
   const value = parseFloat(asset.estimated_value);
@@ -139,7 +185,9 @@ export default function DashboardScreen() {
       // Load health score in background
       loadHealthScore();
       // Refresh Plaid balances in background (doesn't block render)
-      apiRequest("/v1/plaid/refresh-balances", { method: "POST" }).catch(() => {});
+      apiRequest("/v1/plaid/refresh-balances", { method: "POST" }).catch((err) => {
+        if (__DEV__) console.warn("Balance refresh failed:", err);
+      });
     }, [])
   );
 
@@ -151,6 +199,8 @@ export default function DashboardScreen() {
           style={styles.headerAddButton}
           onPress={() => setShowAddMenu((v) => !v)}
           activeOpacity={0.7}
+          accessibilityLabel="Add account or asset"
+          accessibilityRole="button"
         >
           <MaterialCommunityIcons name="plus" size={22} color={colors.primary} />
         </TouchableOpacity>
@@ -266,6 +316,24 @@ export default function DashboardScreen() {
     return Array.from(map.values());
   }, [budgetSummaries, plans]);
 
+  const incomeSlices = useMemo(
+    () => incomeByCategory.map((cat, i) => ({
+      label: cat.category_name,
+      value: parseFloat(cat.amount),
+      color: getCategoryColor(cat.category_color, INCOME_COLORS, i),
+    })),
+    [incomeByCategory],
+  );
+
+  const spendingSlices = useMemo(
+    () => spendingByCategory.map((cat, i) => ({
+      label: cat.category_name,
+      value: parseFloat(cat.amount),
+      color: getCategoryColor(cat.category_color, PIE_COLORS, i),
+    })),
+    [spendingByCategory],
+  );
+
   const hasAccounts = accounts.length > 0 || assets.length > 0;
   const [carouselPage, setCarouselPage] = useState(0);
   const [budgetExpanded, setBudgetExpanded] = useState(false);
@@ -335,14 +403,8 @@ export default function DashboardScreen() {
                 {hasAccounts ? formatCurrency(monthlyIncome) : "--"}
               </Text>
             )}
-            {incomeByCategory.length > 0 && (
-              <PieChart
-                slices={incomeByCategory.map((cat, i) => ({
-                  label: cat.category_name,
-                  value: parseFloat(cat.amount),
-                  color: cat.category_color || INCOME_COLORS[i % INCOME_COLORS.length],
-                }))}
-              />
+            {incomeSlices.length > 0 && (
+              <PieChart slices={incomeSlices} />
             )}
             {hasAccounts && (
               <Text style={styles.cardLink}>View details →</Text>
@@ -362,14 +424,8 @@ export default function DashboardScreen() {
                 {hasAccounts ? formatCurrency(monthlySpending) : "--"}
               </Text>
             )}
-            {spendingByCategory.length > 0 && (
-              <PieChart
-                slices={spendingByCategory.map((cat, i) => ({
-                  label: cat.category_name,
-                  value: parseFloat(cat.amount),
-                  color: cat.category_color || PIE_COLORS[i % PIE_COLORS.length],
-                }))}
-              />
+            {spendingSlices.length > 0 && (
+              <PieChart slices={spendingSlices} />
             )}
             {hasAccounts && (
               <Text style={styles.cardLink}>View details →</Text>
@@ -420,7 +476,7 @@ export default function DashboardScreen() {
               const widthPct = (spent / totalBudgeted) * 100 * scale;
               const catColor = isOverBudget
                 ? colors.error
-                : item.category_color || PIE_COLORS[idx % PIE_COLORS.length];
+                : getCategoryColor(item.category_color, PIE_COLORS, idx);
               return (
                 <View
                   key={`${item.category_id}-${idx}`}
@@ -506,6 +562,8 @@ export default function DashboardScreen() {
               setBudgetExpanded((prev) => !prev);
             }}
             hitSlop={12}
+            accessibilityLabel={budgetExpanded ? "Collapse budget details" : "Expand budget details"}
+            accessibilityRole="button"
           >
             <MaterialCommunityIcons
               name={budgetExpanded ? "chevron-up" : "chevron-down"}
@@ -518,60 +576,11 @@ export default function DashboardScreen() {
 
       {/* Health Score Card */}
       {healthScore !== null && (
-        <TouchableOpacity
-          style={styles.healthScoreCard}
-          onPress={() => router.push("/health-score")}
-          activeOpacity={0.7}
-        >
-          <View style={styles.healthScoreLeft}>
-            <Text style={styles.healthScoreLabel}>FINANCIAL HEALTH</Text>
-            <Text style={styles.healthScoreDetail}>
-              {healthCompleteness < 1
-                ? `Based on ${Math.round(healthCompleteness * 100)}% of data`
-                : "Tap to see full breakdown"}
-            </Text>
-          </View>
-          <View style={styles.healthScoreRight}>
-            <Text
-              style={[
-                styles.healthScoreValue,
-                {
-                  color:
-                    healthGrade === "A"
-                      ? "#2e7d32"
-                      : healthGrade === "B"
-                        ? "#45655a"
-                        : healthGrade === "C"
-                          ? "#d99e33"
-                          : healthGrade === "D"
-                            ? "#e67e66"
-                            : "#ba1a1a",
-                },
-              ]}
-            >
-              {healthScore}
-            </Text>
-            <Text
-              style={[
-                styles.healthScoreGrade,
-                {
-                  color:
-                    healthGrade === "A"
-                      ? "#2e7d32"
-                      : healthGrade === "B"
-                        ? "#45655a"
-                        : healthGrade === "C"
-                          ? "#d99e33"
-                          : healthGrade === "D"
-                            ? "#e67e66"
-                            : "#ba1a1a",
-                },
-              ]}
-            >
-              {healthGrade}
-            </Text>
-          </View>
-        </TouchableOpacity>
+        <HealthScoreCard
+          score={healthScore}
+          grade={healthGrade ?? "F"}
+          completeness={healthCompleteness}
+        />
       )}
 
       {/* Accounts */}
@@ -651,6 +660,8 @@ export default function DashboardScreen() {
               style={styles.onboardingClose}
               onPress={() => setShowOnboarding(false)}
               hitSlop={12}
+              accessibilityLabel="Dismiss onboarding"
+              accessibilityRole="button"
             >
               <MaterialCommunityIcons name="close" size={18} color={colors.textMuted} />
             </TouchableOpacity>
@@ -673,6 +684,8 @@ export default function DashboardScreen() {
                 openLink();
               }}
               activeOpacity={0.7}
+              accessibilityLabel="Add bank account"
+              accessibilityRole="button"
             >
               <MaterialCommunityIcons name="bank-outline" size={20} color={colors.primary} />
               <Text style={styles.addMenuText}>Add Account</Text>
@@ -685,6 +698,8 @@ export default function DashboardScreen() {
                 router.push("/add-asset");
               }}
               activeOpacity={0.7}
+              accessibilityLabel="Add property or vehicle"
+              accessibilityRole="button"
             >
               <MaterialCommunityIcons name="home-outline" size={20} color={colors.primary} />
               <Text style={styles.addMenuText}>Add Property or Vehicle</Text>
@@ -697,6 +712,8 @@ export default function DashboardScreen() {
                 router.push("/import-csv");
               }}
               activeOpacity={0.7}
+              accessibilityLabel="Import transactions from CSV"
+              accessibilityRole="button"
             >
               <MaterialCommunityIcons name="file-upload-outline" size={20} color={colors.primary} />
               <Text style={styles.addMenuText}>Import Transactions</Text>

@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import {
   PlusJakartaSans_400Regular,
@@ -15,8 +14,6 @@ import {
 } from "@expo-google-fonts/inter";
 import { useAuthStore } from "../src/stores/auth";
 import { colors } from "../src/theme";
-
-const queryClient = new QueryClient();
 
 function AuthGate() {
   const { isAuthenticated, isLoading, loadUser } = useAuthStore();
@@ -128,9 +125,5 @@ export default function RootLayout() {
 
   if (!fontsLoaded) return null;
 
-  return (
-    <QueryClientProvider client={queryClient}>
-      <AuthGate />
-    </QueryClientProvider>
-  );
+  return <AuthGate />;
 }

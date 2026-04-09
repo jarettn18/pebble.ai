@@ -59,9 +59,11 @@ export default function TransactionsScreen() {
 
   useEffect(() => {
     load();
-    apiRequest<{ categories: Category[] }>("/v1/categories").then((data) =>
-      setCategories(data.categories)
-    );
+    apiRequest<{ categories: Category[] }>("/v1/categories")
+      .then((data) => setCategories(data.categories))
+      .catch((err) => {
+        if (__DEV__) console.warn("Failed to load categories:", err);
+      });
   }, [load]);
 
   const handleSearchChange = useCallback(
@@ -144,6 +146,8 @@ export default function TransactionsScreen() {
               <TouchableOpacity
                 onPress={() => handleSearchChange("")}
                 hitSlop={8}
+                accessibilityLabel="Clear search"
+                accessibilityRole="button"
               >
                 <Text style={styles.clearSearch}>{"\u2715"}</Text>
               </TouchableOpacity>
@@ -255,6 +259,8 @@ export default function TransactionsScreen() {
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push("/transaction/create")}
+        accessibilityLabel="Add transaction"
+        accessibilityRole="button"
       >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>

@@ -47,6 +47,8 @@ export default memo(function PieChart({ slices, size = 110 }: Props) {
   const innerR = r - strokeWidth / 2;
   const outerR = r + strokeWidth / 2;
 
+  const containerStyle = useMemo(() => ({ width: size, height: size }), [size]);
+
   // Precompute all segment geometry
   const segments = useMemo(() => {
     const result: {
@@ -81,7 +83,7 @@ export default memo(function PieChart({ slices, size = 110 }: Props) {
 
   return (
     <View style={styles.wrapper}>
-      <View style={{ width: size, height: size }}>
+      <View style={containerStyle}>
         <Svg width={size} height={size}>
           {/* Colored segments */}
           {segments.map((seg, i) => (

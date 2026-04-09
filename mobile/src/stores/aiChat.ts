@@ -53,8 +53,8 @@ export const useAIChatStore = create<AIChatState>((set, get) => ({
         "/v1/ai/conversations"
       );
       set({ conversations: data.conversations });
-    } catch {
-      // Silently fail — conversations list is non-critical
+    } catch (err) {
+      if (__DEV__) console.warn("Failed to load conversations:", err);
     }
   },
 
@@ -74,8 +74,8 @@ export const useAIChatStore = create<AIChatState>((set, get) => ({
         })),
         error: null,
       });
-    } catch (err: any) {
-      set({ error: err.message || "Failed to load conversation" });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to load conversation" });
     }
   },
 
@@ -169,8 +169,8 @@ export const useAIChatStore = create<AIChatState>((set, get) => ({
           ? { currentConversationId: null, messages: [] }
           : {}),
       }));
-    } catch {
-      // Silently fail
+    } catch (err) {
+      if (__DEV__) console.warn("Failed to delete conversation:", err);
     }
   },
 
