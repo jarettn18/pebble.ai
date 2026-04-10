@@ -252,6 +252,64 @@ resource "aws_ecr_lifecycle_policy" "backend" {
 
 # ---------- ECS Cluster + Fargate Service ----------
 
+# ---------- Secrets Manager ----------
+
+resource "aws_secretsmanager_secret" "db_password" {
+  name = "pebble/${var.environment}/db-password"
+}
+
+resource "aws_secretsmanager_secret_version" "db_password" {
+  secret_id     = aws_secretsmanager_secret.db_password.id
+  secret_string = var.db_password
+}
+
+resource "aws_secretsmanager_secret" "jwt_secret_key" {
+  name = "pebble/${var.environment}/jwt-secret-key"
+}
+
+resource "aws_secretsmanager_secret_version" "jwt_secret_key" {
+  secret_id     = aws_secretsmanager_secret.jwt_secret_key.id
+  secret_string = var.jwt_secret_key
+}
+
+resource "aws_secretsmanager_secret" "plaid_client_id" {
+  name = "pebble/${var.environment}/plaid-client-id"
+}
+
+resource "aws_secretsmanager_secret_version" "plaid_client_id" {
+  secret_id     = aws_secretsmanager_secret.plaid_client_id.id
+  secret_string = var.plaid_client_id
+}
+
+resource "aws_secretsmanager_secret" "plaid_secret" {
+  name = "pebble/${var.environment}/plaid-secret"
+}
+
+resource "aws_secretsmanager_secret_version" "plaid_secret" {
+  secret_id     = aws_secretsmanager_secret.plaid_secret.id
+  secret_string = var.plaid_secret
+}
+
+resource "aws_secretsmanager_secret" "anthropic_api_key" {
+  name = "pebble/${var.environment}/anthropic-api-key"
+}
+
+resource "aws_secretsmanager_secret_version" "anthropic_api_key" {
+  secret_id     = aws_secretsmanager_secret.anthropic_api_key.id
+  secret_string = var.anthropic_api_key
+}
+
+resource "aws_secretsmanager_secret" "encryption_key" {
+  name = "pebble/${var.environment}/encryption-key"
+}
+
+resource "aws_secretsmanager_secret_version" "encryption_key" {
+  secret_id     = aws_secretsmanager_secret.encryption_key.id
+  secret_string = var.encryption_key
+}
+
+# ---------- ECS Cluster + Fargate Service ----------
+
 resource "aws_ecs_cluster" "main" {
   name = "pebble-${var.environment}"
 
@@ -284,6 +342,29 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy" "ecs_secrets_access" {
+  name = "pebble-${var.environment}-secrets-access"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:GetSecretValue",
+      ]
+      Resource = [
+        aws_secretsmanager_secret.db_password.arn,
+        aws_secretsmanager_secret.jwt_secret_key.arn,
+        aws_secretsmanager_secret.plaid_client_id.arn,
+        aws_secretsmanager_secret.plaid_secret.arn,
+        aws_secretsmanager_secret.anthropic_api_key.arn,
+        aws_secretsmanager_secret.encryption_key.arn,
+      ]
+    }]
+  })
+}
+
 resource "aws_iam_role" "ecs_task" {
   name = "pebble-${var.environment}-ecs-task"
 
@@ -312,15 +393,21 @@ resource "aws_ecs_task_definition" "backend" {
     portMappings = [{ containerPort = 8000, protocol = "tcp" }]
 
     environment = [
-      { name = "DATABASE_URL", value = "postgresql+asyncpg://pebble:${var.db_password}@${aws_db_instance.postgres.endpoint}/pebble" },
+      { name = "DATABASE_HOST", value = aws_db_instance.postgres.endpoint },
+      { name = "DATABASE_NAME", value = "pebble" },
+      { name = "DATABASE_USER", value = "pebble" },
       { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379/0" },
       { name = "ENVIRONMENT", value = var.environment },
-      { name = "JWT_SECRET_KEY", value = var.jwt_secret_key },
-      { name = "PLAID_CLIENT_ID", value = var.plaid_client_id },
-      { name = "PLAID_SECRET", value = var.plaid_secret },
       { name = "PLAID_ENV", value = var.plaid_env },
-      { name = "ANTHROPIC_API_KEY", value = var.anthropic_api_key },
-      { name = "ENCRYPTION_KEY", value = var.encryption_key },
+    ]
+
+    secrets = [
+      { name = "DB_PASSWORD", valueFrom = aws_secretsmanager_secret.db_password.arn },
+      { name = "JWT_SECRET_KEY", valueFrom = aws_secretsmanager_secret.jwt_secret_key.arn },
+      { name = "PLAID_CLIENT_ID", valueFrom = aws_secretsmanager_secret.plaid_client_id.arn },
+      { name = "PLAID_SECRET", valueFrom = aws_secretsmanager_secret.plaid_secret.arn },
+      { name = "ANTHROPIC_API_KEY", valueFrom = aws_secretsmanager_secret.anthropic_api_key.arn },
+      { name = "ENCRYPTION_KEY", valueFrom = aws_secretsmanager_secret.encryption_key.arn },
     ]
 
     logConfiguration = {

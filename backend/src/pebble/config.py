@@ -1,9 +1,24 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # Database
+    # Database — either set database_url directly (local dev),
+    # or provide the parts and it will be assembled (ECS + Secrets Manager).
     database_url: str = "postgresql+asyncpg://pebble:pebble_dev_password@localhost:5432/pebble"
+    database_host: str = ""
+    database_name: str = "pebble"
+    database_user: str = "pebble"
+    db_password: str = ""
+
+    @model_validator(mode="after")
+    def assemble_database_url(self) -> "Settings":
+        if self.database_host and self.db_password:
+            self.database_url = (
+                f"postgresql+asyncpg://{self.database_user}:{self.db_password}"
+                f"@{self.database_host}/{self.database_name}"
+            )
+        return self
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -25,6 +40,11 @@ class Settings(BaseSettings):
 
     # Encryption
     encryption_key: str = ""
+
+    # Twilio (SMS verification)
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_verify_service_sid: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

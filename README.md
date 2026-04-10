@@ -622,6 +622,7 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [ ] Mobile: Update Settings screen to support account changes
 - [ ] Mobile: Remove FAB for adding transactions
 - [ ] AI: Bill negotiation, Credit optimization
+- [ ] AI: Maybe port gemma 4 via ollama to the AI instead of paying for claude API calls
 ---
 
 ## Running Locally
