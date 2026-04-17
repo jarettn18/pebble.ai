@@ -13,7 +13,10 @@ RUN pip install --no-cache-dir .
 COPY alembic.ini .
 COPY alembic/ alembic/
 
-EXPOSE 8000
+EXPOSE 8080
 
-# No --reload in staging; run migrations then start
-CMD ["sh", "-c", "alembic upgrade head && uvicorn pebble.main:app --host 0.0.0.0 --port 8000 --workers 2"]
+# Migrations run out-of-band as a Cloud Run Job (`pebble-migrate`), not at
+# service startup — this avoids the ordering/cold-start hazard that caused the
+# AWS incident pattern. Cloud Run injects $PORT (8080); local runs fall back
+# to 8000. `exec` makes uvicorn PID 1 so it receives SIGTERM directly.
+CMD ["sh", "-c", "exec uvicorn pebble.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"]
