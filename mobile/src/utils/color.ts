@@ -10,6 +10,17 @@ export function withOpacity(hex: string, opacity: number): string {
 }
 
 /**
+ * Return a category color, falling back to a palette color by index.
+ */
+export function getCategoryColor(
+  color: string | null | undefined,
+  palette: string[],
+  index: number,
+): string {
+  return color || palette[index % palette.length];
+}
+
+/**
  * Return a contrasting foreground color (white or dark) for a given hex background.
  */
 export function contrastForeground(hex: string): string {

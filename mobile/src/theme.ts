@@ -38,6 +38,13 @@ export const colors = {
   error: "#ba1a1a",
   errorBackground: "#ffdad6",
 
+  // Health score grades
+  gradeA: "#2e7d32",
+  gradeB: "#45655a",
+  gradeC: "#d99e33",
+  gradeD: "#e67e66",
+  gradeF: "#ba1a1a",
+
   // Chart palettes — design system colors
   // Extended category palette (8 distinct colors)
   categoryPalette: [
@@ -50,26 +57,9 @@ export const colors = {
     "#5B8D80", // Forest Green (Health)
     "#5488A8", // Ocean Blue (Subscriptions)
   ],
-  spendingPalette: [
-    "#45655A",
-    "#E67E66",
-    "#D99E33",
-    "#8B7EBF",
-    "#C26D4D",
-    "#23686A",
-    "#5B8D80",
-    "#5488A8",
-  ],
-  incomePalette: [
-    "#45655A",
-    "#E67E66",
-    "#D99E33",
-    "#8B7EBF",
-    "#C26D4D",
-    "#23686A",
-    "#5B8D80",
-    "#5488A8",
-  ],
+  // Aliases — currently identical; split later if designs diverge
+  get spendingPalette() { return this.categoryPalette; },
+  get incomePalette() { return this.categoryPalette; },
 
   // Color picker palette (16 options)
   colorPickerPalette: [

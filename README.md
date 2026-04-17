@@ -609,6 +609,7 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [x] iOS App Transport Security exception for staging ELB domain (`us-east-1.elb.amazonaws.com` allows HTTP)
 - [x] Plaid Link native module now functional (requires dev client, silently no-ops in Expo Go)
 - [x] Physical device deployment via `npx expo run:ios --device`
+- [x] **Decommissioned 2026-04-16** — AWS account closed; `terraform.tfstate` and `terraform.tfvars` removed locally. `main.tf` retained as architectural reference for future redeployment.
 
 ### Phase 7 — Iteration
 - [ ] AI System: Allow asset optimization/Balance Transfers
@@ -622,6 +623,38 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [ ] Mobile: Update Settings screen to support account changes
 - [ ] Mobile: Remove FAB for adding transactions
 - [ ] AI: Bill negotiation, Credit optimization
+- [ ] AI: Maybe port gemma 4 via ollama to the AI instead of paying for claude API calls
+
+### Deployment:
+
+**2026-04-16 — AWS staging decommissioned.** Account closed after a 7-day ECS Fargate crash loop (1,296 failed task launches) produced unexpected charges. Root cause: the deployed ECR image was built from an older `config.py` that lacked the `database_host` field, so the `DATABASE_HOST` env var injected by the task definition was silently ignored and `database_url` stayed at its localhost default. Alembic then tried to connect to `127.0.0.1:5432` inside the container and crashed on startup.
+
+Fix applied before teardown: replaced the runtime-assembly pattern with a pre-assembled `DATABASE_URL` stored in Secrets Manager and injected via the task definition's `secrets` block. Task revision :6 reached steady state (`failedTasks: 0`, `rolloutState: COMPLETED`).
+
+Lessons carried forward for any future cloud redeployment:
+- [ ] Cloud: Add billing alarms / budget alerts on day one before spinning up any billable resources
+- [ ] Cloud: Prefer pre-assembled connection strings as secrets over runtime assembly from parts — silent fallback to a localhost default is the worst failure mode
+- [ ] Cloud: Never commit plaintext API keys or DB passwords to `terraform.tfvars`; use a secret backend or `TF_VAR_*` env vars
+- [ ] Cloud: Enable `deletion_protection` and final snapshots on any production-adjacent RDS instance
+- [ ] Cloud: Tag every billable resource with `Project` / `Environment` so Cost Explorer slices cleanly
+- [ ] Cloud: Add CloudWatch alarms on ECS `failedTasks` so a crash loop pages within minutes, not days
+- [ ] Cloud: Skip VPC interface endpoints for Secrets Manager / ECR / CloudWatch in small staging environments — the $58/mo cost dominates the NAT traffic they were meant to save
+
+Local cleanup done: `terraform.tfstate*` and `terraform.tfvars` removed; `main.tf` retained as an architectural reference under `infra/terraform/aws-legacy/`.
+
+**2026-04-17 — GCP staging rebuild.** Fresh greenfield terraform under `infra/terraform/gcp/` targeting Cloud Run + Cloud SQL + Upstash Redis. Key differences vs. the AWS layout:
+
+- **Cloud Run scales to zero** (`min_instance_count = 0`) — structurally prevents another runaway-cost incident. A crash loop can't rack up charges if there's nothing running.
+- **Alembic migrations move to a Cloud Run Job** (`pebble-migrate`), executed by CI before each service deploy. Removes the startup-time ordering hazard that caused the AWS incident.
+- **Cloud SQL via Unix socket** (`/cloudsql/PROJECT:REGION:INSTANCE`) — no VPC, no NAT, no private IP, no connector fees. `DATABASE_URL` is pre-assembled in Secret Manager (same lesson as the AWS fix) with the password URL-encoded.
+- **Upstash Redis** instead of Memorystore — keeps the scale-to-zero cost story intact (Memorystore BASIC + mandatory VPC connector would burn ~$45/mo idle).
+- **Workload Identity Federation** for GitHub Actions — no long-lived JSON keys, per-branch/per-repo claim matching.
+- **$50/mo billing budget** with 50/90/100% email alerts wired up on day one via `google_billing_budget`.
+
+File layout (`infra/terraform/gcp/`): `providers.tf`, `variables.tf`, `apis.tf`, `artifacts.tf`, `database.tf`, `secrets.tf`, `iam.tf`, `run.tf`, `budget.tf`, `outputs.tf`. See `infra/terraform/gcp/BOOTSTRAP.md` for the one-time manual pre-Terraform steps (project creation, state bucket, `terraform.tfvars`).
+
+Estimated steady-state cost: ~$10–15/mo (vs. ~$190–200/mo on AWS).
+
 ---
 
 ## Running Locally
@@ -651,9 +684,10 @@ cd mobile
 npm install
 npx expo run:ios
 
-# Run iOS dev client pointing to staging
+# Run iOS dev client pointing to GCP staging (Cloud Run)
+# Get the URL from: `cd infra/terraform/gcp && terraform output -raw service_url`
 cd mobile
-echo 'EXPO_PUBLIC_API_URL=http://pebble-staging-710423421.us-east-1.elb.amazonaws.com' > .env
+echo 'EXPO_PUBLIC_API_URL=https://pebble-backend-<hash>-uc.a.run.app' > .env
 npx expo prebuild
 npx expo run:ios
 
@@ -667,8 +701,8 @@ npx expo run:ios --device
 
 | Service | Local | Staging | Production |
 |---------|-------|---------|-----------|
-| PostgreSQL | Docker (port 5432) | AWS RDS | Neon |
-| Redis | Docker (port 6379) | AWS ElastiCache | Upstash |
-| Backend | Docker (port 8000) | AWS ELB (`pebble-staging-*.us-east-1.elb.amazonaws.com`) | Railway or Render |
+| PostgreSQL | Docker (port 5432) | GCP Cloud SQL (`db-f1-micro`, PG16, `us-central1`) | Neon |
+| Redis | Docker (port 6379) | Upstash Redis (TLS, free tier) | Upstash |
+| Backend | Docker (port 8000) | GCP Cloud Run (`pebble-backend`, scales 0–3, `us-central1`) | Railway or Render |
 | Mobile (web) | Docker (port 8081) | — | Static deploy |
 | Mobile (iOS) | `npx expo run:ios` | Dev client → staging ELB | EAS Build + TestFlight |

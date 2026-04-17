@@ -235,6 +235,8 @@ const ConversationItem = memo(function ConversationItem({
       <TouchableOpacity
         onPress={() => onDelete(conversation.id)}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityLabel="Delete conversation"
+        accessibilityRole="button"
       >
         <MaterialCommunityIcons
           name="delete-outline"
@@ -280,6 +282,8 @@ export default function AiChatScreen() {
         <TouchableOpacity
           onPress={() => setShowHistory(true)}
           style={styles.headerBtn}
+          accessibilityLabel="Conversation history"
+          accessibilityRole="button"
         >
           <MaterialCommunityIcons
             name="history"
@@ -292,6 +296,8 @@ export default function AiChatScreen() {
         <TouchableOpacity
           onPress={startNewConversation}
           style={styles.headerBtn}
+          accessibilityLabel="New conversation"
+          accessibilityRole="button"
         >
           <MaterialCommunityIcons
             name="plus"
@@ -435,6 +441,8 @@ export default function AiChatScreen() {
           onPress={handleSend}
           disabled={!inputText.trim() || isStreaming}
           activeOpacity={0.7}
+          accessibilityLabel={isStreaming ? "Stop response" : "Send message"}
+          accessibilityRole="button"
         >
           <MaterialCommunityIcons
             name={isStreaming ? "stop" : "send"}

@@ -13,6 +13,7 @@ import { useDashboardStore, type IncomeByCategory } from "../src/stores/dashboar
 import { formatCurrency } from "../src/utils/dashboard";
 import { apiRequest } from "../src/api/client";
 import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../src/theme";
+import { getCategoryColor } from "../src/utils/color";
 import { Transaction } from "../src/components/TransactionRow";
 import { TransactionListCard } from "../src/components/TransactionListCard";
 
@@ -89,8 +90,9 @@ export default function IncomeScreen() {
         setSelectedTransactions(txns.transactions);
         setLoadingSelected(false);
       }
-    }).catch(() => {
+    }).catch((err) => {
       if (!cancelled) setLoadingSelected(false);
+      if (__DEV__) console.warn("Failed to load income data:", err);
     });
 
     return () => { cancelled = true; };
@@ -240,7 +242,7 @@ export default function IncomeScreen() {
                     {
                       width: `${pct}%`,
                       backgroundColor:
-                        cat.category_color || CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                        getCategoryColor(cat.category_color, CATEGORY_COLORS, i),
                     },
                     i === 0 && styles.stackedFirst,
                     i === activeCategoryData.length - 1 && styles.stackedLast,
@@ -254,7 +256,7 @@ export default function IncomeScreen() {
           {activeCategoryData.map((cat, i) => {
             const amount = parseFloat(cat.amount);
             const pct = (amount / maxCategoryAmount) * 100;
-            const color = cat.category_color || CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+            const color = getCategoryColor(cat.category_color, CATEGORY_COLORS, i);
             const activeMonth = selectedMonth ?? { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
             return (
               <TouchableOpacity

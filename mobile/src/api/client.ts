@@ -10,6 +10,7 @@ type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   noAuth?: boolean;
+  signal?: AbortSignal;
 };
 
 async function getTokens() {
@@ -73,7 +74,7 @@ export async function apiRequest<T = unknown>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { method = "GET", body, headers = {}, noAuth = false } = options;
+  const { method = "GET", body, headers = {}, noAuth = false, signal } = options;
 
   const requestHeaders: Record<string, string> = {
     "Content-Type": "application/json",
@@ -91,6 +92,7 @@ export async function apiRequest<T = unknown>(
     method,
     headers: requestHeaders,
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   // If 401, try refreshing the token once
@@ -102,6 +104,7 @@ export async function apiRequest<T = unknown>(
         method,
         headers: requestHeaders,
         body: body ? JSON.stringify(body) : undefined,
+        signal,
       });
     }
   }
@@ -122,8 +125,9 @@ export async function apiRequest<T = unknown>(
 
 export async function apiUpload<T = unknown>(
   path: string,
-  formData: FormData
+  formData: FormData | (() => FormData)
 ): Promise<T> {
+  const buildFormData = typeof formData === "function" ? formData : () => formData;
   const requestHeaders: Record<string, string> = {};
 
   const { access } = await getTokens();
@@ -134,10 +138,10 @@ export async function apiUpload<T = unknown>(
   let res = await fetch(`${API_URL}${path}`, {
     method: "POST",
     headers: requestHeaders,
-    body: formData,
+    body: buildFormData(),
   });
 
-  // If 401, try refreshing the token once
+  // If 401, try refreshing the token once — rebuild FormData since the stream is consumed
   if (res.status === 401) {
     const newToken = await refreshAccessToken();
     if (newToken) {
@@ -145,7 +149,7 @@ export async function apiUpload<T = unknown>(
       res = await fetch(`${API_URL}${path}`, {
         method: "POST",
         headers: requestHeaders,
-        body: formData,
+        body: buildFormData(),
       });
     }
   }

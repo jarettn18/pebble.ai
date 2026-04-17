@@ -8,7 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useAuthStore } from "../../src/stores/auth";
 import { colors, borderRadius } from "../../src/theme";
 
@@ -16,13 +16,15 @@ export default function RegisterScreen() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const register = useAuthStore((s) => s.register);
+  const initiateRegister = useAuthStore((s) => s.initiateRegister);
+  const router = useRouter();
 
   const handleRegister = async () => {
     setError("");
-    if (!fullName || !email || !password) {
+    if (!fullName || !email || !password || !phoneNumber) {
       setError("Please fill in all fields");
       return;
     }
@@ -32,7 +34,13 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
-      await register(email.trim().toLowerCase(), password, fullName.trim());
+      await initiateRegister(
+        email.trim().toLowerCase(),
+        password,
+        fullName.trim(),
+        phoneNumber.trim()
+      );
+      router.push("/(auth)/verify-phone");
     } catch (e: any) {
       setError(e.message || "Registration failed");
     } finally {
@@ -69,6 +77,14 @@ export default function RegisterScreen() {
         />
         <TextInput
           style={styles.input}
+          placeholder="Phone number"
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          keyboardType="phone-pad"
+          autoComplete="tel"
+        />
+        <TextInput
+          style={styles.input}
           placeholder="Password"
           value={password}
           onChangeText={setPassword}
@@ -82,7 +98,7 @@ export default function RegisterScreen() {
           disabled={loading}
         >
           <Text style={styles.buttonText}>
-            {loading ? "Creating account..." : "Create Account"}
+            {loading ? "Sending code..." : "Create Account"}
           </Text>
         </TouchableOpacity>
 
