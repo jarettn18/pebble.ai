@@ -2,7 +2,7 @@ import datetime
 import enum
 import uuid
 
-from sqlalchemy import Date, Enum, Integer, String
+from sqlalchemy import Boolean, Date, Enum, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,8 @@ class User(Base, TimestampMixin):
         Enum(SubscriptionTier), default=SubscriptionTier.free
     )
     api_key_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    phone_number: Mapped[str | None] = mapped_column(String(20), unique=True, index=True)
+    phone_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # Profile fields
     date_of_birth: Mapped[datetime.date | None] = mapped_column(Date)

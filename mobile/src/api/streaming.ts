@@ -48,8 +48,8 @@ function parseSSEChunk(raw: string, callbacks: StreamCallbacks) {
           callbacks.onError(data.message);
           break;
       }
-    } catch {
-      // Skip malformed JSON
+    } catch (e) {
+      if (__DEV__) console.warn("Malformed SSE chunk:", trimmed, e);
     }
   }
 }
@@ -145,6 +145,7 @@ export async function streamChat(
   message: string,
   conversationId: string | null,
   callbacks: StreamCallbacks,
+  _retryCount = 0,
 ): Promise<{ abort: () => void }> {
   if (USE_MOCK) {
     return streamChatMock(message, conversationId, callbacks);
@@ -175,12 +176,11 @@ export async function streamChat(
   };
 
   xhr.onload = async () => {
-    // If 401, try refreshing and retrying once
-    if (xhr.status === 401) {
+    // If 401, try refreshing and retrying once (max 1 retry)
+    if (xhr.status === 401 && _retryCount < 1) {
       const newToken = await refreshAccessToken();
       if (newToken) {
-        // Retry with fresh token
-        const retryResult = await streamChat(message, conversationId, callbacks);
+        const retryResult = await streamChat(message, conversationId, callbacks, _retryCount + 1);
         retryAbort = retryResult.abort;
         return;
       }
@@ -220,6 +220,10 @@ export async function streamChat(
 
   return {
     abort: () => {
+      xhr.onprogress = null;
+      xhr.onload = null;
+      xhr.onerror = null;
+      xhr.ontimeout = null;
       xhr.abort();
       retryAbort?.();
     },

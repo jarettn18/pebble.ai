@@ -6,14 +6,13 @@ on:
   workflow_dispatch: # allow manual triggers
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: pebble/backend
-  ECS_CLUSTER: pebble-staging
-  ECS_SERVICE: backend
-  TASK_FAMILY: pebble-staging-backend
+  GCP_REGION: us-central1
+  AR_REPO: pebble
+  SERVICE_NAME: pebble-backend
+  JOB_NAME: pebble-migrate
 
 permissions:
-  id-token: write   # for OIDC
+  id-token: write   # for Workload Identity Federation
   contents: read
 
 jobs:
@@ -71,53 +70,60 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Authenticate to Google Cloud (WIF)
+        id: auth
+        uses: google-github-actions/auth@v2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
 
-      - name: Login to Amazon ECR
-        id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
-      - name: Build, tag, and push image
+      - name: Configure docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
         id: build
         env:
-          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/backend:${{ github.sha }}
+          IMAGE_LATEST: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/backend:latest
         run: |
-          docker build -f backend/Dockerfile.staging -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG backend/
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          docker build -f backend/Dockerfile.staging -t "$IMAGE" -t "$IMAGE_LATEST" backend/
+          docker push "$IMAGE"
+          docker push "$IMAGE_LATEST"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
-      - name: Download current task definition
+      - name: Run migrations (Cloud Run Job)
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
         run: |
-          aws ecs describe-task-definition \
-            --task-definition $TASK_FAMILY \
-            --query taskDefinition \
-            > task-def.json
+          gcloud run jobs update "$JOB_NAME" \
+            --image="$IMAGE" \
+            --region="$GCP_REGION" \
+            --project="${{ secrets.GCP_PROJECT_ID }}"
+          gcloud run jobs execute "$JOB_NAME" \
+            --region="$GCP_REGION" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --wait
 
-      - name: Update task definition with new image
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-def.json
-          container-name: backend
-          image: ${{ steps.build.outputs.image }}
-
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
+      - name: Deploy Cloud Run service
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          gcloud run deploy "$SERVICE_NAME" \
+            --image="$IMAGE" \
+            --region="$GCP_REGION" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --quiet
 
       - name: Summary
         run: |
-          echo "### Staging Deploy Complete :rocket:" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ steps.build.outputs.image }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          URL=$(gcloud run services describe "$SERVICE_NAME" \
+            --region="$GCP_REGION" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --format='value(status.url)')
+          echo "### Staging Deploy Complete :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Service:** $URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Image:** \`${{ steps.build.outputs.image }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commit:** \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"

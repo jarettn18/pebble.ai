@@ -272,7 +272,9 @@ export default function BudgetPlanDetailScreen() {
     try {
       const data = await apiRequest<{ categories: Category[] }>("/v1/categories");
       setAllCategories(data.categories);
-    } catch {}
+    } catch (err) {
+      if (__DEV__) console.warn("Failed to load categories:", err);
+    }
   }
 
   function cancelEditMode() {

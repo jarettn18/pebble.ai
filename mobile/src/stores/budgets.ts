@@ -51,7 +51,9 @@ export const useBudgetsStore = create<BudgetsState>((set, get) => ({
     try {
       // Kick off transaction sync in background so spending data is fresh,
       // but don't block budget loading on it
-      useTransactionsStore.getState().load().catch(() => {});
+      useTransactionsStore.getState().load().catch((err) => {
+        if (__DEV__) console.warn("Background transaction sync failed:", err);
+      });
 
       const data = await apiRequest<BudgetListResponse>(
         `/v1/budgets?month=${month}&year=${year}`

@@ -1,6 +1,7 @@
 import datetime
 import re
 
+import phonenumbers
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
@@ -19,6 +20,60 @@ class RegisterRequest(BaseModel):
         if not re.search(r"[0-9]", v):
             raise ValueError("Password must contain at least one digit")
         return v
+
+
+def _validate_phone(v: str) -> str:
+    """Validate and normalize phone number to E.164 format."""
+    # Dev-only: allow the fictitious-use mock number through without
+    # phonenumbers' validity check (555-01xx is reserved, not "valid").
+    from pebble.services.sms import MOCK_PHONE_NUMBER
+    if v == MOCK_PHONE_NUMBER:
+        return MOCK_PHONE_NUMBER
+
+    try:
+        parsed = phonenumbers.parse(v, "US")
+    except phonenumbers.NumberParseException:
+        raise ValueError("Invalid phone number format")
+    if not phonenumbers.is_valid_number(parsed):
+        raise ValueError("Invalid phone number")
+    return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+
+
+class InitiateRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=1, max_length=255)
+    phone_number: str = Field(min_length=10, max_length=20)
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"[0-9]", v):
+            raise ValueError("Password must contain at least one digit")
+        return v
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone(cls, v: str) -> str:
+        return _validate_phone(v)
+
+
+class InitiateRegisterResponse(BaseModel):
+    verification_id: str
+    message: str = "Verification code sent"
+
+
+class VerifyRegisterRequest(BaseModel):
+    verification_id: str
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class ResendCodeRequest(BaseModel):
+    verification_id: str
 
 
 class LoginRequest(BaseModel):
@@ -41,6 +96,8 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     subscription_tier: str
+    phone_number: str | None = None
+    phone_verified: bool = False
     date_of_birth: datetime.date | None = None
     occupation: str | None = None
     annual_income: int | None = None

@@ -8,7 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useAuthStore } from "../../src/stores/auth";
 import { colors, borderRadius } from "../../src/theme";
 
@@ -16,14 +16,20 @@ export default function RegisterScreen() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const register = useAuthStore((s) => s.register);
+  const initiateRegister = useAuthStore((s) => s.initiateRegister);
+  const router = useRouter();
 
   const handleRegister = async () => {
     setError("");
-    if (!fullName || !email || !password) {
+    if (!fullName || !email || !password || !phoneNumber) {
       setError("Please fill in all fields");
+      return;
+    }
+    if (phoneNumber.length !== 10) {
+      setError("Phone number must be 10 digits");
       return;
     }
     if (password.length < 8) {
@@ -32,7 +38,13 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
-      await register(email.trim().toLowerCase(), password, fullName.trim());
+      await initiateRegister(
+        email.trim().toLowerCase(),
+        password,
+        fullName.trim(),
+        `+1${phoneNumber}`
+      );
+      router.push("/(auth)/verify-phone");
     } catch (e: any) {
       setError(e.message || "Registration failed");
     } finally {
@@ -67,6 +79,20 @@ export default function RegisterScreen() {
           keyboardType="email-address"
           autoComplete="email"
         />
+        <View style={styles.phoneRow}>
+          <View style={styles.phonePrefix}>
+            <Text style={styles.phonePrefixText}>+1</Text>
+          </View>
+          <TextInput
+            style={styles.phoneInput}
+            placeholder="5555550100"
+            value={phoneNumber}
+            onChangeText={(t) => setPhoneNumber(t.replace(/\D/g, "").slice(0, 10))}
+            keyboardType="number-pad"
+            autoComplete="tel"
+            maxLength={10}
+          />
+        </View>
         <TextInput
           style={styles.input}
           placeholder="Password"
@@ -82,7 +108,7 @@ export default function RegisterScreen() {
           disabled={loading}
         >
           <Text style={styles.buttonText}>
-            {loading ? "Creating account..." : "Create Account"}
+            {loading ? "Sending code..." : "Create Account"}
           </Text>
         </TouchableOpacity>
 
@@ -127,6 +153,32 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     marginBottom: 12,
+    backgroundColor: colors.background,
+  },
+  phoneRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  phonePrefix: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+    backgroundColor: colors.background,
+    marginRight: 8,
+  },
+  phonePrefixText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  phoneInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    padding: 16,
+    fontSize: 16,
     backgroundColor: colors.background,
   },
   button: {

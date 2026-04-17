@@ -18,3 +18,8 @@ jwt_secret_key = "CHANGE_ME_generate_a_strong_random_secret"
 
 # --- Encryption ---
 # encryption_key = ""
+
+# Twilio (SMS verification)
+TWILIO_ACCOUNT_SID=your-twilio-account-sid
+TWILIO_AUTH_TOKEN=your-twilio-auth-token
+TWILIO_PHONE_NUMBER=+1234567890
