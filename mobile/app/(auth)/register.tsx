@@ -28,6 +28,10 @@ export default function RegisterScreen() {
       setError("Please fill in all fields");
       return;
     }
+    if (phoneNumber.length !== 10) {
+      setError("Phone number must be 10 digits");
+      return;
+    }
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
@@ -38,7 +42,7 @@ export default function RegisterScreen() {
         email.trim().toLowerCase(),
         password,
         fullName.trim(),
-        phoneNumber.trim()
+        `+1${phoneNumber}`
       );
       router.push("/(auth)/verify-phone");
     } catch (e: any) {
@@ -75,14 +79,20 @@ export default function RegisterScreen() {
           keyboardType="email-address"
           autoComplete="email"
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Phone number"
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
-          keyboardType="phone-pad"
-          autoComplete="tel"
-        />
+        <View style={styles.phoneRow}>
+          <View style={styles.phonePrefix}>
+            <Text style={styles.phonePrefixText}>+1</Text>
+          </View>
+          <TextInput
+            style={styles.phoneInput}
+            placeholder="5555550100"
+            value={phoneNumber}
+            onChangeText={(t) => setPhoneNumber(t.replace(/\D/g, "").slice(0, 10))}
+            keyboardType="number-pad"
+            autoComplete="tel"
+            maxLength={10}
+          />
+        </View>
         <TextInput
           style={styles.input}
           placeholder="Password"
@@ -143,6 +153,32 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     marginBottom: 12,
+    backgroundColor: colors.background,
+  },
+  phoneRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  phonePrefix: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+    backgroundColor: colors.background,
+    marginRight: 8,
+  },
+  phonePrefixText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  phoneInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    padding: 16,
+    fontSize: 16,
     backgroundColor: colors.background,
   },
   button: {

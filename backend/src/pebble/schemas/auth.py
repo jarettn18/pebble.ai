@@ -24,6 +24,12 @@ class RegisterRequest(BaseModel):
 
 def _validate_phone(v: str) -> str:
     """Validate and normalize phone number to E.164 format."""
+    # Dev-only: allow the fictitious-use mock number through without
+    # phonenumbers' validity check (555-01xx is reserved, not "valid").
+    from pebble.services.sms import MOCK_PHONE_NUMBER
+    if v == MOCK_PHONE_NUMBER:
+        return MOCK_PHONE_NUMBER
+
     try:
         parsed = phonenumbers.parse(v, "US")
     except phonenumbers.NumberParseException:
