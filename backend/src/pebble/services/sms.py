@@ -5,6 +5,11 @@ from pebble.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Dev-only bypass: this fictitious-use number skips Twilio entirely.
+# Pair with MOCK_VERIFICATION_CODE when verifying.
+MOCK_PHONE_NUMBER = "+15555550100"
+MOCK_VERIFICATION_CODE = "000000"
+
 _twilio_client = None
 
 
@@ -19,6 +24,10 @@ def _get_client():
 
 async def send_verification_code(to_number: str) -> None:
     """Send a verification code via Twilio Verify API."""
+    if to_number == MOCK_PHONE_NUMBER:
+        logger.info("Mock phone number — skipping Twilio SMS")
+        return
+
     if not settings.twilio_account_sid:
         logger.warning("Twilio not configured — skipping SMS to %s", to_number)
         return
@@ -34,6 +43,9 @@ async def send_verification_code(to_number: str) -> None:
 
 async def check_verification_code(to_number: str, code: str) -> bool:
     """Check a verification code via Twilio Verify API. Returns True if valid."""
+    if to_number == MOCK_PHONE_NUMBER:
+        return code == MOCK_VERIFICATION_CODE
+
     if not settings.twilio_account_sid:
         logger.warning("Twilio not configured — auto-approving code for %s", to_number)
         return True
