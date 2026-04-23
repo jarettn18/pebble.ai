@@ -12,11 +12,32 @@ import { Link, useRouter } from "expo-router";
 import { useAuthStore } from "../../src/stores/auth";
 import { colors, borderRadius } from "../../src/theme";
 
+function formatDobInput(prev: string, next: string): string {
+  // Accept backspace freely; otherwise keep only digits and auto-insert dashes
+  if (next.length < prev.length) return next;
+  const digits = next.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+}
+
+function isValidDob(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(s + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return false;
+  const today = new Date();
+  if (d > today) return false;
+  if (d.getFullYear() < 1900) return false;
+  // Round-trip to catch invalid dates like 2025-02-30
+  return d.toISOString().slice(0, 10) === s;
+}
+
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const initiateRegister = useAuthStore((s) => s.initiateRegister);
@@ -24,12 +45,16 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     setError("");
-    if (!fullName || !email || !password || !phoneNumber) {
+    if (!fullName || !email || !password || !phoneNumber || !dateOfBirth) {
       setError("Please fill in all fields");
       return;
     }
     if (phoneNumber.length !== 10) {
       setError("Phone number must be 10 digits");
+      return;
+    }
+    if (!isValidDob(dateOfBirth)) {
+      setError("Enter a valid birthday (YYYY-MM-DD)");
       return;
     }
     if (password.length < 8) {
@@ -42,7 +67,8 @@ export default function RegisterScreen() {
         email.trim().toLowerCase(),
         password,
         fullName.trim(),
-        `+1${phoneNumber}`
+        `+1${phoneNumber}`,
+        dateOfBirth
       );
       router.push("/(auth)/verify-phone");
     } catch (e: any) {
@@ -93,6 +119,15 @@ export default function RegisterScreen() {
             maxLength={10}
           />
         </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Birthday (YYYY-MM-DD)"
+          value={dateOfBirth}
+          onChangeText={(t) => setDateOfBirth(formatDobInput(dateOfBirth, t))}
+          keyboardType="number-pad"
+          autoComplete="birthdate-full"
+          maxLength={10}
+        />
         <TextInput
           style={styles.input}
           placeholder="Password"

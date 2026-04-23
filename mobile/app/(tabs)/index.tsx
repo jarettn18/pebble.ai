@@ -23,6 +23,7 @@ import { useTransactionsStore } from "../../src/stores/transactions";
 import { usePlaidLink } from "../../src/hooks/usePlaidLink";
 import { apiRequest } from "../../src/api/client";
 import { formatCurrency } from "../../src/utils/dashboard";
+import { exportTransactions } from "../../src/utils/exportTransactions";
 import PieChart from "../../src/components/PieChart";
 import NetWorthChart from "../../src/components/NetWorthChart";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -146,6 +147,7 @@ export default function DashboardScreen() {
   const user = useAuthStore((s) => s.user);
   const [exchanging, setExchanging] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
 
   const {
@@ -240,6 +242,7 @@ export default function DashboardScreen() {
             refreshAccounts(),
             syncTransactions(),
             refreshDashboard(),
+            loadHealthScore(),
           ]);
         }
       } catch (err) {
@@ -717,6 +720,35 @@ export default function DashboardScreen() {
             >
               <MaterialCommunityIcons name="file-upload-outline" size={20} color={colors.primary} />
               <Text style={styles.addMenuText}>Import Transactions</Text>
+            </TouchableOpacity>
+            <View style={styles.addMenuDivider} />
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              disabled={exporting}
+              onPress={async () => {
+                if (exporting) return;
+                setShowAddMenu(false);
+                setExporting(true);
+                try {
+                  await exportTransactions();
+                } catch (err) {
+                  Alert.alert(
+                    "Export failed",
+                    err instanceof Error ? err.message : "Could not export transactions."
+                  );
+                } finally {
+                  setExporting(false);
+                }
+              }}
+              activeOpacity={0.7}
+              accessibilityLabel="Export transactions to CSV"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: exporting }}
+            >
+              <MaterialCommunityIcons name="file-download-outline" size={20} color={colors.primary} />
+              <Text style={styles.addMenuText}>
+                {exporting ? "Exporting…" : "Export Transactions"}
+              </Text>
             </TouchableOpacity>
           </View>
         </>

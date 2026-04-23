@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { apiRequest } from "../api/client";
+import { useHealthScoreStore } from "./healthScore";
 
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 day
 
@@ -118,6 +119,9 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         totalCount: data.count,
         lastFetchedAt: Date.now(),
       });
+      // Transactions just changed (or may have) — refresh the health score so
+      // the dashboard card doesn't show a stale value.
+      useHealthScoreStore.getState().load();
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Failed to load",
@@ -173,6 +177,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     set((state) => ({
       transactions: [created, ...state.transactions],
     }));
+    useHealthScoreStore.getState().load();
   },
 
   removeTransaction: async (id) => {
@@ -180,5 +185,6 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     set((state) => ({
       transactions: state.transactions.filter((t) => t.id !== id),
     }));
+    useHealthScoreStore.getState().load();
   },
 }));

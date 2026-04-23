@@ -1,4 +1,7 @@
+from datetime import date as date_type
+
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pebble.database import get_db
@@ -10,15 +13,19 @@ from pebble.schemas.transaction import (
     TransactionListResponse,
     TransactionUpdateRequest,
 )
+from pebble.services.rate_limiter import RateLimitDependency
 from pebble.services.transactions import (
     create_transaction,
     delete_transaction,
+    export_transactions_csv,
     get_transaction,
     get_transactions,
     update_transaction,
 )
 
 router = APIRouter(prefix="/v1/transactions", tags=["transactions"])
+
+_export_limiter = RateLimitDependency(max_requests=3, window_seconds=60)
 
 
 @router.get("", response_model=TransactionListResponse)
@@ -55,6 +62,19 @@ async def create_transaction_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     return await create_transaction(str(user.id), req.model_dump(), db)
+
+
+@router.get("/export.csv", dependencies=[Depends(_export_limiter)])
+async def export_transactions_endpoint(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    filename = f"pebble-transactions-{date_type.today().isoformat()}.csv"
+    return StreamingResponse(
+        export_transactions_csv(str(user.id), db),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{transaction_id}", response_model=TransactionDetailOut)

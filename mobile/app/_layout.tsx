@@ -16,7 +16,7 @@ import { useAuthStore } from "../src/stores/auth";
 import { colors } from "../src/theme";
 
 function AuthGate() {
-  const { isAuthenticated, isLoading, loadUser } = useAuthStore();
+  const { isAuthenticated, isLoading, loadUser, user } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
 
@@ -28,13 +28,28 @@ function AuthGate() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === "(auth)";
+    const inOnboardingGroup = segments[0] === "(onboarding)";
+    const needsOnboarding =
+      isAuthenticated && user && !user.onboarding_completed;
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace("/(auth)/login");
     } else if (isAuthenticated && inAuthGroup) {
+      if (needsOnboarding) {
+        router.replace("/(onboarding)/occupation");
+      } else {
+        router.replace("/(tabs)");
+      }
+    } else if (needsOnboarding && !inOnboardingGroup) {
+      router.replace("/(onboarding)/occupation");
+    } else if (
+      isAuthenticated &&
+      user?.onboarding_completed &&
+      inOnboardingGroup
+    ) {
       router.replace("/(tabs)");
     }
-  }, [isAuthenticated, isLoading, segments]);
+  }, [isAuthenticated, isLoading, segments, user]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

@@ -1,5 +1,69 @@
 # Changelog
 
+## 2026-04-23 — Onboarding Flow + Account Deactivation
+
+### Sign-up Now Collects Birthday (Required, Pre-SMS)
+
+Sign-up captures the four required identity fields (full name, email, phone, **birthday**) in a single screen before SMS verification. Birthday flows through the existing register/initiate → SMS verify pipeline and is set on the `User` row at account creation.
+
+#### Backend
+- `InitiateRegisterRequest` (`schemas/auth.py`) gained a required `date_of_birth: datetime.date` field with the same `_validate_dob` check shared by `UpdateProfileRequest` (not in future, year ≥ 1900). DOB validator extracted to a module-level helper alongside `_validate_phone`.
+- `services/phone_verification.py` now serializes `date_of_birth` into the Redis pending-registration blob (`isoformat()` in, `fromisoformat()` out) and passes it into the `User()` constructor on `verify_and_create_user`.
+
+#### Mobile
+- `app/(auth)/register.tsx` adds a "Birthday (YYYY-MM-DD)" input below phone with auto-dash formatting (`formatDobInput`) and client-side validity check (`isValidDob` — round-trips through `Date` to reject e.g. `2025-02-30`). Used a `TextInput` to stay consistent with the existing `settings.tsx` DOB pattern and avoid pulling in `@react-native-community/datetimepicker`.
+- `useAuthStore.initiateRegister(...)` signature gained a `dateOfBirth: string` (YYYY-MM-DD) parameter, included as `date_of_birth` in the POST body.
+
+### Multi-Step Onboarding Wizard (Skippable Per Step)
+
+After SMS verification, new users are routed through a 6-step wizard for the optional profile fields. Each step has Continue + "Skip for now" — skipping never blocks. The final step writes `onboarding_completed: true` and replaces to `/(tabs)`.
+
+#### Backend
+- `User.onboarding_completed: bool` (default `false`, `server_default="false"`) added to `models/user.py`.
+- `UpdateProfileRequest` accepts `onboarding_completed: bool | None`, so the mobile completes onboarding via the existing `PATCH /v1/auth/profile` endpoint with no new route.
+- `UserResponse` and `_user_response()` (`routers/auth.py`) surface `onboarding_completed`.
+
+#### Mobile — Routing
+- New `app/(onboarding)/` route group with `_layout.tsx` (Stack, headers off, gestures disabled).
+- `app/_layout.tsx` `AuthGate` now also redirects authenticated users with `!user.onboarding_completed` to `/(onboarding)/occupation`. Existing users get one-shot prompted on next login (no migration backfill — `active` defaults via column default mean they all get the wizard once).
+
+#### Mobile — Step Screens
+6 single-purpose files under `app/(onboarding)/`:
+1. `occupation.tsx` — text input (max 100 chars)
+2. `state.tsx` — chip-grid US state picker
+3. `income.tsx` — formatted income input with `$` prefix (uses shared `formatIncome`)
+4. `marital-status.tsx` — single-select chip row
+5. `dependents.tsx` — `−`/`+` stepper
+6. `goals.tsx` — multi-select financial goals chips, also flips `onboarding_completed = true` and `router.replace("/(tabs)")`
+
+#### Mobile — Shared Component & Refactor
+- `src/components/OnboardingStep.tsx` — shared layout: progress bar (filled segments per `stepIndex`), title + subtitle, scrollable body slot, footer with primary `Continue` button + `Skip for now` link. Match the existing `KeyboardAvoidingView` + `colors`/`borderRadius` theme.
+- `src/constants/profile.ts` (new) — lifted `US_STATES`, `MARITAL_OPTIONS`, `GOAL_OPTIONS`, `capitalize` from `settings.tsx` so onboarding screens and settings share one source of truth.
+- `src/utils/format.ts` (new) — `formatIncome` extracted from `settings.tsx`.
+- `app/(tabs)/settings.tsx` refactored to import the shared constants/utility (no behavior change).
+
+### Account Deactivation
+
+`active: bool` flag on `User` gates all authenticated interaction. Self-serve deactivation lives in Settings; reactivation is intentionally not exposed self-serve.
+
+#### Backend
+- `User.active: bool` (default `true`, `server_default="true"`, indexed via `ix_users_active`) added to `models/user.py`.
+- `middleware/auth.py`: both `get_current_user` and `get_user_by_api_key` now reject inactive users with `403 "Account has been deactivated"` — blocks every authenticated route.
+- `services/auth.py`: `login_user` and `refresh_tokens` also reject inactive users so deactivated accounts can't get fresh tokens even with valid credentials/refresh JWTs.
+- `POST /v1/auth/deactivate` (`routers/auth.py`) flips `active = false` for the current user.
+- `UserResponse.active: bool` (defaults `true`) plumbed through `_user_response()`.
+
+#### Mobile
+- `useAuthStore` adds `deactivateAccount()` — POSTs to `/v1/auth/deactivate`, clears tokens via `clearTokens()`, and resets the store (which boots the user back to login through the existing `AuthGate`).
+- `app/(tabs)/settings.tsx` adds a red "Deactivate Account" button below Sign Out with a confirmation `Alert` warning the user the action will sign them out and prevent re-login.
+
+### Database Migration
+
+- New Alembic revision `4a2b1c3d5e7f_add_onboarding_completed_and_active` (parent: `39efcd9dc1dd`) adds both `onboarding_completed` and `active` columns plus the `ix_users_active` index in a single upgrade.
+- Local Postgres wiped (`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`) and re-migrated through all 12 revisions to verify the chain replays cleanly from scratch.
+
+---
+
 ## 2026-04-08 — Staging Environment + Native Build Migration
 
 ### Staging Environment

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pebble.models.asset import Asset, AssetType
+from pebble.services.health_score import invalidate_health_score_cache
 
 
 def _asset_to_dict(a: Asset) -> dict:
@@ -80,6 +81,7 @@ async def create_asset(user_id: str, data: dict, db: AsyncSession) -> dict:
     db.add(asset)
     await db.commit()
     await db.refresh(asset)
+    await invalidate_health_score_cache(user_id)
 
     return _asset_to_dict(asset)
 
@@ -129,6 +131,7 @@ async def update_asset(
 
     await db.commit()
     await db.refresh(asset)
+    await invalidate_health_score_cache(user_id)
 
     return _asset_to_dict(asset)
 
@@ -152,3 +155,4 @@ async def delete_asset(user_id: str, asset_id: str, db: AsyncSession) -> None:
 
     await db.delete(asset)
     await db.commit()
+    await invalidate_health_score_cache(user_id)
