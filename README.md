@@ -120,11 +120,10 @@ pebble/
 │   │   │   ├── dependents.tsx       # Step 5: dependents −/+ stepper
 │   │   │   └── goals.tsx            # Step 6: financial goals multi-select (also flips onboarding_completed=true)
 │   │   ├── (tabs)/
-│   │   │   ├── _layout.tsx          # Tab navigator (5 tabs)
+│   │   │   ├── _layout.tsx          # Tab navigator (4 tabs — AI chat lifted to global FAB + bottom sheet)
 │   │   │   ├── index.tsx            # Dashboard (net worth chart, pie chart, budgets)
 │   │   │   ├── transactions.tsx     # Transaction list with search, filters & FAB
 │   │   │   ├── budgets.tsx          # Budget list with progress bars, expandable plans, swipe-to-delete
-│   │   │   ├── ai-chat.tsx          # AI chat (streaming, markdown, conversation history)
 │   │   │   └── settings.tsx         # Settings + logout + deactivate account
 │   │   ├── budget/
 │   │   │   ├── create.tsx           # Multi-step budget plan creation wizard
@@ -149,7 +148,9 @@ pebble/
 │       │   └── streaming.ts         # SSE streaming client (XHR onprogress for React Native)
 │       ├── components/
 │       │   ├── CategoryAllocation.tsx # Category allocation list with inline amount inputs
+│       │   ├── ChatSheet.tsx          # Global AI chat bottom sheet (gorhom, snap points 35/75/95%, conversation history)
 │       │   ├── ColorPickerModal.tsx   # Bottom-sheet color picker with 16 preset swatches
+│       │   ├── GlobalChatFAB.tsx      # Route-aware floating action button that opens the chat sheet
 │       │   ├── MonthPicker.tsx       # Multi-select month grid with recurring toggle
 │       │   ├── LineChart.tsx         # SVG line chart with bezier curves, gradient fill, axis labels
 │       │   ├── NetWorthChart.tsx     # Net worth history chart with period tabs (1M/3M/1Y/5Y)
@@ -173,6 +174,7 @@ pebble/
 │           ├── assets.ts            # Zustand assets store (CRUD)
 │           ├── budgets.ts           # Zustand budgets store
 │           ├── budgetPlans.ts       # Zustand budget plans store
+│           ├── chatUI.ts            # Zustand chat sheet UI store (open/close)
 │           ├── dashboard.ts         # Zustand dashboard store (server-side aggregation)
 │           ├── healthScore.ts      # Zustand health score store (score + insights + history)
 │           └── transactions.ts      # Zustand transactions store (24h cache)
@@ -633,6 +635,7 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [ ] Mobile: Support for dark mode
 - [ ] Mobile: Update Transaction Categories to mimic Mint Category Schema
 - [x] Mobile: Data imports (CSV import with auto-column detection)
+- [x] Mobile: AI chat lifted out of the tab bar into a global FAB + draggable bottom sheet (gorhom, snap points 35/75/95%) — accessible from every authenticated screen so users can reference on-screen figures while chatting
 - [ ] Mobile: Data exports
 - [ ] Mobile: Sign in Google/Apple
 - [ ] Mobile: Update Settings screen to support account changes
@@ -640,6 +643,9 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [ ] AI: Bill negotiation, Credit optimization
 - [ ] AI: Maybe port gemma 4 via ollama to the AI instead of paying for claude API calls
 - [ ] AI/Frontend: Have a budget design feature. After importing transactions or adding accounts, redirect to an automatic (or manual) budget creation feature
+- [ ] AI/Mobile: Auto-inject current-screen context into the chat prompt (e.g. "user is viewing transaction X" / "user is on the Budgets tab for April") so follow-ups don't need to fetch context the user is already looking at
+- [ ] Mobile: Per-screen suggested prompts in the global chat sheet — surface different starter chips based on the active route (transactions vs. budgets vs. dashboard)
+- [ ] Mobile: Persist global chat sheet open/closed state (and last snap point) across app restarts
 
 ### Deployment:
 

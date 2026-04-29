@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { OnboardingStep } from "../../src/components/OnboardingStep";
 import { useAuthStore } from "../../src/stores/auth";
 import { GOAL_OPTIONS } from "../../src/constants/profile";
-import { colors, borderRadius } from "../../src/theme";
+import { colors, borderRadius, fonts } from "../../src/theme";
 
 export default function GoalsStep() {
   const router = useRouter();
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 14,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
   chipTextActive: {

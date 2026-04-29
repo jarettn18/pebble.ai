@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiRequest } from "../../src/api/client";
 import { useTransactionsStore } from "../../src/stores/transactions";
 import { useDashboardStore } from "../../src/stores/dashboard";
-import { colors, borderRadius, shadows } from "../../src/theme";
+import { colors, borderRadius, fonts, shadows } from "../../src/theme";
 
 type TransactionDetail = {
   id: string;
@@ -54,7 +54,7 @@ const CategoryChip = memo(function CategoryChip({
       style={[styles.chip, isSelected && styles.chipSelected]}
       onPress={() => onPress(item)}
     >
-      <View style={[styles.chipDot, { backgroundColor: item.color || "#999" }]} />
+      <View style={[styles.chipDot, { backgroundColor: item.color || colors.dotInactive }]} />
       <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
         {item.name}
       </Text>
@@ -337,11 +337,11 @@ const styles = StyleSheet.create({
   backArrow: {
     fontSize: 24,
     color: colors.primary,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   body: {
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   },
   amount: {
     fontSize: 36,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     textAlign: "center",
     marginBottom: 20,
   },
@@ -382,14 +382,14 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 14,
     color: colors.textPrimary,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     flex: 1,
     textAlign: "right",
     marginLeft: 12,
   },
   sectionLabel: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 4,
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
   },
   currentCategoryText: {
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   clearBtn: {
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: colors.textOnPrimary,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   errorText: {
     color: colors.error,
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
   backBtnText: {
     color: colors.textOnPrimary,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   deleteBtn: {
     borderWidth: 1,
@@ -488,6 +488,6 @@ const styles = StyleSheet.create({
   deleteBtnText: {
     color: colors.error,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
 });

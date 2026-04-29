@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { OnboardingStep } from "../../src/components/OnboardingStep";
 import { useAuthStore } from "../../src/stores/auth";
 import { MARITAL_OPTIONS, capitalize } from "../../src/constants/profile";
-import { colors, borderRadius } from "../../src/theme";
+import { colors, borderRadius, fonts } from "../../src/theme";
 
 export default function MaritalStatusStep() {
   const router = useRouter();
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
   },
   chipTextActive: {

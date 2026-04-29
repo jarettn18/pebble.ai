@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { OnboardingStep } from "../../src/components/OnboardingStep";
 import { useAuthStore } from "../../src/stores/auth";
-import { colors, borderRadius } from "../../src/theme";
+import { colors, borderRadius, fonts } from "../../src/theme";
 
 export default function DependentsStep() {
   const router = useRouter();
@@ -75,12 +75,12 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 26,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   value: {
     fontSize: 36,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
     minWidth: 52,
     textAlign: "center",

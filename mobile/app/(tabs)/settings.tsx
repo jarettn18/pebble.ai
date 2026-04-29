@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuthStore } from "../../src/stores/auth";
-import { colors, borderRadius, shadows } from "../../src/theme";
+import { colors, borderRadius, fonts, shadows } from "../../src/theme";
 import {
   US_STATES,
   MARITAL_OPTIONS,
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 20,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   email: {
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.primary,
   },
   sectionHeader: {
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.8,
@@ -564,12 +564,12 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 14,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
   fieldValue: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
     textAlign: "right",
     flexShrink: 1,
@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
   // -- Edit mode inputs --
   label: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 6,
     marginTop: 16,
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 13,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
   chipTextActive: {
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
   },
   stateChipText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
   },
   stateChipTextActive: {
@@ -659,12 +659,12 @@ const styles = StyleSheet.create({
   },
   stepperText: {
     fontSize: 20,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   stepperValue: {
     fontSize: 18,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
     minWidth: 24,
     textAlign: "center",
@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
   },
   dollarSign: {
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
   },
   cardActions: {
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
   saveText: {
     color: colors.textOnPrimary,
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   cancelButton: {
     flex: 1,
@@ -706,7 +706,7 @@ const styles = StyleSheet.create({
   cancelText: {
     color: colors.textSecondary,
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   logoutButton: {
     backgroundColor: colors.surface,
@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
   logoutText: {
     color: colors.error,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   deactivateButton: {
     backgroundColor: colors.error,
@@ -731,6 +731,6 @@ const styles = StyleSheet.create({
   deactivateText: {
     color: colors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
 });

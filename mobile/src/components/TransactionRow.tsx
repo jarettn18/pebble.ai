@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { colors } from "../theme";
+import { colors, fonts } from "../theme";
 
 export type Transaction = {
   id: string;
@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
   },
   txnName: {
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   txnDetail: {
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   },
   txnAmount: {
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   debit: {
     color: colors.textPrimary,

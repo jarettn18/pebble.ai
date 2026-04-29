@@ -1,12 +1,17 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
   Animated,
   Modal,
@@ -14,14 +19,22 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
 import Markdown from "react-native-marked";
-import { colors, borderRadius, fonts, shadows } from "../../src/theme";
+import {
+  BottomSheetModal,
+  BottomSheetBackdrop,
+  BottomSheetFlatList,
+  BottomSheetTextInput,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
+import type { BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
+import { colors, borderRadius, fonts, shadows } from "../theme";
 import {
   useAIChatStore,
   Message,
   Conversation,
-} from "../../src/stores/aiChat";
+} from "../stores/aiChat";
+import { useChatUIStore } from "../stores/chatUI";
 
 // ── Suggested prompts for empty state ──────────────────────
 const SUGGESTIONS = [
@@ -46,64 +59,6 @@ const mdColorTheme = {
   },
 };
 
-// ── Message bubble ─────────────────────────────────────────
-const MessageBubble = memo(function MessageBubble({
-  message,
-  activeToolCall,
-}: {
-  message: Message;
-  activeToolCall: string | null;
-}) {
-  const isUser = message.role === "user";
-  const showToolCall = message.isStreaming && message.content === "" && activeToolCall;
-  const showLoader = message.isStreaming && message.content === "" && !activeToolCall;
-
-  return (
-    <View
-      style={[
-        styles.bubbleRow,
-        isUser ? styles.bubbleRowUser : styles.bubbleRowAssistant,
-      ]}
-    >
-      <View
-        style={[
-          styles.bubble,
-          isUser ? styles.bubbleUser : styles.bubbleAssistant,
-        ]}
-      >
-        {isUser ? (
-          <Text style={[styles.bubbleText, styles.bubbleTextUser]}>
-            {message.content}
-          </Text>
-        ) : (
-          <Markdown
-            value={message.content}
-            flatListProps={mdFlatListProps}
-            styles={mdTheme}
-            theme={mdColorTheme}
-          />
-        )}
-        {showToolCall ? <ToolCallPill tool={activeToolCall} /> : null}
-        {showLoader ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : null}
-      </View>
-    </View>
-  );
-});
-
-// ── Tool call indicator ────────────────────────────────────
-const TOOL_LABELS: Record<string, string> = {
-  get_spending_by_category: "Looking up spending...",
-  get_spending_over_time: "Checking spending trends...",
-  get_top_merchants: "Finding top merchants...",
-  get_account_balances: "Checking account balances...",
-  get_budget_status: "Checking budget status...",
-  get_recent_transactions: "Looking up transactions...",
-  get_income_summary: "Checking income...",
-  compare_spending: "Comparing spending periods...",
-};
-
 const mdTheme: import("react-native-marked").MarkedStyles = {
   text: {
     fontSize: 15,
@@ -113,7 +68,6 @@ const mdTheme: import("react-native-marked").MarkedStyles = {
   },
   strong: {
     fontFamily: fonts.bold,
-    fontWeight: "700",
     color: colors.textPrimary,
   },
   em: {
@@ -157,7 +111,7 @@ const mdTheme: import("react-native-marked").MarkedStyles = {
   },
   code: {
     backgroundColor: colors.surfaceContainer,
-    borderRadius: 8,
+    borderRadius: borderRadius.sm,
     padding: 12,
   },
   paragraph: {
@@ -170,6 +124,22 @@ const mdTheme: import("react-native-marked").MarkedStyles = {
   },
 };
 
+// ── Tool call indicator labels ─────────────────────────────
+const TOOL_LABELS: Record<string, string> = {
+  get_spending_by_category: "Looking up spending...",
+  get_spending_over_time: "Checking spending trends...",
+  get_top_merchants: "Finding top merchants...",
+  get_account_balances: "Checking account balances...",
+  get_budget_status: "Checking budget status...",
+  get_recent_transactions: "Looking up transactions...",
+  get_income_summary: "Checking income...",
+  compare_spending: "Comparing spending periods...",
+};
+
+// ── Sheet snap points ──────────────────────────────────────
+const SNAP_POINTS = ["35%", "75%", "95%"];
+
+// ── Tool call pill ─────────────────────────────────────────
 const ToolCallPill = memo(function ToolCallPill({ tool }: { tool: string }) {
   const pulseAnim = useRef(new Animated.Value(0.5)).current;
 
@@ -203,6 +173,54 @@ const ToolCallPill = memo(function ToolCallPill({ tool }: { tool: string }) {
         {TOOL_LABELS[tool] || "Looking up data..."}
       </Text>
     </Animated.View>
+  );
+});
+
+// ── Message bubble ─────────────────────────────────────────
+const MessageBubble = memo(function MessageBubble({
+  message,
+  activeToolCall,
+}: {
+  message: Message;
+  activeToolCall: string | null;
+}) {
+  const isUser = message.role === "user";
+  const showToolCall =
+    message.isStreaming && message.content === "" && activeToolCall;
+  const showLoader =
+    message.isStreaming && message.content === "" && !activeToolCall;
+
+  return (
+    <View
+      style={[
+        styles.bubbleRow,
+        isUser ? styles.bubbleRowUser : styles.bubbleRowAssistant,
+      ]}
+    >
+      <View
+        style={[
+          styles.bubble,
+          isUser ? styles.bubbleUser : styles.bubbleAssistant,
+        ]}
+      >
+        {isUser ? (
+          <Text style={[styles.bubbleText, styles.bubbleTextUser]}>
+            {message.content}
+          </Text>
+        ) : (
+          <Markdown
+            value={message.content}
+            flatListProps={mdFlatListProps}
+            styles={mdTheme}
+            theme={mdColorTheme}
+          />
+        )}
+        {showToolCall ? <ToolCallPill tool={activeToolCall} /> : null}
+        {showLoader ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : null}
+      </View>
+    </View>
   );
 });
 
@@ -248,8 +266,25 @@ const ConversationItem = memo(function ConversationItem({
   );
 });
 
-// ── Main screen ────────────────────────────────────────────
-export default function AiChatScreen() {
+// ── Backdrop with stronger dim near full snap ──────────────
+const renderBackdrop = (props: BottomSheetBackdropProps) => (
+  <BottomSheetBackdrop
+    {...props}
+    appearsOnIndex={0}
+    disappearsOnIndex={-1}
+    opacity={0.4}
+    pressBehavior="close"
+  />
+);
+
+// ── Main sheet ─────────────────────────────────────────────
+export default function ChatSheet() {
+  const open = useChatUIStore((s) => s.open);
+  const closeChat = useChatUIStore((s) => s.closeChat);
+
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => SNAP_POINTS, []);
+
   const {
     messages,
     isStreaming,
@@ -265,49 +300,29 @@ export default function AiChatScreen() {
 
   const [inputText, setInputText] = useState("");
   const [showHistory, setShowHistory] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
   const inputTextRef = useRef(inputText);
   inputTextRef.current = inputText;
-  const navigation = useNavigation();
+  // Both FlatList and BottomSheetFlatList expose scrollToEnd; we just need
+  // a handle to call it as content streams in.
+  const flatListRef = useRef<{ scrollToEnd: (params?: { animated?: boolean }) => void } | null>(null);
 
-  // Load conversations on mount
+  // Open / close in response to store changes.
+  useEffect(() => {
+    if (open) {
+      sheetRef.current?.present();
+    } else {
+      sheetRef.current?.dismiss();
+    }
+  }, [open]);
+
+  // Load conversations on mount.
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
 
-  // Set up header buttons
-  useEffect(() => {
-    navigation.setOptions({
-      headerLeft: () => (
-        <TouchableOpacity
-          onPress={() => setShowHistory(true)}
-          style={styles.headerBtn}
-          accessibilityLabel="Conversation history"
-          accessibilityRole="button"
-        >
-          <MaterialCommunityIcons
-            name="history"
-            size={24}
-            color={colors.primary}
-          />
-        </TouchableOpacity>
-      ),
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={startNewConversation}
-          style={styles.headerBtn}
-          accessibilityLabel="New conversation"
-          accessibilityRole="button"
-        >
-          <MaterialCommunityIcons
-            name="plus"
-            size={24}
-            color={colors.primary}
-          />
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, startNewConversation]);
+  const handleDismiss = useCallback(() => {
+    if (open) closeChat();
+  }, [open, closeChat]);
 
   const handleSend = useCallback(() => {
     const text = inputTextRef.current.trim();
@@ -348,7 +363,10 @@ export default function AiChatScreen() {
 
   const keyExtractor = useCallback((item: Message) => item.id, []);
 
-  const conversationKeyExtractor = useCallback((c: Conversation) => c.id, []);
+  const conversationKeyExtractor = useCallback(
+    (c: Conversation) => c.id,
+    []
+  );
 
   const renderConversation = useCallback(
     ({ item }: { item: Conversation }) => (
@@ -361,25 +379,63 @@ export default function AiChatScreen() {
     [handleSelectConversation, handleDeleteConversation]
   );
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom as new content streams in.
+  const lastContentLength = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
     if (messages.length > 0) {
-      setTimeout(() => {
+      const t = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
+      return () => clearTimeout(t);
     }
-  }, [messages.length, messages[messages.length - 1]?.content.length]);
+  }, [messages.length, lastContentLength]);
 
   const isEmpty = messages.length === 0;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+    <BottomSheetModal
+      ref={sheetRef}
+      index={1}
+      snapPoints={snapPoints}
+      onDismiss={handleDismiss}
+      backdropComponent={renderBackdrop}
+      handleIndicatorStyle={styles.handle}
+      backgroundStyle={styles.sheetBackground}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
+      enablePanDownToClose
     >
+      <BottomSheetView style={styles.sheetHeader}>
+        <TouchableOpacity
+          onPress={() => setShowHistory(true)}
+          style={styles.headerBtn}
+          accessibilityLabel="Conversation history"
+          accessibilityRole="button"
+        >
+          <MaterialCommunityIcons
+            name="history"
+            size={22}
+            color={colors.primary}
+          />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Pebble AI</Text>
+        <TouchableOpacity
+          onPress={startNewConversation}
+          style={styles.headerBtn}
+          accessibilityLabel="New conversation"
+          accessibilityRole="button"
+        >
+          <MaterialCommunityIcons
+            name="plus"
+            size={22}
+            color={colors.primary}
+          />
+        </TouchableOpacity>
+      </BottomSheetView>
+
       {isEmpty ? (
-        <View style={styles.emptyContainer}>
+        <BottomSheetView style={styles.emptyContainer}>
           <MaterialCommunityIcons
             name="robot-outline"
             size={48}
@@ -401,10 +457,11 @@ export default function AiChatScreen() {
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </BottomSheetView>
       ) : (
-        <FlatList
-          ref={flatListRef}
+        <BottomSheetFlatList
+          // Both FlatList and BottomSheetFlatList expose scrollToEnd.
+          ref={flatListRef as never}
           data={messages}
           renderItem={renderMessage}
           keyExtractor={keyExtractor}
@@ -420,8 +477,8 @@ export default function AiChatScreen() {
       ) : null}
 
       {/* Input area */}
-      <View style={styles.inputContainer}>
-        <TextInput
+      <BottomSheetView style={styles.inputContainer}>
+        <BottomSheetTextInput
           style={styles.input}
           value={inputText}
           onChangeText={setInputText}
@@ -454,9 +511,9 @@ export default function AiChatScreen() {
             }
           />
         </TouchableOpacity>
-      </View>
+      </BottomSheetView>
 
-      {/* Conversation history modal */}
+      {/* Conversation history (plain RN Modal — overlays the entire sheet) */}
       <Modal
         visible={showHistory}
         transparent
@@ -492,17 +549,40 @@ export default function AiChatScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </KeyboardAvoidingView>
+    </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  sheetBackground: {
     backgroundColor: colors.background,
+    borderTopLeftRadius: borderRadius.lg,
+    borderTopRightRadius: borderRadius.lg,
+  },
+  handle: {
+    backgroundColor: colors.border,
+    width: 40,
+  },
+
+  // Sheet header (replaces the tab navigator header)
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
   },
   headerBtn: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
 
   // Empty state
@@ -526,7 +606,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   suggestions: {
-    marginTop: 32,
+    marginTop: 24,
     width: "100%",
     gap: 10,
   },
@@ -580,9 +660,6 @@ const styles = StyleSheet.create({
   bubbleTextUser: {
     color: colors.textOnPrimary,
   },
-  bubbleTextAssistant: {
-    color: colors.textPrimary,
-  },
 
   // Tool call pill
   toolPill: {
@@ -616,7 +693,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     paddingHorizontal: 12,
     paddingVertical: 8,
-    paddingBottom: Platform.OS === "ios" ? 24 : 8,
+    paddingBottom: Platform.OS === "ios" ? 16 : 8,
     backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.divider,
@@ -648,7 +725,7 @@ const styles = StyleSheet.create({
   // History modal
   historyOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: colors.scrim,
     justifyContent: "flex-end",
   },
   historySheet: {

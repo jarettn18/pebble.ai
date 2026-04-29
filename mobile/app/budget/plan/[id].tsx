@@ -479,7 +479,7 @@ export default function BudgetPlanDetailScreen() {
                   false: colors.border,
                   true: colors.primaryLight,
                 }}
-                thumbColor={plan.recurring_active ? colors.primary : "#f4f3f4"}
+                thumbColor={plan.recurring_active ? colors.primary : colors.switchThumb}
               />
             </View>
           </View>
@@ -583,7 +583,7 @@ export default function BudgetPlanDetailScreen() {
                 activeOpacity={0.8}
               >
                 {savingEdits ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={colors.textOnPrimary} />
                 ) : (
                   <Text style={styles.saveAllocBtnText}>Save Allocations</Text>
                 )}
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
   backArrow: {
     fontSize: 24,
     color: colors.primary,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   headerTitle: {
     fontSize: 18,
@@ -969,7 +969,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   saveAllocBtnText: {
-    color: "#fff",
+    color: colors.textOnPrimary,
     fontSize: 16,
     fontFamily: fonts.semiBold,
   },
@@ -977,7 +977,7 @@ const styles = StyleSheet.create({
   // Category Picker Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: colors.scrimStrong,
     justifyContent: "center",
     alignItems: "center",
   },

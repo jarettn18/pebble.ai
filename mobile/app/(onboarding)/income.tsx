@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { OnboardingStep } from "../../src/components/OnboardingStep";
 import { useAuthStore } from "../../src/stores/auth";
 import { formatIncome } from "../../src/utils/format";
-import { colors, borderRadius } from "../../src/theme";
+import { colors, borderRadius, fonts } from "../../src/theme";
 
 export default function IncomeStep() {
   const router = useRouter();
@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
   },
   dollar: {
     fontSize: 18,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
   },
   input: {

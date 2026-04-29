@@ -1,5 +1,57 @@
 # Changelog
 
+## 2026-04-29 — Global AI Chat (Out of the Tab Bar)
+
+The AI assistant lifted out of the tab navigator into a globally accessible floating action button + draggable bottom sheet. Users can now talk to the assistant from any authenticated screen — Dashboard, Transactions, Budgets, detail screens, Settings — and reference on-screen figures (transactions, charts, budget rows) at the smaller snap point while typing, instead of losing their context to a full-screen tab.
+
+### Mobile — UI/UX
+
+- **Tab bar reduced from 5 to 4 entries** (`Dashboard`, `Transactions`, `Budgets`, `Settings`). The `AI Chat` tab entry was removed from `app/(tabs)/_layout.tsx` and `app/(tabs)/ai-chat.tsx` was deleted.
+- **Global FAB** (`src/components/GlobalChatFAB.tsx`): 56pt circular button anchored bottom-right, colored `colors.primary` with `shadows.hero`. Lifted above the tab bar via `useSafeAreaInsets()` + a fixed `TAB_BAR_HEIGHT` offset when inside the tabs group; uses just the safe-area inset on stack-pushed detail screens. Hidden on `(auth)` and `(onboarding)` segments via `useSegments()` (chat is meaningless before login + profile setup). Auto-hides while the sheet is open so it isn't visible behind the dim backdrop.
+- **Global chat sheet** (`src/components/ChatSheet.tsx`): chat UI ported into a `BottomSheetModal` from `@gorhom/bottom-sheet` with snap points `["35%", "75%", "95%"]`. Opens at the 75% snap by default; the 35% snap leaves the underlying screen partially visible (this is the whole point of the refactor — referencing figures while chatting). `BottomSheetFlatList` replaces the message-list `FlatList` and `BottomSheetTextInput` replaces the input `TextInput` so gesture-pan-to-close, scroll, and keyboard interactions cooperate with the sheet. The `BottomSheetBackdrop` dims at 0.4 opacity and dismisses on tap. `keyboardBehavior="interactive"` + `keyboardBlurBehavior="restore"` mean the keyboard doesn't collapse the sheet when dismissed. The conversation history modal is preserved as a plain RN `Modal` overlay (it correctly stacks on top of the sheet because RN modals render at the OS layer).
+- **Header replacement**: the old chat tab had its `headerLeft`/`headerRight` icons (history + new conversation) attached via `navigation.setOptions`. Inside the sheet, the same controls live in a custom in-sheet header row at the top, since `BottomSheetModal` has no native nav header.
+- **Health Score "Ask AI for Tips" button** (`app/health-score.tsx`): now calls `useChatUIStore.getState().openChat()` instead of `router.push("/(tabs)/ai-chat?prefill=...")`. The `?prefill=` query param it was passing was never actually consumed by the chat screen — dormant code path retired. Unused `useRouter` import dropped.
+
+### Mobile — State
+
+- New `src/stores/chatUI.ts` — tiny Zustand store (`open`, `openChat`, `closeChat`). Kept separate from `aiChat.ts` so message/conversation domain state stays decoupled from sheet UI presentation state.
+- `aiChat.ts` (Zustand AI chat store) is **untouched** — all streaming, tool-call handling, conversation persistence, and abort logic continues to work identically. The refactor was purely a UI re-shell.
+- `api/streaming.ts` is untouched. No backend changes.
+
+### Mobile — Root Layout (`app/_layout.tsx`)
+
+- Wraps the app in `<GestureHandlerRootView style={{ flex: 1 }}>` (required by both `react-native-gesture-handler` and `@gorhom/bottom-sheet`) and `<BottomSheetModalProvider>`.
+- Mounts `<GlobalChatFAB />` and `<ChatSheet />` as siblings of the existing `<Stack>` so they overlay every route the user can reach.
+
+### Mobile — Babel Config (`mobile/babel.config.js`, new file)
+
+- Created with `babel-preset-expo` + `react-native-worklets/plugin` (Reanimated v4's worklets plugin) registered last, as required. Without this plugin, Reanimated worklets fail to compile at bundle time.
+
+### Mobile — Dependencies
+
+- `@gorhom/bottom-sheet@^5.2.10` — sheet primitive.
+- `react-native-gesture-handler@~2.30.0` — peer dep.
+- `react-native-reanimated@4.2.1` — peer dep.
+- `react-native-worklets@0.7.4` — explicit pin. Reanimated 4.2.1's podspec validates worklets against `min: 0.7.0, max: 0.7`; the latest `0.8.x` line that npm pulls in by default fails `pod install` with "Failed to validate worklets version." Pinning to `0.7.4` (Expo SDK 55's known-good version) resolves it.
+- `babel-preset-expo@~55.0.11` — added as a top-level `devDependency`. It existed transitively under `expo/node_modules`, but Babel's preset resolver only checks the project root's `node_modules`, so bundling failed with "Cannot find module 'babel-preset-expo'" until the preset was hoisted.
+
+### First-run after pulling
+
+```bash
+cd mobile
+npm install
+cd ios && pod install && cd ..   # native modules added — Reanimated, Gesture Handler
+npx expo start -c                 # `-c` clears Metro cache after the new Babel plugin
+```
+
+### Out of scope (tracked under Phase 7 in README)
+
+- Auto-injecting current-screen context into the chat prompt (e.g. "user is viewing transaction X" / "user is on the Budgets tab for April").
+- Per-screen suggested prompts in the global chat sheet — different starter chips based on the active route.
+- Persisting global chat sheet open/closed state and last snap point across app restarts.
+
+---
+
 ## 2026-04-23 — Onboarding Flow + Account Deactivation
 
 ### Sign-up Now Collects Birthday (Required, Pre-SMS)

@@ -9,7 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { colors, borderRadius } from "../theme";
+import { colors, borderRadius, fonts } from "../theme";
 
 type Props = {
   stepIndex: number; // 0-based
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     fontSize: 12,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.8,
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
     marginBottom: 8,
   },
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: colors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   skipButton: {
     alignItems: "center",
@@ -172,6 +172,6 @@ const styles = StyleSheet.create({
   skipText: {
     color: colors.textSecondary,
     fontSize: 14,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
   },
 });

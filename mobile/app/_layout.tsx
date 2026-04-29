@@ -12,8 +12,12 @@ import {
   Inter_400Regular,
   Inter_500Medium,
 } from "@expo-google-fonts/inter";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { useAuthStore } from "../src/stores/auth";
-import { colors } from "../src/theme";
+import { colors, fonts } from "../src/theme";
+import GlobalChatFAB from "../src/components/GlobalChatFAB";
+import ChatSheet from "../src/components/ChatSheet";
 
 function AuthGate() {
   const { isAuthenticated, isLoading, loadUser, user } = useAuthStore();
@@ -52,7 +56,8 @@ function AuthGate() {
   }, [isAuthenticated, isLoading, segments, user]);
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <>
+      <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen
         name="spending"
         options={{
@@ -60,7 +65,7 @@ function AuthGate() {
           title: "Spending Summary",
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.primary,
-          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+          headerTitleStyle: { fontFamily: fonts.semiBold },
         }}
       />
       <Stack.Screen
@@ -70,7 +75,7 @@ function AuthGate() {
           title: "Income Summary",
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.primary,
-          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+          headerTitleStyle: { fontFamily: fonts.semiBold },
         }}
       />
       <Stack.Screen
@@ -80,7 +85,7 @@ function AuthGate() {
           title: "Add Asset",
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.primary,
-          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+          headerTitleStyle: { fontFamily: fonts.semiBold },
         }}
       />
       <Stack.Screen
@@ -90,7 +95,7 @@ function AuthGate() {
           title: "Asset Details",
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.primary,
-          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+          headerTitleStyle: { fontFamily: fonts.semiBold },
         }}
       />
       <Stack.Screen
@@ -100,7 +105,7 @@ function AuthGate() {
           title: "",
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.primary,
-          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+          headerTitleStyle: { fontFamily: fonts.semiBold },
         }}
       />
       <Stack.Screen
@@ -110,7 +115,7 @@ function AuthGate() {
           title: "Account Details",
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.primary,
-          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+          headerTitleStyle: { fontFamily: fonts.semiBold },
         }}
       />
       <Stack.Screen
@@ -120,10 +125,13 @@ function AuthGate() {
           title: "Import Transactions",
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.primary,
-          headerTitleStyle: { fontWeight: "600", fontFamily: "PlusJakartaSans_600SemiBold" },
+          headerTitleStyle: { fontFamily: fonts.semiBold },
         }}
       />
-    </Stack>
+      </Stack>
+      <GlobalChatFAB />
+      <ChatSheet />
+    </>
   );
 }
 
@@ -140,5 +148,11 @@ export default function RootLayout() {
 
   if (!fontsLoaded) return null;
 
-  return <AuthGate />;
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <BottomSheetModalProvider>
+        <AuthGate />
+      </BottomSheetModalProvider>
+    </GestureHandlerRootView>
+  );
 }

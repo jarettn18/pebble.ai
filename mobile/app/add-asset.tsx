@@ -11,7 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { useAssetsStore } from "../src/stores/assets";
 import { useDashboardStore } from "../src/stores/dashboard";
-import { colors, borderRadius, shadows } from "../src/theme";
+import { colors, borderRadius, fonts, shadows } from "../src/theme";
 
 const ASSET_TYPES = [
   { value: "primary_residence", label: "Primary Residence" },
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 16,
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     padding: 12,
     backgroundColor: colors.errorBackground,
-    borderRadius: 8,
+    borderRadius: borderRadius.sm,
   },
   saveBtn: {
     backgroundColor: colors.primary,
@@ -248,6 +248,6 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: colors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
 });

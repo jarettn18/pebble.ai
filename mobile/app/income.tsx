@@ -9,15 +9,30 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useDashboardStore, type IncomeByCategory } from "../src/stores/dashboard";
 import { formatCurrency } from "../src/utils/dashboard";
 import { apiRequest } from "../src/api/client";
-import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../src/theme";
-import { getCategoryColor } from "../src/utils/color";
+import {
+  colors,
+  borderRadius,
+  shadows,
+  fonts,
+  heroCard,
+  heroProgressBarStyles,
+  microLabel,
+  microLabelTiny,
+} from "../src/theme";
+import { getCategoryColor, withOpacity } from "../src/utils/color";
+import { getCategoryIcon } from "../src/utils/categoryIcons";
 import { Transaction } from "../src/components/TransactionRow";
 import { TransactionListCard } from "../src/components/TransactionListCard";
 
 const CATEGORY_COLORS = colors.incomePalette;
+
+// Income screen uses a positive-green accent for chart highlights
+const TREND_ACCENT = colors.incomePositive;
+const TREND_ACCENT_DIM = colors.incomeTrendDim;
 
 type SelectedMonth = { month: number; year: number } | null;
 
@@ -102,15 +117,17 @@ export default function IncomeScreen() {
   const activeCategoryData = selectedCategoryData ?? incomeByCategory;
   const activeTransactions = selectedTransactions ?? transactions;
 
-  const { maxCategoryAmount, totalCatIncome } = useMemo(() => {
+  const { maxCategoryAmount, totalCatIncome, topCategory } = useMemo(() => {
     let max = 1;
     let total = 0;
+    let top: IncomeByCategory | null = null;
     for (const c of activeCategoryData) {
       const amt = parseFloat(c.amount);
       if (amt > max) max = amt;
+      if (!top || amt > parseFloat(top.amount)) top = c;
       total += amt;
     }
-    return { maxCategoryAmount: max, totalCatIncome: total };
+    return { maxCategoryAmount: max, totalCatIncome: total, topCategory: top };
   }, [activeCategoryData]);
 
   const maxMonthAmount = useMemo(() => {
@@ -134,6 +151,11 @@ export default function IncomeScreen() {
     }
   }
 
+  const displayTotal = selectedMonth ? totalCatIncome : monthlyIncome;
+  const headerLabel = selectedMonth
+    ? monthLabel(selectedMonth.month, selectedMonth.year).toUpperCase() + " INCOME"
+    : "THIS MONTH'S INCOME";
+
   const categoryTitle = selectedMonth
     ? `By Category — ${monthLabel(selectedMonth.month, selectedMonth.year)}`
     : "By Category";
@@ -150,31 +172,66 @@ export default function IncomeScreen() {
         <RefreshControl
           refreshing={isLoading}
           onRefresh={refresh}
-          tintColor={colors.primary}
+          tintColor={colors.accent}
         />
       }
     >
-      {/* Monthly Total */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          {selectedMonth
-            ? `${monthLabel(selectedMonth.month, selectedMonth.year)} Income`
-            : "This Month's Income"}
+      {/* Hero — dark surface, big amount, nested summary pill */}
+      <View style={styles.heroCard}>
+        <View style={styles.heroCardGlow} />
+        <Text style={styles.heroLabel}>{headerLabel}</Text>
+        <Text style={styles.heroAmount}>{formatCurrency(displayTotal)}</Text>
+        <Text style={styles.heroSubtitle}>
+          {activeCategoryData.length > 0
+            ? `Across ${activeCategoryData.length} ${activeCategoryData.length === 1 ? "source" : "sources"}`
+            : "No income recorded yet"}
         </Text>
-        <Text style={styles.totalAmount}>
-          {selectedMonth
-            ? formatCurrency(totalCatIncome)
-            : formatCurrency(monthlyIncome)}
-        </Text>
+
+        {topCategory && totalCatIncome > 0 && (
+          <View style={heroProgressBarStyles.container}>
+            <View style={heroProgressBarStyles.header}>
+              <View>
+                <Text style={heroProgressBarStyles.label}>Top Source</Text>
+                <Text style={heroProgressBarStyles.value}>
+                  {topCategory.category_name}
+                </Text>
+              </View>
+              <Text style={heroProgressBarStyles.remaining}>
+                {formatCurrency(parseFloat(topCategory.amount))}
+              </Text>
+            </View>
+            <View style={[heroProgressBarStyles.track, styles.stackedTrack]}>
+              {activeCategoryData.map((cat, i) => {
+                const pct =
+                  totalCatIncome > 0
+                    ? (parseFloat(cat.amount) / totalCatIncome) * 100
+                    : 0;
+                if (pct < 1) return null;
+                return (
+                  <View
+                    key={`${cat.category_name}-${i}`}
+                    style={{
+                      width: `${pct}%`,
+                      height: "100%" as unknown as number,
+                      backgroundColor: getCategoryColor(cat.category_color, CATEGORY_COLORS, i),
+                    }}
+                  />
+                );
+              })}
+            </View>
+          </View>
+        )}
       </View>
 
-      {/* Monthly Trend Bar Chart */}
+      {/* Monthly Trend */}
       {incomeOverTime.length > 0 && (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Monthly Trend</Text>
-          <Text style={styles.chartHint}>Tap a bar to view details</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionEyebrow}>MONTHLY TREND</Text>
+            <Text style={styles.sectionHint}>Tap a bar to filter</Text>
+          </View>
           <View style={styles.barChart}>
-            {incomeOverTime.map((point, i) => {
+            {incomeOverTime.map((point) => {
               const amount = parseFloat(point.amount);
               const heightPct = maxMonthAmount > 0 ? (amount / maxMonthAmount) * 100 : 0;
               const now = new Date();
@@ -188,7 +245,7 @@ export default function IncomeScreen() {
                   onPress={() => handleBarPress(point.month, point.year)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.barValue}>
+                  <Text style={[styles.barValue, isActive && styles.barValueActive]}>
                     {amount > 0 ? formatCurrency(amount) : ""}
                   </Text>
                   <View style={styles.barTrack}>
@@ -197,7 +254,7 @@ export default function IncomeScreen() {
                         styles.bar,
                         {
                           height: `${Math.max(heightPct, 2)}%`,
-                          backgroundColor: isActive ? colors.primaryLight : colors.primaryDark,
+                          backgroundColor: isActive ? TREND_ACCENT : TREND_ACCENT_DIM,
                         },
                       ]}
                     />
@@ -217,74 +274,72 @@ export default function IncomeScreen() {
         </View>
       )}
 
-      {/* Category Breakdown — Horizontal Bars */}
+      {/* Category Breakdown — colored cards with icons */}
       {loadingSelected ? (
         <View style={styles.loadingCard}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color={colors.accent} />
         </View>
       ) : activeCategoryData.length > 0 ? (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{categoryTitle}</Text>
+        <View style={styles.categoriesSection}>
+          <Text style={styles.categoriesTitle}>{categoryTitle}</Text>
 
-          {/* Stacked summary bar */}
-          <View style={styles.stackedBar}>
-            {activeCategoryData.map((cat, i) => {
-              const pct =
-                totalCatIncome > 0
-                  ? (parseFloat(cat.amount) / totalCatIncome) * 100
-                  : 0;
-              if (pct < 1) return null;
-              return (
-                <View
-                  key={`${cat.category_name}-${i}`}
-                  style={[
-                    styles.stackedSegment,
-                    {
-                      width: `${pct}%`,
-                      backgroundColor:
-                        getCategoryColor(cat.category_color, CATEGORY_COLORS, i),
-                    },
-                    i === 0 && styles.stackedFirst,
-                    i === activeCategoryData.length - 1 && styles.stackedLast,
-                  ]}
-                />
-              );
-            })}
-          </View>
-
-          {/* Individual category bars */}
           {activeCategoryData.map((cat, i) => {
             const amount = parseFloat(cat.amount);
             const pct = (amount / maxCategoryAmount) * 100;
-            const color = getCategoryColor(cat.category_color, CATEGORY_COLORS, i);
+            const sharePct = totalCatIncome > 0 ? (amount / totalCatIncome) * 100 : 0;
+            const catColor = getCategoryColor(cat.category_color, CATEGORY_COLORS, i);
+            const iconBg = withOpacity(catColor, 0.2);
             const activeMonth = selectedMonth ?? { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
             return (
               <TouchableOpacity
                 key={`${cat.category_name}-${i}`}
-                style={styles.categoryRow}
-                activeOpacity={0.7}
+                style={[styles.categoryCard, { borderColor: withOpacity(catColor, 0.22) }]}
+                activeOpacity={0.85}
                 onPress={() =>
                   router.push(
-                    `/budget-transactions?category_id=${cat.category_id}&category_name=${encodeURIComponent(cat.category_name)}&category_color=${encodeURIComponent(color)}&spent=${cat.amount}&month=${activeMonth.month}&year=${activeMonth.year}`
+                    `/budget-transactions?category_id=${cat.category_id}&category_name=${encodeURIComponent(cat.category_name)}&category_color=${encodeURIComponent(catColor)}&spent=${cat.amount}&month=${activeMonth.month}&year=${activeMonth.year}`
                   )
                 }
               >
-                <View style={styles.categoryHeader}>
-                  <View style={styles.categoryLabelRow}>
-                    <View
-                      style={[styles.categoryDot, { backgroundColor: color }]}
+                <View
+                  style={[
+                    styles.categoryCardGlow,
+                    { backgroundColor: withOpacity(catColor, 0.18) },
+                  ]}
+                />
+                <View style={styles.categoryCardHeader}>
+                  <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
+                    <MaterialCommunityIcons
+                      name={getCategoryIcon(cat.category_name) as any}
+                      size={22}
+                      color={catColor}
                     />
-                    <Text style={styles.categoryName}>{cat.category_name}</Text>
                   </View>
-                  <Text style={styles.categoryAmount}>
-                    {formatCurrency(amount)}
-                  </Text>
+                  <View style={styles.categoryCardMid}>
+                    <Text style={styles.categoryCardName} numberOfLines={1}>
+                      {cat.category_name}
+                    </Text>
+                    <Text style={styles.categoryCardSub}>
+                      {sharePct.toFixed(0)}% of total
+                    </Text>
+                  </View>
+                  <View style={styles.categoryCardRight}>
+                    <Text style={styles.categoryCardAmount}>
+                      {formatCurrency(amount)}
+                    </Text>
+                    <Text style={styles.categoryCardLabel}>EARNED</Text>
+                  </View>
                 </View>
-                <View style={progressBarStyles.track}>
+                <View
+                  style={[
+                    styles.categoryCardTrack,
+                    { backgroundColor: withOpacity(catColor, 0.14) },
+                  ]}
+                >
                   <View
                     style={[
-                      progressBarStyles.fill,
-                      { width: `${pct}%`, backgroundColor: color },
+                      styles.categoryCardFill,
+                      { width: `${pct}%`, backgroundColor: catColor },
                     ]}
                   />
                 </View>
@@ -319,6 +374,32 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
+
+  // Hero
+  heroCard: {
+    ...heroCard.surface,
+    marginBottom: 16,
+  },
+  heroCardGlow: heroCard.glow,
+  heroLabel: heroCard.label,
+  heroAmount: {
+    fontSize: 40,
+    fontFamily: fonts.extraBold,
+    color: colors.incomePositive,
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    fontFamily: fonts.medium,
+    color: colors.heroTextSecondary,
+  },
+  stackedTrack: {
+    flexDirection: "row",
+    overflow: "hidden",
+  },
+
+  // Light-surface card (trend)
   card: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
@@ -328,24 +409,23 @@ const styles = StyleSheet.create({
     borderColor: `${colors.outlineVariant}1A`,
     ...shadows.card,
   },
-  cardTitle: {
-    fontSize: 14,
-    fontFamily: fonts.medium,
-    color: colors.textSecondary,
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
     marginBottom: 12,
   },
-  chartHint: {
+  sectionEyebrow: {
+    ...microLabel,
+    color: colors.textSecondary,
+  },
+  sectionHint: {
     fontSize: 11,
     fontFamily: fonts.medium,
     color: colors.textMuted,
-    marginTop: -8,
-    marginBottom: 8,
   },
-  totalAmount: {
-    fontSize: 32,
-    fontFamily: fonts.bold,
-    color: colors.income,
-  },
+
+  // Loading card
   loadingCard: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
@@ -356,6 +436,8 @@ const styles = StyleSheet.create({
     borderColor: `${colors.outlineVariant}1A`,
     ...shadows.card,
   },
+
+  // Bar chart
   barChart: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -372,9 +454,13 @@ const styles = StyleSheet.create({
   barValue: {
     fontSize: 10,
     fontFamily: fonts.labelMedium,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginBottom: 4,
     textAlign: "center",
+  },
+  barValueActive: {
+    color: TREND_ACCENT,
+    fontFamily: fonts.bold,
   },
   barTrack: {
     flex: 1,
@@ -385,8 +471,6 @@ const styles = StyleSheet.create({
     width: "100%",
     borderTopLeftRadius: 6,
     borderTopRightRadius: 6,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
     minHeight: 2,
   },
   barLabel: {
@@ -396,56 +480,93 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   barLabelActive: {
-    color: colors.primary,
+    color: TREND_ACCENT,
     fontFamily: fonts.bold,
   },
-  stackedBar: {
-    flexDirection: "row",
-    height: 12,
-    borderRadius: 6,
-    overflow: "hidden",
+
+  // Categories section
+  categoriesSection: {
     marginBottom: 16,
   },
-  stackedSegment: {
-    height: "100%",
+  categoriesTitle: {
+    fontSize: 20,
+    fontFamily: fonts.bold,
+    color: colors.heroSurface,
+    letterSpacing: -0.3,
+    marginBottom: 12,
+    marginTop: 4,
   },
-  stackedFirst: {
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 6,
+
+  // Category cards
+  categoryCard: {
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    ...shadows.card,
   },
-  stackedLast: {
-    borderTopRightRadius: 6,
-    borderBottomRightRadius: 6,
+  categoryCardGlow: {
+    position: "absolute",
+    top: -60,
+    right: -60,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
   },
-  categoryRow: {
+  categoryCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 14,
   },
-  categoryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
-    marginBottom: 6,
+    justifyContent: "center",
+    marginRight: 12,
   },
-  categoryLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  categoryCardMid: {
     flex: 1,
+    marginRight: 12,
   },
-  categoryDot: {
-    width: 10,
+  categoryCardName: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+    color: colors.heroSurface,
+    letterSpacing: -0.2,
+    marginBottom: 2,
+  },
+  categoryCardSub: {
+    fontSize: 12,
+    fontFamily: fonts.labelMedium,
+    color: colors.textMuted,
+    letterSpacing: 0.2,
+  },
+  categoryCardRight: {
+    alignItems: "flex-end",
+  },
+  categoryCardAmount: {
+    fontSize: 18,
+    fontFamily: fonts.extraBold,
+    color: colors.heroSurface,
+    letterSpacing: -0.3,
+  },
+  categoryCardLabel: {
+    ...microLabelTiny,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  categoryCardTrack: {
     height: 10,
-    borderRadius: 5,
-    marginRight: 8,
+    borderRadius: borderRadius.pill,
+    overflow: "hidden",
   },
-  categoryName: {
-    fontSize: 14,
-    fontFamily: fonts.medium,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  categoryAmount: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
+  categoryCardFill: {
+    height: "100%" as unknown as number,
+    borderRadius: borderRadius.pill,
   },
 });
