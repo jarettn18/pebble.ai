@@ -1,5 +1,66 @@
 # Changelog
 
+## 2026-04-30 — Transaction Row Redesign + Date Grouping
+
+UI/UX pass on the transaction list, scoped to the three highest-impact items from a wider review: leading category-icon avatar on each row, transactions grouped by date under section headers, and a `Pending` pill replacing inline status text. The shared `TransactionRow` and `TransactionListCard` components feed five screens (`(tabs)/transactions.tsx`, `account-transactions.tsx`, `budget-transactions.tsx`, `spending.tsx`, `income.tsx`), so all of them inherit the new visuals without per-screen edits.
+
+### Backend
+
+- **`services/transactions.py`** — list and detail payloads now include `category_color` (eager-loaded via the existing `joinedload(Transaction.category)`, no extra query). Row avatars can now render the saved category color without a follow-up lookup.
+- **`schemas/transaction.py`** — `TransactionOut.category_color: str | None` added; `TransactionDetailOut` inherits it.
+
+### Mobile — New Utility
+
+- **`src/utils/date.ts`** (new file) — two formatters that share an internal `parseLocalDate` helper:
+  - `formatTransactionDate(iso)` → compact label: `"Today"` / `"Yesterday"` / `"Apr 30"` / `"Apr 30, 2025"` (year shown when older than current year).
+  - `formatTransactionDateGroup(iso)` → section-header label: `"Today"` / `"Yesterday"` / `"Mon, Apr 30"` / `"Mon, Apr 30, 2025"`.
+  - **Local-time parsing** — `parseLocalDate("2026-04-30")` returns midnight in the device's local zone, instead of `new Date("2026-04-30")`'s UTC-midnight (which renders as April 29 in negative-UTC zones). All grouping/labeling is local-time consistent.
+  - `Intl.DateTimeFormat` instances hoisted to module level to avoid per-row formatter construction.
+
+### Mobile — `TransactionRow.tsx` Rebuild
+
+- **Layout** — three-column row: 40×40 category-icon avatar | merchant name + meta line | amount. The avatar uses `withOpacity(category_color, 0.15)` for the background and full color for the icon (via `getCategoryIcon(name)`); falls back to `colors.textMuted` when `category_color` is null.
+- **Title row** — merchant name (`fontSize: 15`, `fonts.semiBold`, `letterSpacing: -0.1`) + optional `Pending` pill (uppercase tracked label, `surfaceContainerHigh` background, `textMuted` text). Replaces the previous `" · Pending"` appended to the metadata string.
+- **Meta line** — `category_name · account_name` (date suppressed via the new `hideDate` prop when the parent groups by date). Single-line ellipsis.
+- **Amount** — `fontSize: 15`, `fonts.bold`, `fontVariant: ["tabular-nums"]` for column-aligned digits across rows. Credits switched from `colors.income` (`#45655a`, the dark sage primary that was visually identical to body text) to `colors.incomePositive` (`#2BA671`) so debits and credits are distinguishable at a glance — the same green already used in the `(tabs)/transactions.tsx` filtered-totals row, so no new token introduced.
+- **`Transaction` type** gains `category_color: string | null` (required field, matches backend).
+- **`hideDate` prop** (default `false`) — backwards compatible. Existing direct callers of `TransactionRow` keep date-in-metadata behavior; the list card opts in.
+- **Separator** — `marginLeft: 72` (= 20 row inset + 40 avatar + 12 gap) so the hairline rule starts under the merchant name, not under the avatar.
+
+### Mobile — `TransactionListCard.tsx` Date Grouping
+
+- **`groupByDate(transactions)`** walks the (already date-sorted) list once and emits `DateGroup[]` with `key` (raw ISO), `label` (formatted via `formatTransactionDateGroup`), and `transactions[]`. `useMemo`'d on the input list. No re-sort — the backend already returns `ORDER BY date DESC, created_at DESC`.
+- **Section headers** — `microLabelSmall` uppercase tracked text in `colors.textMuted`, padded `paddingHorizontal: 20` (aligned to the row's leading inset), `paddingTop: 14` (8 for the first group, via a `groupHeaderFirst` override).
+- **Card padding** restructured — `padding: 20` → `paddingVertical: 8` on the card, with rows/headers carrying their own horizontal padding so date-header text and row content share the same leading edge.
+- **Rows** pass `hideDate` so the metadata line shows only `category · account` (the date is now in the group header above).
+- **Empty state** unchanged.
+
+### Mobile — Store Plumbing
+
+- **`stores/transactions.ts`** — `Transaction` type gains `category_color: string | null`. `updateTransactionCategory` signature extended to `(id, categoryName, categoryColor?)`; when `categoryColor` is omitted the existing color is preserved (so callers that haven't been updated keep working). The setter function passes through both fields.
+- **`app/transaction/[id].tsx`** — `TransactionDetail` type gains `category_color`. `handleCategorySelect` and `handleClearCategory` track `{id, name, color}` for revert, pass `category.color` into both the local `setTxn` optimistic update and the store's `updateTransactionCategory` call. The avatar in any screen showing this txn updates instantly on category change without waiting for the next refresh.
+
+### Out of scope (parked for follow-up)
+
+- Item #4 from the review: switching the list to `FlatList` virtualization (currently `transactions.map` with up to 200 rows inside a parent `ScrollView`). Pending — needs the parent ScrollView lifted in `(tabs)/transactions.tsx`, `account-transactions.tsx`, `budget-transactions.tsx` to avoid nested vertical scrolls.
+- Item #6: replacing `transaction/[id].tsx`'s hard-coded `paddingTop: 60` with `useSafeAreaInsets()` and the Unicode `←` with `MaterialCommunityIcons name="arrow-left"`.
+- Item #7: swipe-to-categorize / swipe-to-delete on rows via `react-native-gesture-handler` `Swipeable`.
+- Item #8: collapsing the filter panel's category grid for users with 20+ categories.
+- Item #10: unsaved-notes confirmation on detail-screen back navigation.
+- Item #11: renaming "Filtered total" → "Net" with row count.
+- Items #12–#14: `colors.primary` vs `colors.accent` consistency pass; skeleton loaders; in-context search on `account-transactions.tsx`.
+
+### First-run after pulling
+
+No native changes, no new packages — just code:
+
+```bash
+cd backend && uv sync                # only if pulling other branch changes
+cd ../mobile && npx tsc --noEmit     # verify (already passes)
+```
+
+---
+
 ## 2026-04-29 — Global AI Chat (Out of the Tab Bar)
 
 The AI assistant lifted out of the tab navigator into a globally accessible floating action button + draggable bottom sheet. Users can now talk to the assistant from any authenticated screen — Dashboard, Transactions, Budgets, detail screens, Settings — and reference on-screen figures (transactions, charts, budget rows) at the smaller snap point while typing, instead of losing their context to a full-screen tab.

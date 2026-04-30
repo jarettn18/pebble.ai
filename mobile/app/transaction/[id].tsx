@@ -25,6 +25,7 @@ type TransactionDetail = {
   merchant_name: string | null;
   pending: boolean;
   category_name: string | null;
+  category_color: string | null;
   category_id: string | null;
   notes: string | null;
 };
@@ -102,12 +103,20 @@ export default function TransactionDetailScreen() {
   async function handleCategorySelect(category: Category) {
     if (!txn || category.id === txn.category_id) return;
 
-    const prevCategoryId = txn.category_id;
-    const prevCategoryName = txn.category_name;
+    const prev = {
+      id: txn.category_id,
+      name: txn.category_name,
+      color: txn.category_color,
+    };
 
     // Optimistic update
-    setTxn({ ...txn, category_id: category.id, category_name: category.name });
-    updateTransactionCategory(txn.id, category.name);
+    setTxn({
+      ...txn,
+      category_id: category.id,
+      category_name: category.name,
+      category_color: category.color,
+    });
+    updateTransactionCategory(txn.id, category.name, category.color);
 
     try {
       await apiRequest(`/v1/transactions/${id}`, {
@@ -116,20 +125,32 @@ export default function TransactionDetailScreen() {
       });
       refreshDashboard();
     } catch {
-      // Revert on failure
-      setTxn({ ...txn, category_id: prevCategoryId, category_name: prevCategoryName });
-      updateTransactionCategory(txn.id, prevCategoryName);
+      setTxn({
+        ...txn,
+        category_id: prev.id,
+        category_name: prev.name,
+        category_color: prev.color,
+      });
+      updateTransactionCategory(txn.id, prev.name, prev.color);
     }
   }
 
   async function handleClearCategory() {
     if (!txn || !txn.category_id) return;
 
-    const prevCategoryId = txn.category_id;
-    const prevCategoryName = txn.category_name;
+    const prev = {
+      id: txn.category_id,
+      name: txn.category_name,
+      color: txn.category_color,
+    };
 
-    setTxn({ ...txn, category_id: null, category_name: null });
-    updateTransactionCategory(txn.id, null);
+    setTxn({
+      ...txn,
+      category_id: null,
+      category_name: null,
+      category_color: null,
+    });
+    updateTransactionCategory(txn.id, null, null);
 
     try {
       await apiRequest(`/v1/transactions/${id}`, {
@@ -138,8 +159,13 @@ export default function TransactionDetailScreen() {
       });
       refreshDashboard();
     } catch {
-      setTxn({ ...txn, category_id: prevCategoryId, category_name: prevCategoryName });
-      updateTransactionCategory(txn.id, prevCategoryName);
+      setTxn({
+        ...txn,
+        category_id: prev.id,
+        category_name: prev.name,
+        category_color: prev.color,
+      });
+      updateTransactionCategory(txn.id, prev.name, prev.color);
     }
   }
 

@@ -18,7 +18,8 @@ async def get_accounts(user_id: str, db: AsyncSession) -> dict:
             {
                 "id": str(a.id),
                 "name": a.name,
-                "official_name": a.official_name,
+                "nickname": a.nickname,
+                "mask": a.mask,
                 "type": a.type,
                 "subtype": a.subtype,
                 "balance_current": str(a.balance_current) if a.balance_current is not None else None,

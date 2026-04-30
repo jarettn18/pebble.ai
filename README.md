@@ -23,7 +23,7 @@ Mint-like budgeting app with an integrated AI financial assistant. The AI assist
 
 ```
 pebble/
-├── docker-compose.yml              # PostgreSQL + Redis + Backend + Mobile
+├── docker-compose.yml              # PostgreSQL + Redis + Backend
 ├── .env.example
 │
 ├── backend/
@@ -156,8 +156,8 @@ pebble/
 │       │   ├── NetWorthChart.tsx     # Net worth history chart with period tabs (1M/3M/1Y/5Y)
 │       │   ├── OnboardingStep.tsx    # Shared onboarding wizard step (progress bar, title, body slot, Continue/Skip)
 │       │   ├── PieChart.tsx          # SVG donut chart with interactive segments + legend
-│       │   ├── TransactionRow.tsx    # Shared transaction row + separator components
-│       │   └── TransactionListCard.tsx # Shared transaction list card (used across 4+ screens)
+│       │   ├── TransactionRow.tsx    # Shared transaction row — category icon avatar, pending pill, tabular-nums amount
+│       │   └── TransactionListCard.tsx # Shared transaction list card — groups rows by date with section headers
 │       ├── constants/
 │       │   └── profile.ts            # US_STATES, MARITAL_OPTIONS, GOAL_OPTIONS, capitalize (shared by onboarding + settings)
 │       ├── hooks/
@@ -166,6 +166,7 @@ pebble/
 │       │   ├── categoryIcons.ts     # Shared getCategoryIcon() mapping (30+ categories → MaterialCommunityIcons)
 │       │   ├── color.ts             # withOpacity, contrastForeground color utilities
 │       │   ├── dashboard.ts         # Net worth, spending calc, currency formatting
+│       │   ├── date.ts              # formatTransactionDate / formatTransactionDateGroup (Today/Yesterday/Mon DD)
 │       │   └── format.ts            # Shared formatIncome helper
 │       └── stores/
 │           ├── auth.ts              # Zustand auth store
@@ -541,6 +542,11 @@ Redesign the budgeting system from individual per-category budgets to unified bu
   - `MonthPicker.tsx`: wrapped export in `memo`
 - [x] React best practices refactor — added `React.memo` to 4 reusable display components: `TransactionRow`, `TransactionListCard`, `LineChart`, `ColorPickerModal`
 - [x] Verified `useEffect` dependencies in `transaction/create.tsx` and `NetWorthChart.tsx` — all correct, no changes needed
+- [x] Transaction list redesign — `TransactionRow` rebuilt with a leading category-icon avatar (color tinted from `category_color`), `Pending` pill replacing inline status text, and `tabular-nums` amount; credit amounts switched to `colors.incomePositive` for better debit/credit contrast
+- [x] Transaction list redesign — `TransactionListCard` groups consecutive same-day rows under tracked uppercase date headers (`Today`, `Yesterday`, `Mon, Apr 30`), separators indented past the avatar
+- [x] New `src/utils/date.ts` — `formatTransactionDate` + `formatTransactionDateGroup` parse ISO dates as local time (avoids UTC-shift bug on negative-UTC zones)
+- [x] Backend: `category_color` added to `TransactionOut` schema and `services/transactions.py` list/detail payloads so rows render the saved color without an extra category lookup
+- [x] `useTransactionsStore.updateTransactionCategory(id, name, color?)` accepts an optional color so the avatar updates instantly on optimistic re-categorize from the detail screen
 
 ### Phase 5 — AI Assistant
 - [x] AI data access layer (`ai/data_access.py`) — 8 parameterized query handlers scoped by user_id
@@ -682,13 +688,13 @@ Estimated steady-state cost: ~$10–15/mo (vs. ~$190–200/mo on AWS).
 ## Running Locally
 
 ```bash
-# Start everything (Postgres, Redis, Backend, Mobile web)
+# Start backend services (Postgres, Redis, Backend)
 docker compose up --build
 
 # Or run in the background
 docker compose up --build -d
 
-# Rebuild after dependency changes (package.json, pyproject.toml)
+# Rebuild after dependency changes (pyproject.toml)
 docker compose up --build
 
 # Stop all services
@@ -696,12 +702,11 @@ docker compose down
 
 # View logs for a specific service
 docker compose logs -f backend
-docker compose logs -f mobile
 
 # Query the database
 docker exec -it pebble-postgres-1 psql -U pebble -d pebble
 
-# Run iOS natively (requires Xcode, cannot run in Docker)
+# Run iOS natively (mobile is not in Docker — requires Xcode)
 cd mobile
 npm install
 npx expo run:ios
@@ -726,5 +731,4 @@ npx expo run:ios --device
 | PostgreSQL | Docker (port 5432) | GCP Cloud SQL (`db-f1-micro`, PG16, `us-central1`) | Neon |
 | Redis | Docker (port 6379) | Upstash Redis (TLS, free tier) | Upstash |
 | Backend | Docker (port 8000) | GCP Cloud Run (`pebble-backend`, scales 0–3, `us-central1`) | Railway or Render |
-| Mobile (web) | Docker (port 8081) | — | Static deploy |
 | Mobile (iOS) | `npx expo run:ios` | Dev client → staging ELB | EAS Build + TestFlight |

@@ -134,7 +134,7 @@ async def exchange_public_token(
             plaid_item_id=plaid_item.id,
             plaid_account_id=acct["account_id"],
             name=acct["name"],
-            official_name=acct.get("official_name"),
+            mask=acct.get("mask"),
             type=acct["type"],
             subtype=acct.get("subtype"),
             balance_current=balances.get("current"),
@@ -322,6 +322,8 @@ async def refresh_balances(item: "PlaidItem", db: AsyncSession) -> None:
             balances = acct_data.get("balances", {})
             account.balance_current = balances.get("current")
             account.balance_available = balances.get("available")
+            if account.mask is None and acct_data.get("mask"):
+                account.mask = acct_data["mask"]
 
 
 async def refresh_balances_if_stale(user_id: str, db: AsyncSession) -> bool:

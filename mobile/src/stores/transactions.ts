@@ -14,6 +14,7 @@ type Transaction = {
   merchant_name: string | null;
   pending: boolean;
   category_name: string | null;
+  category_color: string | null;
 };
 
 type TransactionsResponse = {
@@ -59,8 +60,12 @@ type TransactionsState = {
   setFilters: (filters: TransactionFilters) => Promise<void>;
   /** Clear all filters and fetch. */
   clearFilters: () => Promise<void>;
-  /** Update a transaction's category_name in the local list (optimistic). */
-  updateTransactionCategory: (id: string, categoryName: string | null) => void;
+  /** Update a transaction's category in the local list (optimistic). */
+  updateTransactionCategory: (
+    id: string,
+    categoryName: string | null,
+    categoryColor?: string | null,
+  ) => void;
   /** Create a manual transaction. */
   addTransaction: (input: CreateTransactionInput) => Promise<void>;
   /** Delete a transaction. */
@@ -161,10 +166,17 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     await get().fetchFiltered();
   },
 
-  updateTransactionCategory: (id, categoryName) => {
+  updateTransactionCategory: (id, categoryName, categoryColor) => {
     set((state) => ({
       transactions: state.transactions.map((t) =>
-        t.id === id ? { ...t, category_name: categoryName } : t
+        t.id === id
+          ? {
+              ...t,
+              category_name: categoryName,
+              category_color:
+                categoryColor !== undefined ? categoryColor : t.category_color,
+            }
+          : t
       ),
     }));
   },

@@ -108,6 +108,7 @@ async def get_transactions(
             "merchant_name": t.merchant_name,
             "pending": t.pending,
             "category_name": t.category.name if t.category else None,
+            "category_color": t.category.color if t.category else None,
         }
         for t in rows
     ]
@@ -125,6 +126,7 @@ def _txn_to_detail(t: Transaction) -> dict:
         "merchant_name": t.merchant_name,
         "pending": t.pending,
         "category_name": t.category.name if t.category else None,
+        "category_color": t.category.color if t.category else None,
         "category_id": str(t.category_id) if t.category_id else None,
         "notes": t.notes,
     }

@@ -195,6 +195,8 @@ async def get_dashboard(
         account_list.append({
             "id": str(a.id),
             "name": a.name,
+            "nickname": a.nickname,
+            "mask": a.mask,
             "type": a.type,
             "subtype": a.subtype,
             "balance_current": str(a.balance_current) if a.balance_current is not None else None,

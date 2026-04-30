@@ -623,14 +623,17 @@ export default function DashboardScreen() {
                   styles.accountsWidgetRow,
                   index < accounts.length - 1 && styles.accountsWidgetRowBorder,
                 ]}
-                onPress={() => router.push(`/account-transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}&balance_current=${acct.balance_current || ""}&account_type=${acct.type}&institution_name=${encodeURIComponent(acct.institution_name || "")}`)}
+                onPress={() => router.push(`/account-transactions?account_id=${acct.id}`)}
                 activeOpacity={0.7}
               >
                 <View style={styles.accountsWidgetLeft}>
                   <Text style={styles.accountsWidgetSub}>
                     {acct.institution_name ?? ACCOUNT_TYPE_LABELS[acct.type] ?? acct.type}
+                    {acct.mask ? ` ··${acct.mask}` : ""}
                   </Text>
-                  <Text style={styles.accountsWidgetName} numberOfLines={1} ellipsizeMode="tail">{acct.name}</Text>
+                  <Text style={styles.accountsWidgetName} numberOfLines={1} ellipsizeMode="tail">
+                    {acct.nickname ?? acct.name}
+                  </Text>
                 </View>
                 {acct.balance_current && (
                   <Text style={[
