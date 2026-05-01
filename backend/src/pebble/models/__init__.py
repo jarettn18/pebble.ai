@@ -9,6 +9,8 @@ from pebble.models.api_usage import ApiUsage
 from pebble.models.asset import Asset
 from pebble.models.financial_tip import FinancialTip
 from pebble.models.health_score import FinancialHealthScore
+from pebble.models.api_key import APIKey
+from pebble.models.audit_log import MCPAuditLog
 from pebble.models.base import Base
 
 __all__ = [
@@ -27,4 +29,6 @@ __all__ = [
     "Asset",
     "FinancialTip",
     "FinancialHealthScore",
+    "APIKey",
+    "MCPAuditLog",
 ]
