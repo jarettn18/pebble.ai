@@ -24,12 +24,11 @@ def upgrade() -> None:
         'mcp_audit_log',
         sa.Column(
             'id',
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text('gen_random_uuid()'),
+            sa.Uuid(),
             nullable=False,
         ),
-        sa.Column('api_key_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('api_key_id', sa.Uuid(), nullable=True),
+        sa.Column('user_id', sa.Uuid(), nullable=False),
         sa.Column('tool_name', sa.String(length=64), nullable=False),
         sa.Column(
             'args',

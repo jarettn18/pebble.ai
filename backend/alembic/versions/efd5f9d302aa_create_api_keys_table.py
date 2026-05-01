@@ -24,11 +24,10 @@ def upgrade() -> None:
         'api_keys',
         sa.Column(
             'id',
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text('gen_random_uuid()'),
+            sa.Uuid(),
             nullable=False,
         ),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('user_id', sa.Uuid(), nullable=False),
         sa.Column('key_hash', sa.String(length=64), nullable=False),
         sa.Column('name', sa.String(length=100), nullable=False),
         sa.Column(
