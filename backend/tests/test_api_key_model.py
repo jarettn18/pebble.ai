@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-import pytest
+
 from pebble.models.api_key import APIKey
 
 

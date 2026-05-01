@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,7 +17,9 @@ class APIKey(Base, TimestampMixin):
     )
     key_hash: Mapped[str] = mapped_column(String(64), unique=True)
     name: Mapped[str] = mapped_column(String(100))
-    scopes: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    scopes: Mapped[list[str]] = mapped_column(
+        ARRAY(String), default=list, server_default=text("'{}'")
+    )
     last_used_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True)
     )

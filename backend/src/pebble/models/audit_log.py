@@ -1,7 +1,8 @@
 import datetime
 import uuid
+from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,10 +20,12 @@ class MCPAuditLog(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     tool_name: Mapped[str] = mapped_column(String(64), index=True)
-    args: Mapped[dict] = mapped_column(JSONB, default=dict)
+    args: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb")
+    )
     status: Mapped[str] = mapped_column(String(16))
     latency_ms: Mapped[int] = mapped_column(Integer)
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), index=True
+        DateTime(timezone=True), server_default=func.now(), index=True
     )
