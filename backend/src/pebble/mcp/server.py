@@ -20,3 +20,4 @@ def get_streamable_http_app():
 
 # Register tools (must be imported AFTER `mcp` is defined)
 from pebble.mcp import tools_read  # noqa: E402, F401
+from pebble.mcp import tools_budgets  # noqa: E402, F401
