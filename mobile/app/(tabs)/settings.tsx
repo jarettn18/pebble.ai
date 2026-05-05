@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useAuthStore } from "../../src/stores/auth";
 import { colors, borderRadius, fonts, shadows } from "../../src/theme";
 import {
@@ -23,6 +24,7 @@ import {
 import { formatIncome } from "../../src/utils/format";
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { user, logout, updateProfile, deactivateAccount } = useAuthStore();
 
   const [editingPersonal, setEditingPersonal] = useState(false);
@@ -431,6 +433,27 @@ export default function SettingsScreen() {
           )}
         </View>
 
+        {/* Connected AI tools */}
+        <TouchableOpacity
+          style={styles.navRow}
+          onPress={() => router.push("/api-keys")}
+          activeOpacity={0.85}
+        >
+          <View style={styles.navRowLeft}>
+            <MaterialCommunityIcons
+              name="robot-outline"
+              size={20}
+              color={colors.primary}
+            />
+            <Text style={styles.navRowLabel}>Connected AI tools</Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={20}
+            color={colors.textMuted}
+          />
+        </TouchableOpacity>
+
         {/* Sign Out */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Sign Out</Text>
@@ -707,6 +730,27 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 15,
     fontFamily: fonts.semiBold,
+  },
+  navRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 12,
+    ...shadows.card,
+  },
+  navRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  navRowLabel: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
   },
   logoutButton: {
     backgroundColor: colors.surface,
