@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from pebble.mcp.auth_middleware import MCPAuthMiddleware
+from pebble.mcp.server import get_streamable_http_app
 from pebble.routers import accounts, ai_chat, api_keys, assets, auth, budget_plans, budgets, categories, csv_import, dashboard, health_score, plaid, transactions
 
 log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -71,6 +73,10 @@ app.include_router(dashboard.router)
 app.include_router(health_score.router)
 app.include_router(plaid.router)
 app.include_router(transactions.router)
+
+mcp_app = get_streamable_http_app()
+mcp_app.add_middleware(MCPAuthMiddleware)
+app.mount("/mcp", mcp_app)
 
 
 @app.get("/health")
