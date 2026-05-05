@@ -26,6 +26,7 @@ dependencies = [
     "sentence-transformers>=3.0.0",
     "twilio>=9.0.0",
     "phonenumbers>=8.13.0",
+    "mcp>=1.2.0",
 ]
 
 [project.optional-dependencies]
