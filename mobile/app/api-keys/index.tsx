@@ -154,7 +154,7 @@ export default function ApiKeysListScreen() {
             <TouchableOpacity
               onPress={() => handleRevoke(key)}
               disabled={revokingId === key.id}
-              hitSlop={8}
+              hitSlop={12}
               style={styles.revokeBtn}
             >
               {revokingId === key.id ? (
@@ -193,7 +193,7 @@ export default function ApiKeysListScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={16}>
           <Text style={styles.backArrow}>{"←"}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Connected AI tools</Text>
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   },
   revokeBtn: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 10,
     borderRadius: borderRadius.sm,
   },
   revokeBtnText: {

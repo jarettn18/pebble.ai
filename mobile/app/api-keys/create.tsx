@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Platform,
   Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
@@ -29,12 +29,45 @@ const DEFAULT_ON: ReadonlyArray<string> = SCOPE_OPTIONS.filter((s) =>
 
 export default function CreateApiKeyScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>([...DEFAULT_ON]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rawKey, setRawKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup the copy timer on unmount so it can't fire after the screen is gone.
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    },
+    []
+  );
+
+  // On step 2, prevent accidental dismissal — the raw key only exists in
+  // memory and cannot be retrieved once this screen is gone.
+  useEffect(() => {
+    if (step !== 2) return;
+    const sub = navigation.addListener("beforeRemove", (e) => {
+      if (copied) return; // user already copied → safe to leave
+      e.preventDefault();
+      Alert.alert(
+        "Leave without copying?",
+        "You haven't copied your key yet. Once you leave this screen, the key cannot be retrieved.",
+        [
+          { text: "Stay", style: "cancel", onPress: () => {} },
+          {
+            text: "Leave anyway",
+            style: "destructive",
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ]
+      );
+    });
+    return sub;
+  }, [step, copied, navigation]);
 
   const toggleScope = (id: string) => {
     setScopes((prev) =>
@@ -63,9 +96,18 @@ export default function CreateApiKeyScreen() {
 
   const handleCopy = async () => {
     if (!rawKey) return;
-    await Clipboard.setStringAsync(rawKey);
+    try {
+      await Clipboard.setStringAsync(rawKey);
+    } catch (e) {
+      Alert.alert(
+        "Couldn't copy",
+        e instanceof Error ? e.message : "Unable to copy to clipboard"
+      );
+      return;
+    }
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDone = () => {
@@ -80,7 +122,7 @@ export default function CreateApiKeyScreen() {
       {/* Header */}
       <View style={styles.header}>
         {step === 1 ? (
-          <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={16}>
             <Text style={styles.backArrow}>{"←"}</Text>
           </TouchableOpacity>
         ) : (
