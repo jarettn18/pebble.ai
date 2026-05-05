@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-from pebble.routers import accounts, ai_chat, assets, auth, budget_plans, budgets, categories, csv_import, dashboard, health_score, plaid, transactions
+from pebble.routers import accounts, ai_chat, api_keys, assets, auth, budget_plans, budgets, categories, csv_import, dashboard, health_score, plaid, transactions
 
 log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -60,6 +60,7 @@ app.add_middleware(LoggingMiddleware)
 
 app.include_router(accounts.router)
 app.include_router(ai_chat.router)
+app.include_router(api_keys.router)
 app.include_router(assets.router)
 app.include_router(auth.router)
 app.include_router(budget_plans.router)
