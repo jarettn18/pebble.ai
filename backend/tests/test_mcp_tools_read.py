@@ -9,6 +9,15 @@ from pebble.models.api_key import APIKey
 from pebble.models.user import User
 
 
+@pytest.fixture(autouse=True)
+def _stub_audit(monkeypatch):
+    async def _noop(**kwargs):
+        return None
+    monkeypatch.setattr(
+        "pebble.services.mcp_audit.write_audit_entry", _noop
+    )
+
+
 @pytest.mark.asyncio
 async def test_read_tool_denied_without_scope():
     user = User(id=uuid4(), active=True)

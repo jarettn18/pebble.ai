@@ -1,6 +1,7 @@
 """MCP tool wrappers around pebble.ai.data_access read functions."""
 
 from pebble.ai import data_access
+from pebble.mcp.audit_decorator import audited
 from pebble.mcp.context import get_context
 from pebble.mcp.server import mcp
 from pebble.middleware.api_key_auth import require_scope
@@ -12,6 +13,7 @@ def _ctx_user_db():
 
 
 @mcp.tool()
+@audited("get_spending_by_category")
 async def get_spending_by_category(date_from: str, date_to: str) -> dict:
     """Get spending breakdown by category for a date range. Returns total
     and per-category amounts with percentages."""
@@ -23,6 +25,7 @@ async def get_spending_by_category(date_from: str, date_to: str) -> dict:
 
 
 @mcp.tool()
+@audited("get_spending_over_time")
 async def get_spending_over_time(months: int = 6) -> dict:
     """Monthly spending totals for the last N months (1-12)."""
     user_id, db, key = _ctx_user_db()
@@ -33,6 +36,7 @@ async def get_spending_over_time(months: int = 6) -> dict:
 
 
 @mcp.tool()
+@audited("get_top_merchants")
 async def get_top_merchants(
     date_from: str, date_to: str, limit: int = 10
 ) -> dict:
@@ -45,6 +49,7 @@ async def get_top_merchants(
 
 
 @mcp.tool()
+@audited("get_account_balances")
 async def get_account_balances() -> dict:
     """Current balances for all bank accounts and assets, plus net worth."""
     user_id, db, key = _ctx_user_db()
@@ -53,6 +58,7 @@ async def get_account_balances() -> dict:
 
 
 @mcp.tool()
+@audited("get_budget_status")
 async def get_budget_status(
     month: int | None = None, year: int | None = None
 ) -> dict:
@@ -65,6 +71,7 @@ async def get_budget_status(
 
 
 @mcp.tool()
+@audited("get_recent_transactions")
 async def get_recent_transactions(
     limit: int = 10,
     search: str | None = None,
@@ -84,6 +91,7 @@ async def get_recent_transactions(
 
 
 @mcp.tool()
+@audited("get_income_summary")
 async def get_income_summary(date_from: str, date_to: str) -> dict:
     """Income breakdown by category for a date range."""
     user_id, db, key = _ctx_user_db()
@@ -94,6 +102,7 @@ async def get_income_summary(date_from: str, date_to: str) -> dict:
 
 
 @mcp.tool()
+@audited("compare_spending")
 async def compare_spending(
     period1_start: str, period1_end: str,
     period2_start: str, period2_end: str,
@@ -109,6 +118,7 @@ async def compare_spending(
 
 
 @mcp.tool()
+@audited("search_financial_tips")
 async def search_financial_tips(query: str) -> dict:
     """Search a curated knowledge base of financial tips."""
     user_id, db, key = _ctx_user_db()
@@ -117,6 +127,7 @@ async def search_financial_tips(query: str) -> dict:
 
 
 @mcp.tool()
+@audited("get_financial_health_score")
 async def get_financial_health_score() -> dict:
     """Financial Health Score (0-100) with component breakdown."""
     user_id, db, key = _ctx_user_db()

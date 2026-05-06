@@ -24,6 +24,15 @@ def _ctx(user, key, db):
         reset_context(token)
 
 
+@pytest.fixture(autouse=True)
+def _stub_audit(monkeypatch):
+    async def _noop(**kwargs):
+        return None
+    monkeypatch.setattr(
+        "pebble.services.mcp_audit.write_audit_entry", _noop
+    )
+
+
 @pytest.mark.asyncio
 async def test_create_budget_requires_write_scope():
     user = User(id=uuid4(), active=True)

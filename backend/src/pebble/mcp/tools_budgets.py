@@ -1,5 +1,6 @@
 """MCP tool wrappers for budget CRUD."""
 
+from pebble.mcp.audit_decorator import audited
 from pebble.mcp.context import get_context
 from pebble.mcp.server import mcp
 from pebble.middleware.api_key_auth import require_scope
@@ -12,6 +13,7 @@ def _ctx_user_db():
 
 
 @mcp.tool()
+@audited("list_budgets")
 async def list_budgets(
     month: int | None = None, year: int | None = None
 ) -> dict:
@@ -22,6 +24,7 @@ async def list_budgets(
 
 
 @mcp.tool()
+@audited("get_budget")
 async def get_budget(budget_id: str) -> dict:
     """Get a single budget by id."""
     user_id, db, key = _ctx_user_db()
@@ -30,6 +33,7 @@ async def get_budget(budget_id: str) -> dict:
 
 
 @mcp.tool()
+@audited("create_budget")
 async def create_budget(
     category_id: str, amount: str, month: int, year: int
 ) -> dict:
@@ -46,6 +50,7 @@ async def create_budget(
 
 
 @mcp.tool()
+@audited("update_budget")
 async def update_budget(
     budget_id: str,
     amount: str | None = None,
@@ -68,6 +73,7 @@ async def update_budget(
 
 
 @mcp.tool()
+@audited("delete_budget")
 async def delete_budget(budget_id: str) -> dict:
     """PERMANENTLY DELETE a budget. This cannot be undone. The user should
     confirm before calling."""
