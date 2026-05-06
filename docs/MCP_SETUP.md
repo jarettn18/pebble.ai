@@ -8,8 +8,8 @@ Pebble exposes a [Model Context Protocol](https://modelcontextprotocol.io) serve
 
 1. Open the Pebble mobile app.
 2. Go to **Settings → Connected AI tools**.
-3. Tap **Generate new key**.
-4. Give it a name (e.g. "Claude Desktop"), pick the scopes you want to grant, and tap **Create**.
+3. Tap **+ Connect a tool**.
+4. Give it a name (e.g. "Claude Desktop"), pick the scopes you want to grant, and tap **Generate API key**.
 5. Copy the `pb_…` value shown on the next screen. **This is the only time the full key is displayed** — store it in your client's config now.
 
 ### Scopes
@@ -82,12 +82,14 @@ Edit `~/.cursor/mcp.json` (or **Settings → Cursor Settings → MCP** in the ID
 
 ## Revoke a key
 
-In the app: **Settings → Connected AI tools**, swipe a key, confirm. The next request from that key returns `401 Unauthorized` — there is no propagation delay. Revocation is permanent; you cannot re-enable a revoked key.
+In the app: **Settings → Connected AI tools**, tap **Revoke** next to a key, then confirm. The next request from that key returns `401 Unauthorized` — there is no propagation delay. Revocation is permanent; you cannot re-enable a revoked key.
 
 ## Limits
 
 - **60 requests per minute, per key**
 - **1,000 requests per day, per key**
+
+> Limits are enforced per server instance; multi-instance deployments raise the effective ceiling proportionally.
 
 When a limit is exceeded, the server returns `HTTP 429` with a `Retry-After` header indicating the number of seconds to wait. Limits are tracked independently per key, so generating multiple keys (one per client) avoids cross-client throttling.
 

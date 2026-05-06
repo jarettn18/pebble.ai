@@ -133,3 +133,43 @@ async def test_audited_passes_real_tool_kwargs(monkeypatch):
     assert captured["tool_name"] == "list_budgets"
     assert captured["status"] == "ok"
     assert captured["args"] == {"month": 4, "year": 2026}
+
+
+@pytest.mark.asyncio
+async def test_audit_failure_does_not_mask_tool_result(monkeypatch):
+    user = User(id=uuid4(), active=True)
+    key = APIKey(id=uuid4(), user_id=user.id, scopes=["read:budgets"])
+
+    async def boom_audit(**kwargs):
+        raise RuntimeError("audit DB unreachable")
+    monkeypatch.setattr(
+        "pebble.services.mcp_audit.write_audit_entry", boom_audit
+    )
+
+    @audited("test_tool")
+    async def my_tool(x: int) -> dict:
+        return {"x": x}
+
+    with _ctx(user, key, AsyncMock()):
+        result = await my_tool(x=42)  # audit fails internally; result still returned
+    assert result == {"x": 42}
+
+
+@pytest.mark.asyncio
+async def test_audit_failure_does_not_mask_tool_error(monkeypatch):
+    user = User(id=uuid4(), active=True)
+    key = APIKey(id=uuid4(), user_id=user.id, scopes=["read:budgets"])
+
+    async def boom_audit(**kwargs):
+        raise RuntimeError("audit DB unreachable")
+    monkeypatch.setattr(
+        "pebble.services.mcp_audit.write_audit_entry", boom_audit
+    )
+
+    @audited("bad")
+    async def bad():
+        raise ValueError("tool said no")
+
+    with pytest.raises(ValueError, match="tool said no"):  # original error wins
+        with _ctx(user, key, AsyncMock()):
+            await bad()
