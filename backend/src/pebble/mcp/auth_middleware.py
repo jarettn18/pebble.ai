@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 
 from pebble.database import async_session
 from pebble.mcp.context import MCPRequestContext, reset_context, set_context
+from pebble.mcp.rate_limit import _limiter
 from pebble.middleware.api_key_auth import authenticate_api_key
 
 logger = logging.getLogger("pebble.mcp.auth")
@@ -40,6 +41,20 @@ class MCPAuthMiddleware(BaseHTTPMiddleware):
                 )
                 return JSONResponse(
                     {"error": e.detail}, status_code=e.status_code
+                )
+
+            retry = _limiter.check(str(key.id))
+            if retry is not None:
+                logger.warning(
+                    "MCP rate limit hit (key=%s, client=%s, retry=%ds)",
+                    key.id,
+                    request.client.host if request.client else "?",
+                    retry,
+                )
+                return JSONResponse(
+                    {"error": "Rate limit exceeded"},
+                    status_code=429,
+                    headers={"Retry-After": str(retry)},
                 )
 
             token = set_context(MCPRequestContext(user=user, api_key=key, db=db))
