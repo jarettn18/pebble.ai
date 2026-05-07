@@ -34,8 +34,13 @@ class Settings(BaseSettings):
     plaid_secret: str = ""
     plaid_env: str = "sandbox"
 
-    # Anthropic
+    # AI providers (LiteLLM is the unified client; per-provider keys below)
     anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
+    # LiteLLM model id, e.g. "anthropic/claude-haiku-4-5-20251001" or "openai/gpt-4o-mini"
+    default_chat_model: str = "anthropic/claude-haiku-4-5-20251001"
+    # TODO: remove in Task 6 (service.py rewrite). Still referenced by ai/service.py:34.
     anthropic_model: str = "claude-haiku-4-5-20251001"
 
     # Encryption
