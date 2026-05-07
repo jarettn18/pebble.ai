@@ -40,8 +40,6 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     # LiteLLM model id, e.g. "anthropic/claude-haiku-4-5-20251001" or "openai/gpt-4o-mini"
     default_chat_model: str = "anthropic/claude-haiku-4-5-20251001"
-    # TODO: remove in Task 6 (service.py rewrite). Still referenced by ai/service.py:34.
-    anthropic_model: str = "claude-haiku-4-5-20251001"
 
     # Encryption
     encryption_key: str = ""
