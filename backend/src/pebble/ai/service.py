@@ -91,7 +91,7 @@ class AIChatService:
                 )
 
                 tool_calls_acc: dict[int, dict] = {}
-                emitted_tool_names: set[int] = set()
+                emitted_tool_indices: set[int] = set()
                 content_acc = ""
                 finish_reason: str | None = None
                 usage = None
@@ -115,9 +115,9 @@ class AIChatService:
                             if fn and fn.name:
                                 slot["name"] = fn.name
                                 # First time we see the name → emit tool_call SSE
-                                if tc.index not in emitted_tool_names:
+                                if tc.index not in emitted_tool_indices:
                                     yield _sse("tool_call", tool=fn.name)
-                                    emitted_tool_names.add(tc.index)
+                                    emitted_tool_indices.add(tc.index)
                             if fn and fn.arguments:
                                 slot["arguments"] += fn.arguments
 
@@ -169,7 +169,7 @@ class AIChatService:
             await self._save_message(conversation.id, "user", message, model_key=None, db=db)
             await self._save_message(
                 conversation.id, "assistant", assistant_text,
-                model_key=resolve_model(model_key)["litellm_id"], db=db,
+                model_key=litellm_id, db=db,
             )
 
             if len(history) == 0 and assistant_text:
@@ -183,7 +183,9 @@ class AIChatService:
             logger.exception("AI chat error")
             yield _sse("error", message=str(e))
 
-    async def _get_or_create_conversation(self, user_id, conversation_id, db):
+    async def _get_or_create_conversation(
+        self, user_id: str, conversation_id: str | None, db: AsyncSession,
+    ) -> ChatConversation:
         if conversation_id:
             result = await db.execute(
                 select(ChatConversation).where(
@@ -199,7 +201,9 @@ class AIChatService:
         await db.flush()
         return conv
 
-    async def _load_history(self, conversation_id, db) -> list[dict]:
+    async def _load_history(
+        self, conversation_id: uuid.UUID, db: AsyncSession,
+    ) -> list[dict]:
         result = await db.execute(
             select(ChatMessage)
             .where(ChatMessage.conversation_id == conversation_id)
@@ -210,7 +214,12 @@ class AIChatService:
         return [{"role": m.role, "content": m.content} for m in rows]
 
     async def _save_message(
-        self, conversation_id, role: str, content: str, model_key: str | None, db,
+        self,
+        conversation_id: uuid.UUID,
+        role: str,
+        content: str,
+        model_key: str | None,
+        db: AsyncSession,
     ) -> None:
         msg = ChatMessage(
             conversation_id=conversation_id, role=role, content=content, model=model_key,
@@ -218,7 +227,9 @@ class AIChatService:
         db.add(msg)
         await db.flush()
 
-    async def _execute_tool(self, tool_name, tool_input, user_id, db) -> dict:
+    async def _execute_tool(
+        self, tool_name: str, tool_input: dict, user_id: str, db: AsyncSession,
+    ) -> dict:
         handler = TOOL_HANDLERS.get(tool_name)
         if not handler:
             return {"error": f"Unknown tool: {tool_name}"}
@@ -228,7 +239,14 @@ class AIChatService:
             logger.warning("Tool %s failed: %s", tool_name, e)
             return {"error": f"Could not retrieve data: {e}"}
 
-    async def _auto_title(self, conversation, first_message, litellm_id, provider_kwargs, db):
+    async def _auto_title(
+        self,
+        conversation: ChatConversation,
+        first_message: str,
+        litellm_id: str,
+        provider_kwargs: dict,
+        db: AsyncSession,
+    ) -> None:
         try:
             resp = await litellm.acompletion(
                 model=litellm_id,
@@ -248,7 +266,9 @@ class AIChatService:
         except Exception:
             logger.warning("Auto-title generation failed", exc_info=True)
 
-    async def _track_usage(self, user_id, token_count, db):
+    async def _track_usage(
+        self, user_id: str, token_count: int, db: AsyncSession,
+    ) -> None:
         period = date.today().strftime("%Y-%m")
         result = await db.execute(
             select(ApiUsage).where(
