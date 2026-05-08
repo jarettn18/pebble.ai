@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class ChatRequest(BaseModel):
     message: str
     conversation_id: str | None = None
+    model: str | None = None  # ALLOWED_MODELS key, server falls back to default
 
 
 class ConversationOut(BaseModel):

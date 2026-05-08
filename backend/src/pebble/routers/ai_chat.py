@@ -39,7 +39,11 @@ async def chat(
 
     async def _generate():
         async for chunk in _service.stream_chat(
-            str(user.id), req.conversation_id, req.message.strip(), db
+            str(user.id),
+            req.conversation_id,
+            req.message.strip(),
+            db,
+            model_key=req.model,
         ):
             yield chunk
         await db.commit()
