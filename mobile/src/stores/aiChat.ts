@@ -16,6 +16,12 @@ export type Conversation = {
   last_message_preview: string | null;
 };
 
+export type ModelOption = {
+  key: string;
+  label: string;
+  tier: "fast" | "balanced" | "max";
+};
+
 type AIChatState = {
   conversations: Conversation[];
   currentConversationId: string | null;
@@ -25,12 +31,18 @@ type AIChatState = {
   error: string | null;
   abortHandle: { abort: () => void } | null;
 
+  selectedModel: string | null;
+  availableModels: ModelOption[];
+  defaultModel: string | null;
+
   loadConversations: () => Promise<void>;
   loadConversation: (id: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   startNewConversation: () => void;
   deleteConversation: (id: string) => Promise<void>;
   stopStreaming: () => void;
+  loadModels: () => Promise<void>;
+  setSelectedModel: (key: string) => void;
 };
 
 let messageIdCounter = 0;
@@ -46,6 +58,23 @@ export const useAIChatStore = create<AIChatState>((set, get) => ({
   activeToolCall: null,
   error: null,
   abortHandle: null,
+
+  selectedModel: null,
+  availableModels: [],
+  defaultModel: null,
+
+  loadModels: async () => {
+    try {
+      const data = await apiRequest<{ models: ModelOption[]; default: string }>(
+        "/v1/ai/models"
+      );
+      set({ availableModels: data.models, defaultModel: data.default });
+    } catch (err) {
+      if (__DEV__) console.warn("Failed to load models:", err);
+    }
+  },
+
+  setSelectedModel: (key: string) => set({ selectedModel: key }),
 
   loadConversations: async () => {
     try {
@@ -80,8 +109,9 @@ export const useAIChatStore = create<AIChatState>((set, get) => ({
   },
 
   sendMessage: async (text: string) => {
-    const { currentConversationId, isStreaming } = get();
+    const { currentConversationId, isStreaming, selectedModel, defaultModel } = get();
     if (isStreaming) return;
+    const modelToUse = selectedModel ?? defaultModel ?? null;
 
     const userMsg: Message = { id: tempId(), role: "user", content: text };
     const assistantMsg: Message = {
@@ -142,6 +172,7 @@ export const useAIChatStore = create<AIChatState>((set, get) => ({
           }));
         },
       },
+      modelToUse,
     );
 
     set({ abortHandle: controller });
