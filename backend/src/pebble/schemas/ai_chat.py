@@ -23,6 +23,7 @@ class MessageOut(BaseModel):
     role: str
     content: str
     created_at: str
+    model: str | None = None
 
 
 class ConversationDetailResponse(BaseModel):

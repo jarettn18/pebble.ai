@@ -126,6 +126,7 @@ async def get_conversation(
                 role=m.role,
                 content=m.content,
                 created_at=m.created_at.isoformat(),
+                model=m.model,
             )
             for m in conv.messages
         ],
