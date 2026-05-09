@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from pebble.ai.models import ALLOWED_MODELS, DEFAULT_MODEL_KEY
 from pebble.ai.service import AIChatService
 from pebble.database import get_db
 from pebble.middleware.auth import get_current_user
@@ -17,6 +18,8 @@ from pebble.schemas.ai_chat import (
     ConversationListResponse,
     ConversationOut,
     MessageOut,
+    ModelOption,
+    ModelsResponse,
 )
 from pebble.services.rate_limiter import RateLimitDependency
 
@@ -39,7 +42,11 @@ async def chat(
 
     async def _generate():
         async for chunk in _service.stream_chat(
-            str(user.id), req.conversation_id, req.message.strip(), db
+            str(user.id),
+            req.conversation_id,
+            req.message.strip(),
+            db,
+            model_key=req.model,
         ):
             yield chunk
         await db.commit()
@@ -48,6 +55,17 @@ async def chat(
         _generate(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/models", response_model=ModelsResponse)
+async def list_models(user: User = Depends(get_current_user)):
+    return ModelsResponse(
+        models=[
+            ModelOption(key=k, label=v["label"], tier=v["tier"])
+            for k, v in ALLOWED_MODELS.items()
+        ],
+        default=DEFAULT_MODEL_KEY,
     )
 
 
@@ -108,6 +126,7 @@ async def get_conversation(
                 role=m.role,
                 content=m.content,
                 created_at=m.created_at.isoformat(),
+                model=m.model,
             )
             for m in conv.messages
         ],

@@ -34,9 +34,10 @@ class Settings(BaseSettings):
     plaid_secret: str = ""
     plaid_env: str = "sandbox"
 
-    # Anthropic
+    # AI providers (LiteLLM is the unified client; per-provider keys below)
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-haiku-4-5-20251001"
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
 
     # Encryption
     encryption_key: str = ""

@@ -41,6 +41,11 @@ async def login_user(req: LoginRequest, db: AsyncSession) -> TokenResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+    if not user.active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has been deactivated",
+        )
 
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
@@ -80,6 +85,11 @@ async def refresh_tokens(refresh_token: str, db: AsyncSession) -> TokenResponse:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
+        )
+    if not user.active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has been deactivated",
         )
 
     # Blacklist the old refresh token (expires from Redis when the token would have expired)

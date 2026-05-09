@@ -20,7 +20,7 @@ import { useDashboardStore } from "../../src/stores/dashboard";
 import { formatCurrency } from "../../src/utils/dashboard";
 import { withOpacity, getCategoryColor } from "../../src/utils/color";
 import { apiRequest } from "../../src/api/client";
-import { colors, fonts, progressBarStyles } from "../../src/theme";
+import { colors, fonts, heroCard, heroProgressBarStyles, borderRadius, shadows, microLabel, microLabelSmall, microLabelTiny } from "../../src/theme";
 import { getCategoryIcon } from "../../src/utils/categoryIcons";
 import ColorPickerModal from "../../src/components/ColorPickerModal";
 
@@ -353,18 +353,26 @@ const PlansSection = memo(function PlansSection({ plans }: PlansSectionProps) {
         <View style={styles.plansSectionHeader}>
           <Text style={styles.plansSectionTitle}>Budget Plans</Text>
         </View>
-        <View style={styles.emptyPlanCard}>
-          <Text style={styles.emptyPlanText}>No budget plans yet</Text>
+        <TouchableOpacity
+          style={styles.emptyPlanCard}
+          onPress={() => router.push("/budget/create")}
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel="Create your first budget plan"
+        >
+          <View style={styles.emptyPlanGlow} />
+          <View style={styles.emptyPlanIcon}>
+            <MaterialCommunityIcons name="cash-multiple" size={24} color={colors.accent} />
+          </View>
+          <Text style={styles.emptyPlanEyebrow}>READY TO BUDGET?</Text>
+          <Text style={styles.emptyPlanText}>Create your first plan</Text>
           <Text style={styles.emptyPlanHint}>
-            Create a plan to automatically manage your monthly budgets
+            Allocate your monthly income across categories and let Pebble track the rest.
           </Text>
-          <TouchableOpacity
-            style={styles.emptyPlanButton}
-            onPress={() => router.push("/budget/create")}
-          >
-            <Text style={styles.emptyPlanButtonText}>+ Create New</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.emptyPlanButton}>
+            <Text style={styles.emptyPlanButtonText}>+ Create New Plan</Text>
+          </View>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -424,62 +432,74 @@ const BudgetCategoryRow = memo(function BudgetCategoryRow({
 
   return (
     <TouchableOpacity
-      style={[progressBarStyles.container, styles.budgetCard]}
+      style={[styles.budgetCard, { borderColor: withOpacity(catColor, 0.22) }]}
       onPress={() => router.push(transactionUrl)}
-      activeOpacity={0.7}
+      activeOpacity={0.85}
     >
-      <View style={[progressBarStyles.header, styles.categoryHeader]}>
-        <View style={styles.labelRow}>
-          <TouchableOpacity
-            style={[styles.iconCircle, { backgroundColor: iconBg }]}
-            onPress={(e) => {
-              e.stopPropagation();
-              onColorPick(item.category_id, item.category_color);
-            }}
-            activeOpacity={0.6}
-          >
-            <MaterialCommunityIcons
-              name={getCategoryIcon(categoryName) as any}
-              size={22}
-              color={catColor}
-            />
-          </TouchableOpacity>
-          <Text style={styles.labelText}>
-            {categoryName}
-          </Text>
-        </View>
+      <View
+        style={[
+          styles.budgetCardGlow,
+          { backgroundColor: withOpacity(catColor, 0.18) },
+        ]}
+      />
+      <View style={styles.budgetCardHeader}>
         <TouchableOpacity
-          hitSlop={HIT_SLOP_8}
+          style={[styles.iconCircle, { backgroundColor: iconBg }]}
           onPress={(e) => {
             e.stopPropagation();
-            router.push(transactionUrl);
+            onColorPick(item.category_id, item.category_color);
           }}
+          activeOpacity={0.6}
         >
           <MaterialCommunityIcons
-            name="format-list-bulleted"
-            size={25}
-            color={colors.textMuted}
+            name={getCategoryIcon(categoryName) as any}
+            size={22}
+            color={catColor}
           />
         </TouchableOpacity>
+        <View style={styles.budgetCardMid}>
+          <Text style={styles.budgetCardName} numberOfLines={1}>
+            {categoryName}
+          </Text>
+          <Text style={styles.budgetCardSub}>
+            {formatCurrency(Math.floor(spent))} of {formatCurrency(Math.floor(budgeted))}
+          </Text>
+        </View>
+        <View style={styles.budgetCardRight}>
+          <Text
+            style={[
+              styles.budgetCardRemaining,
+              overBudget && styles.budgetCardRemainingOver,
+            ]}
+          >
+            {overBudget
+              ? `-${formatCurrency(Math.floor(Math.abs(remaining)))}`
+              : formatCurrency(Math.floor(remaining))}
+          </Text>
+          <Text
+            style={[
+              styles.budgetCardRemainingLabel,
+              overBudget && styles.budgetCardRemainingOverLabel,
+            ]}
+          >
+            {overBudget ? "over" : "left"}
+          </Text>
+        </View>
       </View>
-      <View style={progressBarStyles.track}>
+      <View
+        style={[
+          styles.budgetCardTrack,
+          { backgroundColor: withOpacity(catColor, 0.14) },
+        ]}
+      >
         <View
           style={[
-            progressBarStyles.fill,
+            styles.budgetCardFill,
             { width: `${clampedPct}%`, backgroundColor: catColor },
             overBudget && { backgroundColor: colors.error },
           ]}
         />
       </View>
-      <Text style={[styles.spentText, overBudget && styles.overText]}>
-        {overBudget
-          ? `${formatCurrency(Math.floor(Math.abs(remaining)))} over`
-          : `${formatCurrency(Math.floor(remaining))} left`}
-        {" "}
-        <Text style={styles.spentTextSub}>
-          of {formatCurrency(Math.floor(budgeted))}
-        </Text>
-      </Text>
     </TouchableOpacity>
   );
 });
@@ -624,53 +644,56 @@ export default function BudgetsScreen() {
       {/* Hero Header */}
       {aggregatedBudgets.length > 0 && (
         <View style={styles.heroSection}>
-          <Text style={styles.heroLabel}>SPENDING CATEGORIES</Text>
-          <Text style={styles.heroAmount}>{formatCurrency(totalSpent)}</Text>
-          <Text style={styles.heroSubtitle}>Total monthly spend so far</Text>
+          <View style={styles.heroCard}>
+            <View style={styles.heroCardGlow} />
+            <Text style={styles.heroCardLabel}>SPENDING CATEGORIES</Text>
+            <Text style={styles.heroCardAmount}>{formatCurrency(totalSpent)}</Text>
+            <Text style={styles.heroCardSubtitle}>Total monthly spend so far</Text>
 
-          {/* Summary Progress Pill */}
-          <View style={[progressBarStyles.container, styles.summaryPill]}>
-            <View style={progressBarStyles.header}>
-              <View>
-                <Text style={progressBarStyles.label}>Overall Budget</Text>
-                <Text style={progressBarStyles.value}>
-                  {budgetPct}%{" "}
-                  <Text style={progressBarStyles.valueSub}>
-                    of {formatCurrency(totalBudgeted)}
+            {/* Summary Progress Pill — nested translucent */}
+            <View style={heroProgressBarStyles.container}>
+              <View style={heroProgressBarStyles.header}>
+                <View>
+                  <Text style={heroProgressBarStyles.label}>Overall Budget</Text>
+                  <Text style={heroProgressBarStyles.value}>
+                    {budgetPct}%{" "}
+                    <Text style={heroProgressBarStyles.valueSub}>
+                      of {formatCurrency(totalBudgeted)}
+                    </Text>
                   </Text>
+                </View>
+                <Text
+                  style={[
+                    heroProgressBarStyles.remaining,
+                    isOverBudget && styles.heroOverText,
+                  ]}
+                >
+                  {isOverBudget ? "Over by " : ""}
+                  {formatCurrency(Math.abs(budgetRemaining))}{" "}
+                  {isOverBudget ? "" : "left"}
                 </Text>
               </View>
-              <Text
-                style={[
-                  progressBarStyles.remaining,
-                  isOverBudget && styles.overText,
-                ]}
-              >
-                {isOverBudget ? "Over by " : ""}
-                {formatCurrency(Math.abs(budgetRemaining))}{" "}
-                {isOverBudget ? "" : "left"}
-              </Text>
-            </View>
-            <View style={[progressBarStyles.track, { flexDirection: "row", overflow: "hidden" }]}>
-              {aggregatedBudgets.map((item, idx) => {
-                const spent = parseFloat(item.spent || "0");
-                if (spent <= 0) return null;
-                const scale = isOverBudget ? totalBudgeted / totalSpent : 1;
-                const widthPct = (spent / totalBudgeted) * 100 * scale;
-                const catColor = isOverBudget
-                  ? colors.error
-                  : getCategoryColor(item.category_color, FALLBACK_COLORS, idx);
-                return (
-                  <View
-                    key={item.category_id}
-                    style={{
-                      width: `${widthPct}%`,
-                      height: "100%" as unknown as number,
-                      backgroundColor: catColor,
-                    }}
-                  />
-                );
-              })}
+              <View style={[heroProgressBarStyles.track, { flexDirection: "row" }]}>
+                {aggregatedBudgets.map((item, idx) => {
+                  const spent = parseFloat(item.spent || "0");
+                  if (spent <= 0) return null;
+                  const scale = isOverBudget ? totalBudgeted / totalSpent : 1;
+                  const widthPct = (spent / totalBudgeted) * 100 * scale;
+                  const catColor = isOverBudget
+                    ? colors.heroNegative
+                    : getCategoryColor(item.category_color, FALLBACK_COLORS, idx);
+                  return (
+                    <View
+                      key={item.category_id}
+                      style={{
+                        width: `${widthPct}%`,
+                        height: "100%" as unknown as number,
+                        backgroundColor: catColor,
+                      }}
+                    />
+                  );
+                })}
+              </View>
             </View>
           </View>
         </View>
@@ -704,7 +727,7 @@ export default function BudgetsScreen() {
         shouldResort.current = true;
         load(period.month, period.year);
       }}
-      tintColor={colors.primary}
+      tintColor={colors.accent}
     />
   ), [isLoading, period.month, period.year]);
 
@@ -716,7 +739,7 @@ export default function BudgetsScreen() {
         <>
           {renderHeader()}
           <View style={styles.centered}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="large" color={colors.accent} />
           </View>
         </>
       ) : aggregatedBudgets.length === 0 ? (
@@ -768,44 +791,40 @@ const styles = StyleSheet.create({
   },
   monthArrow: {
     fontSize: 22,
-    color: colors.primary,
-    fontWeight: "600",
+    color: colors.accent,
+    fontFamily: fonts.semiBold,
   },
   monthLabel: {
     fontSize: 18,
     fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    color: colors.heroSurface,
+    letterSpacing: -0.3,
   },
 
-  // Hero Section
+  // Hero Section — dark hero card with nested progress pill
   heroSection: {
     paddingHorizontal: 24,
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  heroLabel: {
-    fontSize: 12,
-    fontFamily: fonts.labelMedium,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: colors.secondary,
-    marginBottom: 8,
+  heroCard: {
+    ...heroCard.surface,
   },
-  heroAmount: {
-    fontSize: 36,
+  heroCardGlow: heroCard.glow,
+  heroCardLabel: heroCard.label,
+  heroCardAmount: {
+    fontSize: 40,
     fontFamily: fonts.extraBold,
-    color: colors.textPrimary,
+    color: colors.heroTextPrimary,
     letterSpacing: -0.5,
     marginBottom: 4,
   },
-  heroSubtitle: {
+  heroCardSubtitle: {
     fontSize: 14,
     fontFamily: fonts.medium,
-    color: colors.textMuted,
+    color: colors.heroTextSecondary,
   },
-
-  // Summary Progress Pill
-  summaryPill: {
-    marginTop: 24,
+  heroOverText: {
+    color: colors.heroNegative,
   },
 
   // Plans Section
@@ -819,17 +838,14 @@ const styles = StyleSheet.create({
     alignItems: "center" as const,
   },
   plansSectionTitle: {
-    fontSize: 14,
-    fontFamily: fonts.labelMedium,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: colors.textMuted,
+    ...microLabel,
+    color: colors.textSecondary,
     marginBottom: 10,
   },
   swipeableContainer: {
     marginBottom: 8,
     overflow: "hidden",
-    borderRadius: 12,
+    borderRadius: borderRadius.md,
   },
   deleteAction: {
     position: "absolute",
@@ -840,8 +856,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     justifyContent: "center",
     alignItems: "center",
-    borderTopRightRadius: 12,
-    borderBottomRightRadius: 12,
+    borderTopRightRadius: borderRadius.md,
+    borderBottomRightRadius: borderRadius.md,
     borderWidth: 1,
     borderLeftWidth: 0,
     borderColor: `${colors.border}4D`,
@@ -854,8 +870,11 @@ const styles = StyleSheet.create({
   },
   planCardExpanded: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: borderRadius.md,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}33`,
+    ...shadows.card,
   },
   planCardHeader: {
     flexDirection: "row",
@@ -868,13 +887,14 @@ const styles = StyleSheet.create({
   },
   planCardName: {
     fontSize: 16,
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
     marginBottom: 2,
+    letterSpacing: -0.2,
   },
   planCardSub: {
     fontSize: 13,
-    fontFamily: fonts.regular,
+    fontFamily: fonts.medium,
     color: colors.textMuted,
   },
   planCardActions: {
@@ -919,7 +939,7 @@ const styles = StyleSheet.create({
   allocationAmount: {
     fontSize: 15,
     fontFamily: fonts.semiBold,
-    color: colors.primary,
+    color: colors.accentDark,
   },
   allocationTotalRow: {
     flexDirection: "row",
@@ -952,77 +972,151 @@ const styles = StyleSheet.create({
   categoriesTitle: {
     fontSize: 20,
     fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    color: colors.heroSurface,
+    letterSpacing: -0.3,
   },
   createNewText: {
     fontSize: 14,
     fontFamily: fonts.semiBold,
-    color: colors.primary,
+    color: colors.accent,
     marginBottom: 5,
   },
   emptyPlanCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 32,
+    ...heroCard.surface,
     alignItems: "center" as const,
+    padding: 28,
+  },
+  emptyPlanGlow: heroCard.glow,
+  emptyPlanIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.accentSoft,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+  },
+  emptyPlanEyebrow: {
+    ...microLabelSmall,
+    color: colors.heroLabel,
+    marginBottom: 8,
   },
   emptyPlanText: {
-    fontSize: 18,
-    fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
+    fontSize: 22,
+    fontFamily: fonts.extraBold,
+    color: colors.heroTextPrimary,
+    letterSpacing: -0.3,
     marginBottom: 8,
+    textAlign: "center" as const,
   },
   emptyPlanHint: {
     fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
+    fontFamily: fonts.medium,
+    color: colors.heroTextSecondary,
     textAlign: "center" as const,
+    lineHeight: 20,
     marginBottom: 20,
+    maxWidth: 280,
   },
   emptyPlanButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.pill,
+    paddingHorizontal: 22,
+    paddingVertical: 11,
   },
   emptyPlanButtonText: {
     fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: "#FFFFFF",
+    fontFamily: fonts.bold,
+    color: colors.heroSurface,
+    letterSpacing: 0.2,
   },
 
-  // Budget Cards
+  // Budget Cards — secondary hero treatment
   listContent: {
     paddingBottom: 24,
   },
   budgetCard: {
+    position: "relative" as const,
+    overflow: "hidden" as const,
     marginHorizontal: 24,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 20,
+    borderWidth: 1,
+    ...shadows.card,
   },
-  categoryHeader: {
-    alignItems: "center",
+  budgetCardGlow: {
+    position: "absolute" as const,
+    top: -60,
+    right: -60,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
   },
-  labelRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  budgetCardHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    marginBottom: 14,
+  },
+  budgetCardMid: {
     flex: 1,
+    marginRight: 12,
   },
-  labelText: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
+  budgetCardName: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+    color: colors.heroSurface,
+    letterSpacing: -0.2,
+    marginBottom: 2,
+  },
+  budgetCardSub: {
+    fontSize: 12,
+    fontFamily: fonts.labelMedium,
+    color: colors.textMuted,
+    letterSpacing: 0.2,
+  },
+  budgetCardRight: {
+    alignItems: "flex-end" as const,
+  },
+  budgetCardRemaining: {
+    fontSize: 18,
+    fontFamily: fonts.extraBold,
+    color: colors.heroSurface,
+    letterSpacing: -0.3,
+  },
+  budgetCardRemainingOver: {
+    color: colors.error,
+  },
+  budgetCardRemainingLabel: {
+    ...microLabelTiny,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  budgetCardRemainingOverLabel: {
+    color: colors.error,
+  },
+  budgetCardTrack: {
+    height: 10,
+    borderRadius: borderRadius.pill,
+    overflow: "hidden" as const,
+  },
+  budgetCardFill: {
+    height: "100%" as unknown as number,
+    borderRadius: borderRadius.pill,
   },
   iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
 
   separator: {
-    height: 16,
+    height: 12,
   },
 
   // Empty & Error
@@ -1034,7 +1128,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   emptyHint: {
@@ -1042,20 +1136,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 8,
     textAlign: "center",
-  },
-  spentText: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
-    marginTop: 6,
-  },
-  spentTextSub: {
-    fontSize: 13,
-    fontWeight: "400",
-    color: colors.textSecondary,
-  },
-  overText: {
-    color: colors.error,
   },
   errorText: {
     color: colors.error,

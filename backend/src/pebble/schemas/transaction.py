@@ -11,6 +11,7 @@ class TransactionOut(BaseModel):
     merchant_name: str | None = None
     pending: bool
     category_name: str | None = None
+    category_color: str | None = None
 
     model_config = {"from_attributes": True}
 

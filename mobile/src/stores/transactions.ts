@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { apiRequest } from "../api/client";
+import { useHealthScoreStore } from "./healthScore";
 
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 day
 
@@ -13,6 +14,7 @@ type Transaction = {
   merchant_name: string | null;
   pending: boolean;
   category_name: string | null;
+  category_color: string | null;
 };
 
 type TransactionsResponse = {
@@ -58,8 +60,12 @@ type TransactionsState = {
   setFilters: (filters: TransactionFilters) => Promise<void>;
   /** Clear all filters and fetch. */
   clearFilters: () => Promise<void>;
-  /** Update a transaction's category_name in the local list (optimistic). */
-  updateTransactionCategory: (id: string, categoryName: string | null) => void;
+  /** Update a transaction's category in the local list (optimistic). */
+  updateTransactionCategory: (
+    id: string,
+    categoryName: string | null,
+    categoryColor?: string | null,
+  ) => void;
   /** Create a manual transaction. */
   addTransaction: (input: CreateTransactionInput) => Promise<void>;
   /** Delete a transaction. */
@@ -118,6 +124,9 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         totalCount: data.count,
         lastFetchedAt: Date.now(),
       });
+      // Transactions just changed (or may have) — refresh the health score so
+      // the dashboard card doesn't show a stale value.
+      useHealthScoreStore.getState().load();
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Failed to load",
@@ -157,10 +166,17 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     await get().fetchFiltered();
   },
 
-  updateTransactionCategory: (id, categoryName) => {
+  updateTransactionCategory: (id, categoryName, categoryColor) => {
     set((state) => ({
       transactions: state.transactions.map((t) =>
-        t.id === id ? { ...t, category_name: categoryName } : t
+        t.id === id
+          ? {
+              ...t,
+              category_name: categoryName,
+              category_color:
+                categoryColor !== undefined ? categoryColor : t.category_color,
+            }
+          : t
       ),
     }));
   },
@@ -173,6 +189,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     set((state) => ({
       transactions: [created, ...state.transactions],
     }));
+    useHealthScoreStore.getState().load();
   },
 
   removeTransaction: async (id) => {
@@ -180,5 +197,6 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     set((state) => ({
       transactions: state.transactions.filter((t) => t.id !== id),
     }));
+    useHealthScoreStore.getState().load();
   },
 }));

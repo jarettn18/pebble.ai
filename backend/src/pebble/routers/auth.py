@@ -120,6 +120,17 @@ async def update_profile(
     return _user_response(user)
 
 
+@router.post("/deactivate", status_code=200)
+async def deactivate_account(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user.active = False
+    db.add(user)
+    await db.commit()
+    return {"message": "Account deactivated"}
+
+
 def _user_response(user: User) -> UserResponse:
     return UserResponse(
         id=str(user.id),
@@ -135,4 +146,6 @@ def _user_response(user: User) -> UserResponse:
         marital_status=user.marital_status,
         dependents=user.dependents,
         financial_goals=user.financial_goals,
+        onboarding_completed=user.onboarding_completed,
+        active=user.active,
     )

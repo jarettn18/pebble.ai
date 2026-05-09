@@ -12,7 +12,7 @@ import { useRouter } from "expo-router";
 import { useAccountsStore, Account } from "../../src/stores/accounts";
 import { useTransactionsStore } from "../../src/stores/transactions";
 import { apiRequest } from "../../src/api/client";
-import { colors, borderRadius } from "../../src/theme";
+import { colors, borderRadius, fonts } from "../../src/theme";
 
 type Category = {
   id: string;
@@ -229,7 +229,7 @@ export default function CreateTransactionScreen() {
               <View
                 style={[
                   styles.chipDot,
-                  { backgroundColor: cat.color || "#999" },
+                  { backgroundColor: cat.color || colors.dotInactive },
                 ]}
               />
               <Text
@@ -292,11 +292,11 @@ const styles = StyleSheet.create({
   backArrow: {
     fontSize: 24,
     color: colors.primary,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   body: {
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 16,
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   },
   toggleBtnText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
   },
   toggleBtnTextActive: {
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     padding: 12,
     backgroundColor: colors.errorBackground,
-    borderRadius: 8,
+    borderRadius: borderRadius.sm,
   },
   saveBtn: {
     backgroundColor: colors.primary,
@@ -395,6 +395,6 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: colors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
 });

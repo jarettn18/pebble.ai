@@ -14,7 +14,7 @@ import { useAccountsStore, Account } from "../src/stores/accounts";
 import { useDashboardStore } from "../src/stores/dashboard";
 import { useTransactionsStore } from "../src/stores/transactions";
 import { apiUpload } from "../src/api/client";
-import { colors, borderRadius } from "../src/theme";
+import { colors, borderRadius, fonts } from "../src/theme";
 
 type ImportResult = {
   imported: number;
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 16,
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     padding: 12,
     backgroundColor: colors.errorBackground,
-    borderRadius: 8,
+    borderRadius: borderRadius.sm,
   },
   importBtn: {
     backgroundColor: colors.primary,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   importBtnText: {
     color: colors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   resultCard: {
     backgroundColor: colors.surface,
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   },
   resultTitle: {
     fontSize: 20,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
     marginBottom: 20,
   },
@@ -388,6 +388,6 @@ const styles = StyleSheet.create({
   doneBtnText: {
     color: colors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
 });

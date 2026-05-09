@@ -22,6 +22,15 @@ class RegisterRequest(BaseModel):
         return v
 
 
+def _validate_dob(v: datetime.date) -> datetime.date:
+    """Validate date of birth: not in the future, year >= 1900."""
+    if v > datetime.date.today():
+        raise ValueError("Date of birth cannot be in the future")
+    if v.year < 1900:
+        raise ValueError("Date of birth must be after 1900")
+    return v
+
+
 def _validate_phone(v: str) -> str:
     """Validate and normalize phone number to E.164 format."""
     # Dev-only: allow the fictitious-use mock number through without
@@ -44,6 +53,7 @@ class InitiateRegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(min_length=1, max_length=255)
     phone_number: str = Field(min_length=10, max_length=20)
+    date_of_birth: datetime.date
 
     @field_validator("password")
     @classmethod
@@ -60,6 +70,11 @@ class InitiateRegisterRequest(BaseModel):
     @classmethod
     def validate_phone(cls, v: str) -> str:
         return _validate_phone(v)
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def validate_dob(cls, v: datetime.date) -> datetime.date:
+        return _validate_dob(v)
 
 
 class InitiateRegisterResponse(BaseModel):
@@ -105,6 +120,8 @@ class UserResponse(BaseModel):
     marital_status: str | None = None
     dependents: int | None = None
     financial_goals: list[str] | None = None
+    onboarding_completed: bool = False
+    active: bool = True
 
     model_config = {"from_attributes": True}
 
@@ -130,17 +147,14 @@ class UpdateProfileRequest(BaseModel):
     marital_status: str | None = None
     dependents: int | None = Field(None, ge=0)
     financial_goals: list[str] | None = None
+    onboarding_completed: bool | None = None
 
     @field_validator("date_of_birth")
     @classmethod
     def validate_dob(cls, v: datetime.date | None) -> datetime.date | None:
         if v is None:
             return v
-        if v > datetime.date.today():
-            raise ValueError("Date of birth cannot be in the future")
-        if v.year < 1900:
-            raise ValueError("Date of birth must be after 1900")
-        return v
+        return _validate_dob(v)
 
     @field_validator("state")
     @classmethod

@@ -38,6 +38,7 @@ def _make_fake_db():
 def _reset_rate_limiters():
     """Clear all per-endpoint rate limiter state between tests."""
     from pebble.routers import auth, ai_chat, csv_import
+    from pebble.mcp.rate_limit import _limiter as _mcp_limiter
 
     for limiter in (
         auth._login_limiter,
@@ -46,6 +47,9 @@ def _reset_rate_limiters():
         csv_import._import_limiter,
     ):
         limiter._requests.clear()
+
+    _mcp_limiter._minute.clear()
+    _mcp_limiter._day.clear()
 
 
 @pytest.fixture()

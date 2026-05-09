@@ -1,7 +1,8 @@
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, borderRadius, shadows, fonts } from "../theme";
+import { colors, borderRadius, shadows, fonts, microLabelSmall } from "../theme";
+import { formatTransactionDateGroup } from "../utils/date";
 import {
   TransactionRow,
   TransactionSeparator,
@@ -15,6 +16,32 @@ type Props = {
   emptyHint?: string;
 };
 
+type DateGroup = {
+  key: string;
+  label: string;
+  transactions: Transaction[];
+};
+
+function groupByDate(transactions: Transaction[]): DateGroup[] {
+  const groups: DateGroup[] = [];
+  let current: DateGroup | null = null;
+
+  for (const txn of transactions) {
+    const key = txn.date || "";
+    if (!current || current.key !== key) {
+      current = {
+        key,
+        label: formatTransactionDateGroup(key),
+        transactions: [],
+      };
+      groups.push(current);
+    }
+    current.transactions.push(txn);
+  }
+
+  return groups;
+}
+
 export const TransactionListCard = memo(function TransactionListCard({
   transactions,
   title,
@@ -22,6 +49,7 @@ export const TransactionListCard = memo(function TransactionListCard({
   emptyHint = "No transactions found",
 }: Props) {
   const router = useRouter();
+  const groups = useMemo(() => groupByDate(transactions), [transactions]);
 
   if (transactions.length === 0) {
     return (
@@ -37,14 +65,22 @@ export const TransactionListCard = memo(function TransactionListCard({
       <Text style={styles.cardTitle}>
         {title ?? `Transactions (${transactions.length})`}
       </Text>
-      {transactions.map((txn, i) => (
-        <View key={txn.id}>
-          {i > 0 && <TransactionSeparator />}
-          <TouchableOpacity
-            onPress={() => router.push(`/transaction/${txn.id}`)}
-          >
-            <TransactionRow txn={txn} />
-          </TouchableOpacity>
+      {groups.map((group, gi) => (
+        <View key={group.key || `g-${gi}`}>
+          <View style={[styles.groupHeader, gi === 0 && styles.groupHeaderFirst]}>
+            <Text style={styles.groupHeaderText}>{group.label}</Text>
+          </View>
+          {group.transactions.map((txn, i) => (
+            <View key={txn.id}>
+              {i > 0 && <TransactionSeparator />}
+              <TouchableOpacity
+                onPress={() => router.push(`/transaction/${txn.id}`)}
+                activeOpacity={0.7}
+              >
+                <TransactionRow txn={txn} hideDate />
+              </TouchableOpacity>
+            </View>
+          ))}
         </View>
       ))}
     </View>
@@ -55,7 +91,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
-    padding: 20,
+    paddingVertical: 8,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: `${colors.outlineVariant}1A`,
@@ -65,7 +101,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.medium,
     color: colors.textSecondary,
-    marginBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  groupHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 6,
+  },
+  groupHeaderFirst: {
+    paddingTop: 8,
+  },
+  groupHeaderText: {
+    ...microLabelSmall,
+    color: colors.textMuted,
   },
   emptyCard: {
     backgroundColor: colors.surface,

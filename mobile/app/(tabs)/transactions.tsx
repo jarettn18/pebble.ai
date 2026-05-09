@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,20 +8,37 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   useTransactionsStore,
 } from "../../src/stores/transactions";
 import { apiRequest } from "../../src/api/client";
-import { colors, borderRadius, shadows, fonts } from "../../src/theme";
+import { colors, borderRadius, shadows, fonts, microLabelSmall } from "../../src/theme";
+import { withOpacity } from "../../src/utils/color";
+import { getCategoryIcon } from "../../src/utils/categoryIcons";
+import { formatCurrency } from "../../src/utils/dashboard";
 import { TransactionListCard } from "../../src/components/TransactionListCard";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 type Category = {
   id: string;
   name: string;
   color: string | null;
 };
+
+const HIT_SLOP_8 = { top: 8, bottom: 8, left: 8, right: 8 };
 
 export default function TransactionsScreen() {
   const router = useRouter();
@@ -40,15 +57,18 @@ export default function TransactionsScreen() {
 
   const [searchText, setSearchText] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const hasActiveFilters =
-    !!filters.search ||
-    (filters.category_ids && filters.category_ids.length > 0) ||
-    !!filters.date_from ||
-    !!filters.date_to ||
-    (filters.types && filters.types.length > 0) ||
-    !!filters.account_id;
+  const activeFilterCount =
+    (filters.search ? 1 : 0) +
+    (filters.category_ids?.length ?? 0) +
+    (filters.types?.length ?? 0) +
+    (filters.date_from ? 1 : 0) +
+    (filters.date_to ? 1 : 0) +
+    (filters.account_id ? 1 : 0);
+
+  const hasActiveFilters = activeFilterCount > 0;
 
   // Apply account_id filter from navigation params
   useEffect(() => {
@@ -77,6 +97,11 @@ export default function TransactionsScreen() {
     [filters, setFilters]
   );
 
+  function toggleFilters() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFilterOpen((prev) => !prev);
+  }
+
   function handleTypeToggle(type: "expense" | "income") {
     const current = filters.types ?? [];
     const updated = current.includes(type)
@@ -100,6 +125,7 @@ export default function TransactionsScreen() {
   }
 
   function handleClearFilters() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSearchText("");
     clearFilters();
     if (params.account_id) {
@@ -107,10 +133,36 @@ export default function TransactionsScreen() {
     }
   }
 
+  const { spentTotal, earnedTotal } = useMemo(() => {
+    let spent = 0;
+    let earned = 0;
+    for (const t of transactions) {
+      const amt = parseFloat(t.amount);
+      if (!Number.isFinite(amt)) continue;
+      if (amt > 0) spent += amt;
+      else earned += Math.abs(amt);
+    }
+    return { spentTotal: spent, earnedTotal: earned };
+  }, [transactions]);
+
+  const filterSummary = useMemo(() => {
+    if (!hasActiveFilters) return null;
+    const parts: string[] = [];
+    if (filters.search) parts.push(`"${filters.search}"`);
+    if (filters.types?.length) parts.push(filters.types.join(" · "));
+    if (filters.category_ids?.length) {
+      parts.push(
+        `${filters.category_ids.length} ${filters.category_ids.length === 1 ? "category" : "categories"}`
+      );
+    }
+    if (params.account_name) parts.push(params.account_name as string);
+    return parts.join(" · ");
+  }, [filters, hasActiveFilters, params.account_name]);
+
   if (isSyncing && transactions.length === 0 && !hasActiveFilters) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -126,121 +178,205 @@ export default function TransactionsScreen() {
           <RefreshControl
             refreshing={isSyncing}
             onRefresh={syncAndRefresh}
-            tintColor={colors.primary}
+            tintColor={colors.accent}
           />
         }
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Filter Card */}
-        <View style={styles.card}>
-          {/* Search */}
-          <View style={styles.searchInputWrap}>
-            <TextInput
-              style={styles.searchInput}
-              value={searchText}
-              onChangeText={handleSearchChange}
-              placeholder="Search transactions..."
-              placeholderTextColor={colors.textMuted}
-              returnKeyType="search"
-            />
-            {searchText.length > 0 && (
+        {/* ─── Action Bar ─────────────────────────────────────────────── */}
+        <View style={styles.actionBar}>
+          {/* Search + Filter on one row */}
+          <View style={styles.actionBarRow}>
+            <View style={styles.searchInputWrap}>
+              <MaterialCommunityIcons
+                name="magnify"
+                size={18}
+                color={colors.textMuted}
+                style={styles.searchLeadIcon}
+              />
+              <TextInput
+                style={styles.searchInput}
+                value={searchText}
+                onChangeText={handleSearchChange}
+                placeholder="Search transactions..."
+                placeholderTextColor={colors.textMuted}
+                returnKeyType="search"
+              />
+              {searchText.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => handleSearchChange("")}
+                  hitSlop={HIT_SLOP_8}
+                  accessibilityLabel="Clear search"
+                  accessibilityRole="button"
+                >
+                  <MaterialCommunityIcons name="close-circle" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.iconBtn, filterOpen && styles.iconBtnActive]}
+              onPress={toggleFilters}
+              accessibilityLabel={
+                filterOpen
+                  ? "Hide filters"
+                  : `Show filters${activeFilterCount > 0 ? `, ${activeFilterCount} active` : ""}`
+              }
+              accessibilityRole="button"
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons
+                name="tune-variant"
+                size={20}
+                color={filterOpen || hasActiveFilters ? colors.accent : colors.textPrimary}
+              />
+              {activeFilterCount > 0 && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Summary strip — only shown when filters are active */}
+          {hasActiveFilters && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.activeSummary} numberOfLines={1}>
+                {filterSummary}
+              </Text>
               <TouchableOpacity
-                onPress={() => handleSearchChange("")}
-                hitSlop={8}
-                accessibilityLabel="Clear search"
+                onPress={handleClearFilters}
+                hitSlop={HIT_SLOP_8}
+                accessibilityLabel="Clear all filters"
                 accessibilityRole="button"
               >
-                <Text style={styles.clearSearch}>{"\u2715"}</Text>
+                <Text style={styles.clearLink}>Clear</Text>
               </TouchableOpacity>
-            )}
-          </View>
+            </View>
+          )}
 
-          {/* Type Filter */}
-          <Text style={styles.filterLabel}>Type</Text>
-          <View style={styles.filterChipRow}>
-            <TouchableOpacity
-              style={[
-                styles.filterChip,
-                filters.types?.includes("expense") && styles.filterChipActive,
-              ]}
-              onPress={() => handleTypeToggle("expense")}
-            >
+          {/* Filtered net total — only when filters are active */}
+          {hasActiveFilters && (spentTotal > 0 || earnedTotal > 0) && (
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>Filtered total</Text>
               <Text
                 style={[
-                  styles.filterChipText,
-                  filters.types?.includes("expense") && styles.filterChipTextActive,
+                  styles.totalsValue,
+                  {
+                    color:
+                      earnedTotal >= spentTotal
+                        ? colors.incomePositive
+                        : colors.accent,
+                  },
                 ]}
               >
-                Expense
+                {earnedTotal >= spentTotal ? "+" : "−"}
+                {formatCurrency(Math.abs(earnedTotal - spentTotal))}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.filterChip,
-                filters.types?.includes("income") && styles.filterChipIncome,
-              ]}
-              onPress={() => handleTypeToggle("income")}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  filters.types?.includes("income") && styles.filterChipTextActive,
-                ]}
-              >
-                Income
-              </Text>
-            </TouchableOpacity>
-          </View>
+            </View>
+          )}
 
-          {/* Category Filter */}
-          <Text style={styles.filterLabel}>Category</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipScroll}
-          >
-            {categories.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                style={[
-                  styles.filterChip,
-                  filters.category_ids?.includes(cat.id) && styles.filterChipActive,
-                ]}
-                onPress={() => handleCategoryToggle(cat.id)}
-              >
-                <View
-                  style={[
-                    styles.chipDot,
-                    { backgroundColor: cat.color || "#999" },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    filters.category_ids?.includes(cat.id) &&
-                      styles.filterChipTextActive,
-                  ]}
-                >
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {/* ─── Collapsible Filter Panel ───────────────────────────── */}
+          {filterOpen && (
+            <View style={styles.filterPanel}>
+              {/* Type */}
+              <Text style={styles.filterLabel}>TYPE</Text>
+              <View style={styles.typeRow}>
+                {(["expense", "income"] as const).map((type) => {
+                  const active = !!filters.types?.includes(type);
+                  const accent = type === "income" ? colors.incomePositive : colors.accent;
+                  return (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.typeChip,
+                        active && {
+                          backgroundColor: withOpacity(accent, 0.15),
+                          borderColor: withOpacity(accent, 0.5),
+                        },
+                      ]}
+                      onPress={() => handleTypeToggle(type)}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <MaterialCommunityIcons
+                        name={type === "income" ? "arrow-bottom-left" : "arrow-top-right"}
+                        size={14}
+                        color={active ? accent : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.typeChipText,
+                          active && { color: accent, fontFamily: fonts.bold },
+                        ]}
+                      >
+                        {type === "income" ? "Income" : "Expense"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-          {hasActiveFilters && (
-            <TouchableOpacity
-              style={styles.clearFiltersBtn}
-              onPress={handleClearFilters}
-            >
-              <Text style={styles.clearFiltersBtnText}>Clear All Filters</Text>
-            </TouchableOpacity>
+              {/* Categories — wrapping grid */}
+              {categories.length > 0 && (
+                <>
+                  <Text style={styles.filterLabel}>CATEGORY</Text>
+                  <View style={styles.categoryGrid}>
+                    {categories.map((cat) => {
+                      const active = !!filters.category_ids?.includes(cat.id);
+                      const catColor = cat.color || colors.textMuted;
+                      return (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[
+                            styles.categoryChip,
+                            active && {
+                              backgroundColor: withOpacity(catColor, 0.15),
+                              borderColor: withOpacity(catColor, 0.55),
+                            },
+                          ]}
+                          onPress={() => handleCategoryToggle(cat.id)}
+                          activeOpacity={0.7}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                        >
+                          <View
+                            style={[
+                              styles.categoryChipIcon,
+                              { backgroundColor: withOpacity(catColor, 0.18) },
+                            ]}
+                          >
+                            <MaterialCommunityIcons
+                              name={getCategoryIcon(cat.name) as any}
+                              size={14}
+                              color={catColor}
+                            />
+                          </View>
+                          <Text
+                            style={[
+                              styles.categoryChipText,
+                              active && { color: colors.heroSurface, fontFamily: fonts.bold },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {cat.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+            </View>
           )}
         </View>
 
-        {/* Transactions */}
+        {/* ─── Transactions ───────────────────────────────────────────── */}
         {isLoading && transactions.length === 0 ? (
           <ActivityIndicator
             size="large"
-            color={colors.primary}
+            color={colors.accent}
             style={styles.loader}
           />
         ) : (
@@ -261,8 +397,9 @@ export default function TransactionsScreen() {
         onPress={() => router.push("/transaction/create")}
         accessibilityLabel="Add transaction"
         accessibilityRole="button"
+        activeOpacity={0.85}
       >
-        <Text style={styles.fabText}>+</Text>
+        <MaterialCommunityIcons name="plus" size={26} color={colors.heroSurface} />
       </TouchableOpacity>
     </View>
   );
@@ -294,25 +431,109 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: colors.errorBackground,
   },
-  // Card
-  card: {
+
+  // ─── Action Bar ─────────────────────────────────────────────────────
+  actionBar: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
-    padding: 20,
+    padding: 12,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: `${colors.outlineVariant}1A`,
     ...shadows.card,
   },
-  // Search
-  searchInputWrap: {
+  actionBarRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.background,
+    gap: 10,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
     borderRadius: borderRadius.sm,
-    paddingHorizontal: 14,
-    height: 42,
-    marginBottom: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceContainer,
+    position: "relative",
+  },
+  iconBtnActive: {
+    backgroundColor: colors.accentSoft,
+  },
+  filterBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  filterBadgeText: {
+    fontSize: 10,
+    fontFamily: fonts.bold,
+    color: colors.heroSurface,
+  },
+  activeSummary: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: fonts.semiBold,
+    color: colors.heroSurface,
+    letterSpacing: -0.1,
+    marginRight: 12,
+  },
+  clearLink: {
+    fontSize: 13,
+    fontFamily: fonts.semiBold,
+    color: colors.accent,
+    paddingHorizontal: 4,
+  },
+
+  // Filtered totals strip
+  totalsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingTop: 10,
+    paddingHorizontal: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  totalsLabel: {
+    ...microLabelSmall,
+    color: colors.textMuted,
+  },
+  totalsValue: {
+    fontSize: 14,
+    fontFamily: fonts.bold,
+    letterSpacing: -0.2,
+  },
+
+  // ─── Search ─────────────────────────────────────────────────────────
+  searchInputWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: 12,
+    height: 44,
+    gap: 8,
+  },
+  searchLeadIcon: {
+    marginRight: 2,
   },
   searchInput: {
     flex: 1,
@@ -320,67 +541,77 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     color: colors.textPrimary,
   },
-  clearSearch: {
-    fontSize: 14,
-    color: colors.textMuted,
-    padding: 4,
+
+  // ─── Filter Panel ───────────────────────────────────────────────────
+  filterPanel: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  // Filters
   filterLabel: {
+    ...microLabelSmall,
+    color: colors.textMuted,
+    marginBottom: 10,
+  },
+
+  // Type chips
+  typeRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 18,
+  },
+  typeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: borderRadius.pill,
+    backgroundColor: colors.surfaceContainer,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  typeChipText: {
     fontSize: 13,
     fontFamily: fonts.semiBold,
     color: colors.textSecondary,
-    marginBottom: 8,
   },
-  filterChipRow: {
+
+  // Category grid
+  categoryGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    marginBottom: 12,
   },
-  chipScroll: {
-    flexGrow: 0,
-    marginBottom: 4,
-  },
-  filterChip: {
+  categoryChip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: borderRadius.xl,
-    backgroundColor: colors.background,
-    marginRight: 8,
+    gap: 6,
+    paddingLeft: 6,
+    paddingRight: 12,
+    paddingVertical: 6,
+    borderRadius: borderRadius.pill,
+    backgroundColor: colors.surfaceContainer,
+    borderWidth: 1,
+    borderColor: "transparent",
+    maxWidth: "100%",
   },
-  filterChipActive: {
-    backgroundColor: colors.primary,
+  categoryChipIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  filterChipIncome: {
-    backgroundColor: colors.income,
-  },
-  filterChipText: {
+  categoryChipText: {
     fontSize: 13,
     fontFamily: fonts.medium,
     color: colors.textSecondary,
+    flexShrink: 1,
   },
-  filterChipTextActive: {
-    color: colors.textOnPrimary,
-  },
-  chipDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  clearFiltersBtn: {
-    alignItems: "center",
-    paddingVertical: 10,
-    marginTop: 8,
-  },
-  clearFiltersBtnText: {
-    fontSize: 13,
-    fontFamily: fonts.semiBold,
-    color: colors.error,
-  },
-  // FAB
+
+  // ─── List + FAB ─────────────────────────────────────────────────────
   loader: {
     marginTop: 32,
   },
@@ -391,19 +622,13 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  fabText: {
-    color: colors.textOnPrimary,
-    fontSize: 28,
-    fontFamily: fonts.semiBold,
-    marginTop: -2,
+    shadowColor: colors.heroSurface,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });

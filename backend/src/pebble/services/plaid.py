@@ -14,6 +14,7 @@ from pebble.config import settings
 from pebble.models.account import Account, PlaidItem
 from pebble.models.transaction import Transaction
 from pebble.services.categories import get_category_id_by_name, get_plaid_category_map
+from pebble.services.health_score import invalidate_health_score_cache
 from pebble.services.rate_limiter import AsyncRateLimiter
 from pebble.utils.security import decrypt_value, encrypt_value
 
@@ -133,7 +134,7 @@ async def exchange_public_token(
             plaid_item_id=plaid_item.id,
             plaid_account_id=acct["account_id"],
             name=acct["name"],
-            official_name=acct.get("official_name"),
+            mask=acct.get("mask"),
             type=acct["type"],
             subtype=acct.get("subtype"),
             balance_current=balances.get("current"),
@@ -144,6 +145,7 @@ async def exchange_public_token(
         accounts_linked += 1
 
     await db.commit()
+    await invalidate_health_score_cache(str(user_id))
 
     return {"item_id": str(plaid_item.id), "accounts_linked": accounts_linked}
 
@@ -297,6 +299,8 @@ async def sync_transactions(
     # Persist the new cursor
     plaid_item.cursor = cursor
     await db.commit()
+    if total_added or total_modified or total_removed:
+        await invalidate_health_score_cache(str(user_id))
 
     return {"added": total_added, "modified": total_modified, "removed": total_removed}
 
@@ -318,6 +322,8 @@ async def refresh_balances(item: "PlaidItem", db: AsyncSession) -> None:
             balances = acct_data.get("balances", {})
             account.balance_current = balances.get("current")
             account.balance_available = balances.get("available")
+            if account.mask is None and acct_data.get("mask"):
+                account.mask = acct_data["mask"]
 
 
 async def refresh_balances_if_stale(user_id: str, db: AsyncSession) -> bool:
@@ -348,6 +354,7 @@ async def refresh_balances_if_stale(user_id: str, db: AsyncSession) -> bool:
         await refresh_balances(item, db)
 
     await db.commit()
+    await invalidate_health_score_cache(str(user_id))
     return True
 
 

@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiRequest } from "../../src/api/client";
 import { useTransactionsStore } from "../../src/stores/transactions";
 import { useDashboardStore } from "../../src/stores/dashboard";
-import { colors, borderRadius, shadows } from "../../src/theme";
+import { colors, borderRadius, fonts, shadows } from "../../src/theme";
 
 type TransactionDetail = {
   id: string;
@@ -25,6 +25,7 @@ type TransactionDetail = {
   merchant_name: string | null;
   pending: boolean;
   category_name: string | null;
+  category_color: string | null;
   category_id: string | null;
   notes: string | null;
 };
@@ -54,7 +55,7 @@ const CategoryChip = memo(function CategoryChip({
       style={[styles.chip, isSelected && styles.chipSelected]}
       onPress={() => onPress(item)}
     >
-      <View style={[styles.chipDot, { backgroundColor: item.color || "#999" }]} />
+      <View style={[styles.chipDot, { backgroundColor: item.color || colors.dotInactive }]} />
       <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
         {item.name}
       </Text>
@@ -102,12 +103,20 @@ export default function TransactionDetailScreen() {
   async function handleCategorySelect(category: Category) {
     if (!txn || category.id === txn.category_id) return;
 
-    const prevCategoryId = txn.category_id;
-    const prevCategoryName = txn.category_name;
+    const prev = {
+      id: txn.category_id,
+      name: txn.category_name,
+      color: txn.category_color,
+    };
 
     // Optimistic update
-    setTxn({ ...txn, category_id: category.id, category_name: category.name });
-    updateTransactionCategory(txn.id, category.name);
+    setTxn({
+      ...txn,
+      category_id: category.id,
+      category_name: category.name,
+      category_color: category.color,
+    });
+    updateTransactionCategory(txn.id, category.name, category.color);
 
     try {
       await apiRequest(`/v1/transactions/${id}`, {
@@ -116,20 +125,32 @@ export default function TransactionDetailScreen() {
       });
       refreshDashboard();
     } catch {
-      // Revert on failure
-      setTxn({ ...txn, category_id: prevCategoryId, category_name: prevCategoryName });
-      updateTransactionCategory(txn.id, prevCategoryName);
+      setTxn({
+        ...txn,
+        category_id: prev.id,
+        category_name: prev.name,
+        category_color: prev.color,
+      });
+      updateTransactionCategory(txn.id, prev.name, prev.color);
     }
   }
 
   async function handleClearCategory() {
     if (!txn || !txn.category_id) return;
 
-    const prevCategoryId = txn.category_id;
-    const prevCategoryName = txn.category_name;
+    const prev = {
+      id: txn.category_id,
+      name: txn.category_name,
+      color: txn.category_color,
+    };
 
-    setTxn({ ...txn, category_id: null, category_name: null });
-    updateTransactionCategory(txn.id, null);
+    setTxn({
+      ...txn,
+      category_id: null,
+      category_name: null,
+      category_color: null,
+    });
+    updateTransactionCategory(txn.id, null, null);
 
     try {
       await apiRequest(`/v1/transactions/${id}`, {
@@ -138,8 +159,13 @@ export default function TransactionDetailScreen() {
       });
       refreshDashboard();
     } catch {
-      setTxn({ ...txn, category_id: prevCategoryId, category_name: prevCategoryName });
-      updateTransactionCategory(txn.id, prevCategoryName);
+      setTxn({
+        ...txn,
+        category_id: prev.id,
+        category_name: prev.name,
+        category_color: prev.color,
+      });
+      updateTransactionCategory(txn.id, prev.name, prev.color);
     }
   }
 
@@ -337,11 +363,11 @@ const styles = StyleSheet.create({
   backArrow: {
     fontSize: 24,
     color: colors.primary,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   body: {
@@ -353,7 +379,7 @@ const styles = StyleSheet.create({
   },
   amount: {
     fontSize: 36,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     textAlign: "center",
     marginBottom: 20,
   },
@@ -382,14 +408,14 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 14,
     color: colors.textPrimary,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     flex: 1,
     textAlign: "right",
     marginLeft: 12,
   },
   sectionLabel: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 4,
@@ -402,7 +428,7 @@ const styles = StyleSheet.create({
   },
   currentCategoryText: {
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   clearBtn: {
@@ -458,7 +484,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: colors.textOnPrimary,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   errorText: {
     color: colors.error,
@@ -475,7 +501,7 @@ const styles = StyleSheet.create({
   backBtnText: {
     color: colors.textOnPrimary,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   deleteBtn: {
     borderWidth: 1,
@@ -488,6 +514,6 @@ const styles = StyleSheet.create({
   deleteBtnText: {
     color: colors.error,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
 });

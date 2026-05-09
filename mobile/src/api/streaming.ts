@@ -107,6 +107,7 @@ async function streamChatMock(
   message: string,
   conversationId: string | null,
   callbacks: StreamCallbacks,
+  _model: string | null = null,
 ): Promise<{ abort: () => void }> {
   let aborted = false;
   const convId = conversationId ?? `mock-conv-${++mockConversationCounter}`;
@@ -145,10 +146,11 @@ export async function streamChat(
   message: string,
   conversationId: string | null,
   callbacks: StreamCallbacks,
+  model: string | null = null,
   _retryCount = 0,
 ): Promise<{ abort: () => void }> {
   if (USE_MOCK) {
-    return streamChatMock(message, conversationId, callbacks);
+    return streamChatMock(message, conversationId, callbacks, model);
   }
 
   // Ensure a fresh token — refresh proactively since XHR can't retry mid-stream
@@ -180,7 +182,7 @@ export async function streamChat(
     if (xhr.status === 401 && _retryCount < 1) {
       const newToken = await refreshAccessToken();
       if (newToken) {
-        const retryResult = await streamChat(message, conversationId, callbacks, _retryCount + 1);
+        const retryResult = await streamChat(message, conversationId, callbacks, model, _retryCount + 1);
         retryAbort = retryResult.abort;
         return;
       }
@@ -215,6 +217,7 @@ export async function streamChat(
     JSON.stringify({
       message,
       conversation_id: conversationId,
+      model,
     })
   );
 

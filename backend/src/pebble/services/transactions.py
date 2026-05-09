@@ -1,4 +1,7 @@
+import csv
+import io
 import uuid
+from collections.abc import AsyncIterator
 from datetime import date as date_type
 from decimal import Decimal, InvalidOperation
 
@@ -8,6 +11,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from pebble.models.transaction import Transaction
+from pebble.services.health_score import invalidate_health_score_cache
+
+CSV_EXPORT_HEADER = [
+    "Date",
+    "Merchant",
+    "Category",
+    "Account",
+    "Original Statement",
+    "Notes",
+    "Amount",
+    "Tags",
+]
 
 
 async def get_transactions(
@@ -93,6 +108,7 @@ async def get_transactions(
             "merchant_name": t.merchant_name,
             "pending": t.pending,
             "category_name": t.category.name if t.category else None,
+            "category_color": t.category.color if t.category else None,
         }
         for t in rows
     ]
@@ -110,6 +126,7 @@ def _txn_to_detail(t: Transaction) -> dict:
         "merchant_name": t.merchant_name,
         "pending": t.pending,
         "category_name": t.category.name if t.category else None,
+        "category_color": t.category.color if t.category else None,
         "category_id": str(t.category_id) if t.category_id else None,
         "notes": t.notes,
     }
@@ -187,6 +204,7 @@ async def create_transaction(
     db.add(txn)
     await db.commit()
     await db.refresh(txn, ["category"])
+    await invalidate_health_score_cache(user_id)
 
     return _txn_to_detail(txn)
 
@@ -210,6 +228,52 @@ async def delete_transaction(
 
     await db.delete(txn)
     await db.commit()
+    await invalidate_health_score_cache(user_id)
+
+
+async def export_transactions_csv(
+    user_id: str,
+    db: AsyncSession,
+) -> AsyncIterator[bytes]:
+    """Yield a CSV document of every transaction for `user_id`.
+
+    Streams row-by-row so memory stays flat for large histories.
+    """
+    query = (
+        select(Transaction)
+        .where(Transaction.user_id == user_id)
+        .options(joinedload(Transaction.category), joinedload(Transaction.account))
+        .order_by(Transaction.date.desc(), Transaction.created_at.desc())
+    )
+    result = await db.execute(query)
+    rows = result.scalars().unique().all()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+
+    def _flush() -> bytes:
+        data = buffer.getvalue().encode("utf-8")
+        buffer.seek(0)
+        buffer.truncate(0)
+        return data
+
+    writer.writerow(CSV_EXPORT_HEADER)
+    yield _flush()
+
+    for t in rows:
+        writer.writerow(
+            [
+                t.date.isoformat(),
+                t.merchant_name or "",
+                t.category.name if t.category else "",
+                t.account.name if t.account else "",
+                t.name,
+                t.notes or "",
+                str(t.amount),
+                "",
+            ]
+        )
+        yield _flush()
 
 
 async def update_transaction(
@@ -240,5 +304,6 @@ async def update_transaction(
 
     await db.commit()
     await db.refresh(txn, ["category"])
+    await invalidate_health_score_cache(user_id)
 
     return _txn_to_detail(txn)

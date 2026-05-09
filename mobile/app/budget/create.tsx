@@ -14,7 +14,7 @@ import { useRouter } from "expo-router";
 import { apiRequest } from "../../src/api/client";
 import { useBudgetsStore } from "../../src/stores/budgets";
 import { useBudgetPlansStore } from "../../src/stores/budgetPlans";
-import { colors, fonts, borderRadius } from "../../src/theme";
+import { colors, fonts, borderRadius, heroCard, shadows, microLabel, microLabelSmall } from "../../src/theme";
 import { formatCurrency } from "../../src/utils/dashboard";
 import MonthPicker from "../../src/components/MonthPicker";
 import CategoryAllocation, {
@@ -122,7 +122,7 @@ export default function BudgetPlanCreateScreen() {
   if (isLoadingCategories) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -141,33 +141,22 @@ export default function BudgetPlanCreateScreen() {
         <View style={{ width: 28 }} />
       </View>
 
-      {/* Step indicators */}
+      {/* Step indicators — connected progress bar */}
       <View style={styles.stepRow}>
-        {STEPS.map((label, i) => (
-          <View key={label} style={styles.stepItem}>
-            <View
-              style={[
-                styles.stepDot,
-                i <= step && styles.stepDotActive,
-                i < step && styles.stepDotCompleted,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.stepNumber,
-                  i <= step && styles.stepNumberActive,
-                ]}
-              >
-                {i < step ? "\u2713" : i + 1}
-              </Text>
-            </View>
-            <Text
-              style={[styles.stepLabel, i <= step && styles.stepLabelActive]}
-            >
-              {label}
-            </Text>
-          </View>
-        ))}
+        <View style={styles.stepProgressMeta}>
+          <Text style={styles.stepEyebrow}>
+            STEP {step + 1} OF {STEPS.length}
+          </Text>
+          <Text style={styles.stepCurrentLabel}>{STEPS[step]}</Text>
+        </View>
+        <View style={styles.stepTrack}>
+          <View
+            style={[
+              styles.stepFill,
+              { width: `${((step + 1) / STEPS.length) * 100}%` },
+            ]}
+          />
+        </View>
       </View>
 
       <ScrollView
@@ -178,12 +167,14 @@ export default function BudgetPlanCreateScreen() {
         {/* Step 1: Total Budget */}
         {step === 0 && (
           <View>
-            <Text style={styles.stepTitle}>Set your total monthly budget</Text>
+            <Text style={styles.stepTitle}>Set your monthly budget</Text>
             <Text style={styles.stepDescription}>
-              How much do you want to spend per month?
+              How much do you want to spend each month?
             </Text>
 
-            <View style={styles.card}>
+            <View style={styles.amountHero}>
+              <View style={styles.amountHeroGlow} />
+              <Text style={styles.amountHeroLabel}>TOTAL BUDGET</Text>
               <View style={styles.amountRow}>
                 <Text style={styles.amountPrefix}>$</Text>
                 <TextInput
@@ -191,7 +182,7 @@ export default function BudgetPlanCreateScreen() {
                   value={totalAmount}
                   onChangeText={setTotalAmount}
                   placeholder="3,000"
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={colors.heroPlaceholder}
                   keyboardType="decimal-pad"
                   returnKeyType="done"
                   autoFocus
@@ -252,57 +243,68 @@ export default function BudgetPlanCreateScreen() {
         {/* Step 4: Review */}
         {step === 3 && (
           <View>
-            <Text style={styles.stepTitle}>Review your budget plan</Text>
+            <Text style={styles.stepTitle}>Review your plan</Text>
+            <Text style={styles.stepDescription}>
+              One last look before we create it.
+            </Text>
 
-            <View style={styles.reviewCard}>
+            <View style={styles.reviewHero}>
+              <View style={styles.reviewHeroGlow} />
               {planName ? (
                 <Text style={styles.reviewPlanName}>{planName}</Text>
               ) : null}
-              <Text style={styles.reviewLabel}>TOTAL BUDGET</Text>
-              <Text style={styles.reviewAmount}>
-                {formatCurrency(totalParsed)}/mo
+              <Text style={styles.reviewHeroLabel}>TOTAL BUDGET</Text>
+              <Text style={styles.reviewHeroAmount}>
+                {formatCurrency(totalParsed)}
+                <Text style={styles.reviewHeroPerMo}>/mo</Text>
               </Text>
+              <View style={styles.reviewHeroDivider} />
+              <View style={styles.reviewHeroMetaRow}>
+                <View style={styles.reviewHeroMetaItem}>
+                  <Text style={styles.reviewHeroMetaLabel}>ALLOCATED</Text>
+                  <Text style={styles.reviewHeroMetaValue}>
+                    {formatCurrency(allocatedTotal)}
+                  </Text>
+                </View>
+                <View style={styles.reviewHeroMetaItem}>
+                  <Text style={styles.reviewHeroMetaLabel}>UNALLOCATED</Text>
+                  <Text
+                    style={[
+                      styles.reviewHeroMetaValue,
+                      totalParsed - allocatedTotal > 0 && { color: colors.accent },
+                    ]}
+                  >
+                    {formatCurrency(Math.max(0, totalParsed - allocatedTotal))}
+                  </Text>
+                </View>
+              </View>
             </View>
 
+            <Text style={styles.sectionLabel}>Allocations</Text>
             <View style={styles.reviewCard}>
-              <Text style={styles.reviewLabel}>ALLOCATIONS</Text>
-              {allocations.map((a) => {
+              {allocations.map((a, idx) => {
                 const cat = categories.find((c) => c.id === a.category_id);
                 return (
-                  <View key={a.category_id} style={styles.reviewAllocRow}>
-                    <Text style={styles.reviewAllocName}>
-                      {cat?.name || "Unknown"}
-                    </Text>
-                    <Text style={styles.reviewAllocAmount}>
-                      {formatCurrency(parseFloat(a.amount) || 0)}
-                    </Text>
+                  <View key={a.category_id}>
+                    {idx > 0 && <View style={styles.reviewDivider} />}
+                    <View style={styles.reviewAllocRow}>
+                      <Text style={styles.reviewAllocName}>
+                        {cat?.name || "Unknown"}
+                      </Text>
+                      <Text style={styles.reviewAllocAmount}>
+                        {formatCurrency(parseFloat(a.amount) || 0)}
+                      </Text>
+                    </View>
                   </View>
                 );
               })}
-              <View style={styles.reviewDivider} />
-              <View style={styles.reviewAllocRow}>
-                <Text style={styles.reviewAllocName}>Allocated</Text>
-                <Text style={styles.reviewAllocAmount}>
-                  {formatCurrency(allocatedTotal)}
-                </Text>
-              </View>
-              {totalParsed - allocatedTotal > 0 && (
-                <View style={styles.reviewAllocRow}>
-                  <Text style={[styles.reviewAllocName, { color: colors.textMuted }]}>
-                    Unallocated
-                  </Text>
-                  <Text style={[styles.reviewAllocAmount, { color: colors.textMuted }]}>
-                    {formatCurrency(totalParsed - allocatedTotal)}
-                  </Text>
-                </View>
-              )}
             </View>
 
+            <Text style={styles.sectionLabel}>Duration</Text>
             <View style={styles.reviewCard}>
-              <Text style={styles.reviewLabel}>DURATION</Text>
               <Text style={styles.reviewDuration}>
                 {untilTurnOff
-                  ? "Recurring \u2014 Until turned off"
+                  ? "Recurring \u2014 until turned off"
                   : selectedMonths
                       .map((m) =>
                         new Date(m.year, m.month - 1).toLocaleDateString(
@@ -338,7 +340,7 @@ export default function BudgetPlanCreateScreen() {
             activeOpacity={0.8}
           >
             {isSaving ? (
-              <ActivityIndicator color={colors.textOnPrimary} />
+              <ActivityIndicator color={colors.heroSurface} />
             ) : (
               <Text style={styles.primaryBtnText}>Create Budget Plan</Text>
             )}
@@ -364,66 +366,56 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     paddingTop: 60,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    paddingBottom: 12,
+    paddingHorizontal: 24,
   },
   backArrow: {
     fontSize: 24,
-    color: colors.primary,
-    fontWeight: "600",
+    color: colors.accent,
+    fontFamily: fonts.semiBold,
   },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
+    fontSize: 17,
+    fontFamily: fonts.bold,
+    color: colors.heroSurface,
+    letterSpacing: -0.2,
   },
 
-  // Steps
+  // Steps — connected progress bar with labelled step meta
   stepRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingTop: 4,
+    paddingBottom: 20,
     backgroundColor: colors.background,
   },
-  stepItem: {
-    alignItems: "center",
-    flex: 1,
+  stepProgressMeta: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
-  stepDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
+  stepEyebrow: {
+    ...microLabelSmall,
+    color: colors.textMuted,
   },
-  stepDotActive: {
-    backgroundColor: colors.primary,
-  },
-  stepDotCompleted: {
-    backgroundColor: colors.primaryLight,
-  },
-  stepNumber: {
+  stepCurrentLabel: {
     fontSize: 13,
     fontFamily: fonts.semiBold,
-    color: colors.textMuted,
+    color: colors.heroSurface,
+    letterSpacing: -0.1,
   },
-  stepNumberActive: {
-    color: colors.textOnPrimary,
+  stepTrack: {
+    height: 6,
+    backgroundColor: colors.trackLight,
+    borderRadius: borderRadius.pill,
+    overflow: "hidden",
   },
-  stepLabel: {
-    fontSize: 11,
-    fontFamily: fonts.labelMedium,
-    color: colors.textMuted,
-  },
-  stepLabelActive: {
-    color: colors.primary,
+  stepFill: {
+    height: "100%",
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.pill,
   },
 
   // Body
@@ -432,12 +424,14 @@ const styles = StyleSheet.create({
   },
   bodyContent: {
     padding: 24,
+    paddingTop: 8,
     paddingBottom: 40,
   },
   stepTitle: {
-    fontSize: 22,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    fontSize: 26,
+    fontFamily: fonts.extraBold,
+    color: colors.heroSurface,
+    letterSpacing: -0.5,
     marginBottom: 8,
   },
   stepDescription: {
@@ -454,74 +448,129 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}33`,
+    ...shadows.card,
   },
   sectionLabel: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
+    ...microLabel,
     color: colors.textSecondary,
-    marginBottom: 8,
-    marginTop: 4,
+    marginBottom: 10,
+    marginTop: 6,
   },
 
-  // Amount input
+  // Amount input — hero style
+  amountHero: {
+    ...heroCard.surface,
+    padding: 24,
+    marginBottom: 20,
+  },
+  amountHeroGlow: heroCard.glow,
+  amountHeroLabel: {
+    ...microLabelSmall,
+    color: colors.heroLabel,
+    marginBottom: 8,
+  },
   amountRow: {
     flexDirection: "row",
     alignItems: "center",
   },
   amountPrefix: {
-    fontSize: 36,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-    marginRight: 4,
+    fontSize: 44,
+    fontFamily: fonts.extraBold,
+    color: colors.accent,
+    marginRight: 6,
+    letterSpacing: -1,
   },
   amountInput: {
     flex: 1,
-    fontSize: 36,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    fontSize: 44,
+    fontFamily: fonts.extraBold,
+    color: colors.heroTextPrimary,
+    letterSpacing: -1,
+    padding: 0,
   },
   amountHint: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.textMuted,
-    marginTop: 8,
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    color: colors.heroTextSecondary,
+    marginTop: 6,
   },
   nameInput: {
     fontSize: 16,
     fontFamily: fonts.medium,
     color: colors.textPrimary,
+    padding: 0,
   },
 
-  // Review
+  // Review — hero total + lighter subcards
+  reviewHero: {
+    ...heroCard.surface,
+    padding: 24,
+    marginBottom: 24,
+  },
+  reviewHeroGlow: heroCard.glow,
+  reviewPlanName: {
+    fontSize: 16,
+    fontFamily: fonts.semiBold,
+    color: colors.heroTextPrimary,
+    marginBottom: 8,
+  },
+  reviewHeroLabel: {
+    ...microLabelSmall,
+    color: colors.heroLabel,
+    marginBottom: 6,
+  },
+  reviewHeroAmount: {
+    fontSize: 40,
+    fontFamily: fonts.extraBold,
+    color: colors.heroTextPrimary,
+    letterSpacing: -0.8,
+  },
+  reviewHeroPerMo: {
+    fontSize: 18,
+    fontFamily: fonts.medium,
+    color: colors.heroTextSecondary,
+    letterSpacing: 0,
+  },
+  reviewHeroDivider: {
+    height: 1,
+    backgroundColor: colors.heroDivider,
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  reviewHeroMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  reviewHeroMetaItem: {
+    flex: 1,
+  },
+  reviewHeroMetaLabel: {
+    ...microLabelSmall,
+    color: colors.heroLabel,
+    marginBottom: 4,
+  },
+  reviewHeroMetaValue: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: colors.heroTextPrimary,
+    letterSpacing: -0.3,
+  },
   reviewCard: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     padding: 16,
     marginBottom: 16,
-  },
-  reviewPlanName: {
-    fontSize: 18,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-    marginBottom: 12,
-  },
-  reviewLabel: {
-    fontSize: 11,
-    fontFamily: fonts.labelMedium,
-    letterSpacing: 1.5,
-    color: colors.textMuted,
-    marginBottom: 8,
-  },
-  reviewAmount: {
-    fontSize: 28,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}33`,
+    ...shadows.card,
   },
   reviewAllocRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   reviewAllocName: {
     fontSize: 15,
@@ -531,12 +580,11 @@ const styles = StyleSheet.create({
   reviewAllocAmount: {
     fontSize: 15,
     fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
+    color: colors.accentDark,
   },
   reviewDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.border,
-    marginVertical: 8,
   },
   reviewDuration: {
     fontSize: 16,
@@ -552,24 +600,26 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  // Footer
+  // Footer — accent CTA
   footer: {
     padding: 24,
     paddingBottom: 36,
     backgroundColor: colors.background,
   },
   primaryBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
     borderRadius: borderRadius.pill,
     padding: 16,
     alignItems: "center",
+    ...shadows.card,
   },
   btnDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   primaryBtnText: {
-    color: colors.textOnPrimary,
+    color: colors.heroSurface,
     fontSize: 16,
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.bold,
+    letterSpacing: 0.2,
   },
 });
