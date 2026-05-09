@@ -4,6 +4,8 @@ from pydantic import BaseModel
 class AccountSummary(BaseModel):
     id: str
     name: str
+    nickname: str | None = None
+    mask: str | None = None
     type: str
     subtype: str | None = None
     balance_current: str | None = None

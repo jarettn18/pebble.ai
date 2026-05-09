@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pebble.database import get_db
 from pebble.models.user import User
-from pebble.utils.security import decode_token, hash_api_key
+from pebble.utils.security import decode_token
 
 bearer_scheme = HTTPBearer()
 
@@ -43,18 +43,9 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
-    return user
-
-
-async def get_user_by_api_key(
-    api_key: str,
-    db: AsyncSession,
-) -> User:
-    key_hash = hash_api_key(api_key)
-    result = await db.execute(select(User).where(User.api_key_hash == key_hash))
-    user = result.scalar_one_or_none()
-    if user is None:
+    if not user.active:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has been deactivated",
         )
     return user

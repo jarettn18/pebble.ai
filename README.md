@@ -23,7 +23,7 @@ Mint-like budgeting app with an integrated AI financial assistant. The AI assist
 
 ```
 pebble/
-├── docker-compose.yml              # PostgreSQL + Redis + Backend + Mobile
+├── docker-compose.yml              # PostgreSQL + Redis + Backend
 ├── .env.example
 │
 ├── backend/
@@ -60,7 +60,7 @@ pebble/
 │       │   ├── plaid.py             # LinkToken, Exchange, Sync schemas
 │       │   └── transaction.py       # TransactionOut, Detail, Create, Update, List schemas
 │       ├── routers/
-│       │   ├── auth.py              # /v1/auth/* (register, login, refresh, me)
+│       │   ├── auth.py              # /v1/auth/* (register, verify, login, refresh, me, profile, deactivate)
 │       │   ├── accounts.py          # /v1/accounts (list user accounts)
 │       │   ├── assets.py            # /v1/assets (CRUD for properties + vehicles)
 │       │   ├── budgets.py           # /v1/budgets (CRUD)
@@ -109,14 +109,22 @@ pebble/
 │   │   ├── (auth)/
 │   │   │   ├── _layout.tsx          # Stack navigator (no header)
 │   │   │   ├── login.tsx            # Login screen
-│   │   │   └── register.tsx         # Register screen
+│   │   │   ├── register.tsx         # Register screen (name, email, phone, birthday, password)
+│   │   │   └── verify-phone.tsx     # SMS code verification
+│   │   ├── (onboarding)/            # Skippable post-signup wizard (gated by user.onboarding_completed)
+│   │   │   ├── _layout.tsx          # Stack (no header, gestures disabled)
+│   │   │   ├── occupation.tsx       # Step 1: occupation text input
+│   │   │   ├── state.tsx            # Step 2: US state chip-grid picker
+│   │   │   ├── income.tsx           # Step 3: annual income with $ prefix
+│   │   │   ├── marital-status.tsx   # Step 4: marital status chip row
+│   │   │   ├── dependents.tsx       # Step 5: dependents −/+ stepper
+│   │   │   └── goals.tsx            # Step 6: financial goals multi-select (also flips onboarding_completed=true)
 │   │   ├── (tabs)/
-│   │   │   ├── _layout.tsx          # Tab navigator (5 tabs)
+│   │   │   ├── _layout.tsx          # Tab navigator (4 tabs — AI chat lifted to global FAB + bottom sheet)
 │   │   │   ├── index.tsx            # Dashboard (net worth chart, pie chart, budgets)
 │   │   │   ├── transactions.tsx     # Transaction list with search, filters & FAB
 │   │   │   ├── budgets.tsx          # Budget list with progress bars, expandable plans, swipe-to-delete
-│   │   │   ├── ai-chat.tsx          # AI chat (streaming, markdown, conversation history)
-│   │   │   └── settings.tsx         # Settings + logout
+│   │   │   └── settings.tsx         # Settings + logout + deactivate account
 │   │   ├── budget/
 │   │   │   ├── create.tsx           # Multi-step budget plan creation wizard
 │   │   │   ├── [id].tsx             # Budget create/edit screen
@@ -140,19 +148,26 @@ pebble/
 │       │   └── streaming.ts         # SSE streaming client (XHR onprogress for React Native)
 │       ├── components/
 │       │   ├── CategoryAllocation.tsx # Category allocation list with inline amount inputs
+│       │   ├── ChatSheet.tsx          # Global AI chat bottom sheet (gorhom, snap points 35/75/95%, conversation history)
 │       │   ├── ColorPickerModal.tsx   # Bottom-sheet color picker with 16 preset swatches
+│       │   ├── GlobalChatFAB.tsx      # Route-aware floating action button that opens the chat sheet
 │       │   ├── MonthPicker.tsx       # Multi-select month grid with recurring toggle
 │       │   ├── LineChart.tsx         # SVG line chart with bezier curves, gradient fill, axis labels
 │       │   ├── NetWorthChart.tsx     # Net worth history chart with period tabs (1M/3M/1Y/5Y)
+│       │   ├── OnboardingStep.tsx    # Shared onboarding wizard step (progress bar, title, body slot, Continue/Skip)
 │       │   ├── PieChart.tsx          # SVG donut chart with interactive segments + legend
-│       │   ├── TransactionRow.tsx    # Shared transaction row + separator components
-│       │   └── TransactionListCard.tsx # Shared transaction list card (used across 4+ screens)
+│       │   ├── TransactionRow.tsx    # Shared transaction row — category icon avatar, pending pill, tabular-nums amount
+│       │   └── TransactionListCard.tsx # Shared transaction list card — groups rows by date with section headers
+│       ├── constants/
+│       │   └── profile.ts            # US_STATES, MARITAL_OPTIONS, GOAL_OPTIONS, capitalize (shared by onboarding + settings)
 │       ├── hooks/
 │       │   └── usePlaidLink.ts      # Plaid Link hook (fetch token, open modal)
 │       ├── utils/
 │       │   ├── categoryIcons.ts     # Shared getCategoryIcon() mapping (30+ categories → MaterialCommunityIcons)
 │       │   ├── color.ts             # withOpacity, contrastForeground color utilities
-│       │   └── dashboard.ts         # Net worth, spending calc, currency formatting
+│       │   ├── dashboard.ts         # Net worth, spending calc, currency formatting
+│       │   ├── date.ts              # formatTransactionDate / formatTransactionDateGroup (Today/Yesterday/Mon DD)
+│       │   └── format.ts            # Shared formatIncome helper
 │       └── stores/
 │           ├── auth.ts              # Zustand auth store
 │           ├── accounts.ts          # Zustand accounts store (24h cache)
@@ -160,6 +175,7 @@ pebble/
 │           ├── assets.ts            # Zustand assets store (CRUD)
 │           ├── budgets.ts           # Zustand budgets store
 │           ├── budgetPlans.ts       # Zustand budget plans store
+│           ├── chatUI.ts            # Zustand chat sheet UI store (open/close)
 │           ├── dashboard.ts         # Zustand dashboard store (server-side aggregation)
 │           ├── healthScore.ts      # Zustand health score store (score + insights + history)
 │           └── transactions.ts      # Zustand transactions store (24h cache)
@@ -173,7 +189,7 @@ pebble/
 
 | Table | Purpose |
 |-------|---------|
-| `users` | Auth, profile, subscription tier, optional API key hash |
+| `users` | Auth, profile, subscription tier, phone verification, onboarding flag, active flag, optional API key hash |
 | `plaid_items` | Plaid connections (access token encrypted with Fernet) |
 | `accounts` | Bank accounts linked via Plaid |
 | `categories` | Spending categories (name, icon, color, Plaid mapping) |
@@ -192,11 +208,13 @@ pebble/
 
 ## Auth System
 
-- **Registration/Login**: email + password (bcrypt hashed)
+- **Registration**: name + email + phone + **birthday** + password collected on a single screen, then SMS code via Twilio Verify (`POST /v1/auth/register/initiate` → `POST /v1/auth/register/verify`). Pending registration (including DOB) is held in Redis with a 5-min TTL until the code is confirmed.
+- **Login**: email + password (bcrypt hashed)
 - **JWT tokens**: access (15 min) + refresh (30 days)
 - **Mobile storage**: expo-secure-store
 - **API client**: auto-refreshes expired access tokens transparently
-- **Auth gate**: Expo Router layout redirects unauthenticated users to login
+- **Auth gate**: Expo Router layout redirects unauthenticated users to login; authenticated users with `!user.onboarding_completed` are routed into `(onboarding)`; everyone else lands in `(tabs)`
+- **Account deactivation**: `POST /v1/auth/deactivate` flips `users.active = false`. Inactive accounts get `403 "Account has been deactivated"` from `get_current_user`, `get_user_by_api_key`, login, and refresh — blocking every authenticated path. Reactivation is intentionally not self-serve.
 - **External API auth** (Phase 6): API key (SHA-256 hashed in DB), `X-API-Key` header
 
 ---
@@ -524,6 +542,11 @@ Redesign the budgeting system from individual per-category budgets to unified bu
   - `MonthPicker.tsx`: wrapped export in `memo`
 - [x] React best practices refactor — added `React.memo` to 4 reusable display components: `TransactionRow`, `TransactionListCard`, `LineChart`, `ColorPickerModal`
 - [x] Verified `useEffect` dependencies in `transaction/create.tsx` and `NetWorthChart.tsx` — all correct, no changes needed
+- [x] Transaction list redesign — `TransactionRow` rebuilt with a leading category-icon avatar (color tinted from `category_color`), `Pending` pill replacing inline status text, and `tabular-nums` amount; credit amounts switched to `colors.incomePositive` for better debit/credit contrast
+- [x] Transaction list redesign — `TransactionListCard` groups consecutive same-day rows under tracked uppercase date headers (`Today`, `Yesterday`, `Mon, Apr 30`), separators indented past the avatar
+- [x] New `src/utils/date.ts` — `formatTransactionDate` + `formatTransactionDateGroup` parse ISO dates as local time (avoids UTC-shift bug on negative-UTC zones)
+- [x] Backend: `category_color` added to `TransactionOut` schema and `services/transactions.py` list/detail payloads so rows render the saved color without an extra category lookup
+- [x] `useTransactionsStore.updateTransactionCategory(id, name, color?)` accepts an optional color so the avatar updates instantly on optimistic re-categorize from the detail screen
 
 ### Phase 5 — AI Assistant
 - [x] AI data access layer (`ai/data_access.py`) — 8 parameterized query handlers scoped by user_id
@@ -618,12 +641,17 @@ Redesign the budgeting system from individual per-category budgets to unified bu
 - [ ] Mobile: Support for dark mode
 - [ ] Mobile: Update Transaction Categories to mimic Mint Category Schema
 - [x] Mobile: Data imports (CSV import with auto-column detection)
+- [x] Mobile: AI chat lifted out of the tab bar into a global FAB + draggable bottom sheet (gorhom, snap points 35/75/95%) — accessible from every authenticated screen so users can reference on-screen figures while chatting
 - [ ] Mobile: Data exports
 - [ ] Mobile: Sign in Google/Apple
 - [ ] Mobile: Update Settings screen to support account changes
 - [ ] Mobile: Remove FAB for adding transactions
 - [ ] AI: Bill negotiation, Credit optimization
 - [ ] AI: Maybe port gemma 4 via ollama to the AI instead of paying for claude API calls
+- [ ] AI/Frontend: Have a budget design feature. After importing transactions or adding accounts, redirect to an automatic (or manual) budget creation feature
+- [ ] AI/Mobile: Auto-inject current-screen context into the chat prompt (e.g. "user is viewing transaction X" / "user is on the Budgets tab for April") so follow-ups don't need to fetch context the user is already looking at
+- [ ] Mobile: Per-screen suggested prompts in the global chat sheet — surface different starter chips based on the active route (transactions vs. budgets vs. dashboard)
+- [ ] Mobile: Persist global chat sheet open/closed state (and last snap point) across app restarts
 
 ### Deployment:
 
@@ -660,13 +688,13 @@ Estimated steady-state cost: ~$10–15/mo (vs. ~$190–200/mo on AWS).
 ## Running Locally
 
 ```bash
-# Start everything (Postgres, Redis, Backend, Mobile web)
+# Start backend services (Postgres, Redis, Backend)
 docker compose up --build
 
 # Or run in the background
 docker compose up --build -d
 
-# Rebuild after dependency changes (package.json, pyproject.toml)
+# Rebuild after dependency changes (pyproject.toml)
 docker compose up --build
 
 # Stop all services
@@ -674,12 +702,11 @@ docker compose down
 
 # View logs for a specific service
 docker compose logs -f backend
-docker compose logs -f mobile
 
 # Query the database
 docker exec -it pebble-postgres-1 psql -U pebble -d pebble
 
-# Run iOS natively (requires Xcode, cannot run in Docker)
+# Run iOS natively (mobile is not in Docker — requires Xcode)
 cd mobile
 npm install
 npx expo run:ios
@@ -704,5 +731,4 @@ npx expo run:ios --device
 | PostgreSQL | Docker (port 5432) | GCP Cloud SQL (`db-f1-micro`, PG16, `us-central1`) | Neon |
 | Redis | Docker (port 6379) | Upstash Redis (TLS, free tier) | Upstash |
 | Backend | Docker (port 8000) | GCP Cloud Run (`pebble-backend`, scales 0–3, `us-central1`) | Railway or Render |
-| Mobile (web) | Docker (port 8081) | — | Static deploy |
 | Mobile (iOS) | `npx expo run:ios` | Dev client → staging ELB | EAS Build + TestFlight |

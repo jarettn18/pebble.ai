@@ -4,6 +4,8 @@ import { apiRequest } from "../api/client";
 export type AccountSummary = {
   id: string;
   name: string;
+  nickname: string | null;
+  mask: string | null;
   type: string;
   subtype: string | null;
   balance_current: string | null;

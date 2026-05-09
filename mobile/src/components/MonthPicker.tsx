@@ -90,8 +90,9 @@ export default memo(function MonthPicker({
         <Switch
           value={untilTurnOff}
           onValueChange={handleUntilToggle}
-          trackColor={{ false: colors.border, true: colors.primaryLight }}
-          thumbColor={untilTurnOff ? colors.primary : "#f4f3f4"}
+          trackColor={{ false: colors.border, true: colors.accentTrack }}
+          thumbColor={untilTurnOff ? colors.accent : colors.switchThumb}
+          ios_backgroundColor={colors.border}
         />
       </View>
 
@@ -141,13 +142,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}33`,
   },
   toggleLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: fonts.semiBold,
     color: colors.textPrimary,
+    letterSpacing: -0.1,
   },
   toggleHint: {
     fontSize: 13,
@@ -162,41 +169,47 @@ const styles = StyleSheet.create({
   },
   monthCell: {
     width: "30%",
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderRadius: borderRadius.sm,
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}33`,
   },
   monthCellSelected: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.heroSurface,
+    borderColor: colors.heroSurface,
   },
   monthText: {
     fontSize: 15,
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
+    letterSpacing: -0.1,
   },
   monthTextSelected: {
-    color: colors.textOnPrimary,
+    color: colors.accent,
   },
   yearText: {
-    fontSize: 12,
-    fontFamily: fonts.regular,
+    fontSize: 11,
+    fontFamily: fonts.medium,
     color: colors.textMuted,
     marginTop: 2,
+    letterSpacing: 0.5,
   },
   yearTextSelected: {
-    color: colors.textOnPrimary,
-    opacity: 0.8,
+    color: colors.heroTextSecondary,
   },
   recurringNote: {
-    backgroundColor: colors.surfaceContainerLow,
-    borderRadius: borderRadius.sm,
+    backgroundColor: colors.accentSoft,
+    borderRadius: borderRadius.md,
     padding: 16,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
   },
   recurringNoteText: {
     fontSize: 14,
-    fontFamily: fonts.regular,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
     lineHeight: 20,
   },

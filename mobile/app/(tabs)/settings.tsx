@@ -12,42 +12,20 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useAuthStore } from "../../src/stores/auth";
-import { colors, borderRadius, shadows } from "../../src/theme";
-
-const US_STATES = [
-  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
-  "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
-  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
-  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
-  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
-];
-
-const MARITAL_OPTIONS = ["single", "married", "divorced", "widowed", "separated"];
-
-const GOAL_OPTIONS = [
-  { value: "emergency_fund", label: "Emergency Fund" },
-  { value: "debt_payoff", label: "Debt Payoff" },
-  { value: "home_purchase", label: "Home Purchase" },
-  { value: "retirement", label: "Retirement" },
-  { value: "investing", label: "Investing" },
-  { value: "education", label: "Education" },
-  { value: "travel", label: "Travel" },
-  { value: "savings", label: "General Savings" },
-];
-
-function formatIncome(val: string) {
-  const num = parseInt(val.replace(/[^0-9]/g, ""), 10);
-  if (isNaN(num)) return "";
-  return num.toLocaleString("en-US");
-}
-
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
+import { colors, borderRadius, fonts, shadows } from "../../src/theme";
+import {
+  US_STATES,
+  MARITAL_OPTIONS,
+  GOAL_OPTIONS,
+  capitalize,
+} from "../../src/constants/profile";
+import { formatIncome } from "../../src/utils/format";
 
 export default function SettingsScreen() {
-  const { user, logout, updateProfile } = useAuthStore();
+  const router = useRouter();
+  const { user, logout, updateProfile, deactivateAccount } = useAuthStore();
 
   const [editingPersonal, setEditingPersonal] = useState(false);
   const [editingFinancial, setEditingFinancial] = useState(false);
@@ -165,6 +143,29 @@ export default function SettingsScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Sign Out", style: "destructive", onPress: logout },
     ]);
+  };
+
+  const handleDeactivate = () => {
+    Alert.alert(
+      "Deactivate Account",
+      "Your account will be deactivated and you'll be signed out. You won't be able to use the app or sign in again until your account is reactivated. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Deactivate",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deactivateAccount();
+            } catch (e: unknown) {
+              const message =
+                e instanceof Error ? e.message : "Failed to deactivate account";
+              Alert.alert("Error", message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const displayValue = (val: string | null | undefined, placeholder = "Not set") =>
@@ -432,9 +433,38 @@ export default function SettingsScreen() {
           )}
         </View>
 
+        {/* Connected AI tools */}
+        <TouchableOpacity
+          style={styles.navRow}
+          onPress={() => router.push("/api-keys")}
+          activeOpacity={0.85}
+        >
+          <View style={styles.navRowLeft}>
+            <MaterialCommunityIcons
+              name="robot-outline"
+              size={20}
+              color={colors.primary}
+            />
+            <Text style={styles.navRowLabel}>Connected AI tools</Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={20}
+            color={colors.textMuted}
+          />
+        </TouchableOpacity>
+
         {/* Sign Out */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Sign Out</Text>
+        </TouchableOpacity>
+
+        {/* Deactivate Account */}
+        <TouchableOpacity
+          style={styles.deactivateButton}
+          onPress={handleDeactivate}
+        >
+          <Text style={styles.deactivateText}>Deactivate Account</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -510,7 +540,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 20,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   email: {
@@ -528,7 +558,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.primary,
   },
   sectionHeader: {
@@ -541,7 +571,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.8,
@@ -557,12 +587,12 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 14,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
   fieldValue: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
     textAlign: "right",
     flexShrink: 1,
@@ -571,7 +601,7 @@ const styles = StyleSheet.create({
   // -- Edit mode inputs --
   label: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 6,
     marginTop: 16,
@@ -605,7 +635,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 13,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
   chipTextActive: {
@@ -630,7 +660,7 @@ const styles = StyleSheet.create({
   },
   stateChipText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
   },
   stateChipTextActive: {
@@ -652,12 +682,12 @@ const styles = StyleSheet.create({
   },
   stepperText: {
     fontSize: 20,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   stepperValue: {
     fontSize: 18,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
     minWidth: 24,
     textAlign: "center",
@@ -669,7 +699,7 @@ const styles = StyleSheet.create({
   },
   dollarSign: {
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
   },
   cardActions: {
@@ -687,7 +717,7 @@ const styles = StyleSheet.create({
   saveText: {
     color: colors.textOnPrimary,
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   cancelButton: {
     flex: 1,
@@ -699,7 +729,28 @@ const styles = StyleSheet.create({
   cancelText: {
     color: colors.textSecondary,
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
+  },
+  navRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 12,
+    ...shadows.card,
+  },
+  navRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  navRowLabel: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
   },
   logoutButton: {
     backgroundColor: colors.surface,
@@ -712,6 +763,18 @@ const styles = StyleSheet.create({
   logoutText: {
     color: colors.error,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
+  },
+  deactivateButton: {
+    backgroundColor: colors.error,
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  deactivateText: {
+    color: colors.textOnPrimary,
+    fontSize: 16,
+    fontFamily: fonts.semiBold,
   },
 });

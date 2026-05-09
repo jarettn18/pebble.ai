@@ -4,7 +4,8 @@ from pydantic import BaseModel
 class AccountOut(BaseModel):
     id: str
     name: str
-    official_name: str | None = None
+    nickname: str | None = None
+    mask: str | None = None
     type: str
     subtype: str | None = None
     balance_current: str | None = None
@@ -17,3 +18,7 @@ class AccountOut(BaseModel):
 
 class AccountListResponse(BaseModel):
     accounts: list[AccountOut]
+
+
+class AccountUpdate(BaseModel):
+    nickname: str | None = None

@@ -1,5 +1,182 @@
 # Changelog
 
+## 2026-04-30 — Transaction Row Redesign + Date Grouping
+
+UI/UX pass on the transaction list, scoped to the three highest-impact items from a wider review: leading category-icon avatar on each row, transactions grouped by date under section headers, and a `Pending` pill replacing inline status text. The shared `TransactionRow` and `TransactionListCard` components feed five screens (`(tabs)/transactions.tsx`, `account-transactions.tsx`, `budget-transactions.tsx`, `spending.tsx`, `income.tsx`), so all of them inherit the new visuals without per-screen edits.
+
+### Backend
+
+- **`services/transactions.py`** — list and detail payloads now include `category_color` (eager-loaded via the existing `joinedload(Transaction.category)`, no extra query). Row avatars can now render the saved category color without a follow-up lookup.
+- **`schemas/transaction.py`** — `TransactionOut.category_color: str | None` added; `TransactionDetailOut` inherits it.
+
+### Mobile — New Utility
+
+- **`src/utils/date.ts`** (new file) — two formatters that share an internal `parseLocalDate` helper:
+  - `formatTransactionDate(iso)` → compact label: `"Today"` / `"Yesterday"` / `"Apr 30"` / `"Apr 30, 2025"` (year shown when older than current year).
+  - `formatTransactionDateGroup(iso)` → section-header label: `"Today"` / `"Yesterday"` / `"Mon, Apr 30"` / `"Mon, Apr 30, 2025"`.
+  - **Local-time parsing** — `parseLocalDate("2026-04-30")` returns midnight in the device's local zone, instead of `new Date("2026-04-30")`'s UTC-midnight (which renders as April 29 in negative-UTC zones). All grouping/labeling is local-time consistent.
+  - `Intl.DateTimeFormat` instances hoisted to module level to avoid per-row formatter construction.
+
+### Mobile — `TransactionRow.tsx` Rebuild
+
+- **Layout** — three-column row: 40×40 category-icon avatar | merchant name + meta line | amount. The avatar uses `withOpacity(category_color, 0.15)` for the background and full color for the icon (via `getCategoryIcon(name)`); falls back to `colors.textMuted` when `category_color` is null.
+- **Title row** — merchant name (`fontSize: 15`, `fonts.semiBold`, `letterSpacing: -0.1`) + optional `Pending` pill (uppercase tracked label, `surfaceContainerHigh` background, `textMuted` text). Replaces the previous `" · Pending"` appended to the metadata string.
+- **Meta line** — `category_name · account_name` (date suppressed via the new `hideDate` prop when the parent groups by date). Single-line ellipsis.
+- **Amount** — `fontSize: 15`, `fonts.bold`, `fontVariant: ["tabular-nums"]` for column-aligned digits across rows. Credits switched from `colors.income` (`#45655a`, the dark sage primary that was visually identical to body text) to `colors.incomePositive` (`#2BA671`) so debits and credits are distinguishable at a glance — the same green already used in the `(tabs)/transactions.tsx` filtered-totals row, so no new token introduced.
+- **`Transaction` type** gains `category_color: string | null` (required field, matches backend).
+- **`hideDate` prop** (default `false`) — backwards compatible. Existing direct callers of `TransactionRow` keep date-in-metadata behavior; the list card opts in.
+- **Separator** — `marginLeft: 72` (= 20 row inset + 40 avatar + 12 gap) so the hairline rule starts under the merchant name, not under the avatar.
+
+### Mobile — `TransactionListCard.tsx` Date Grouping
+
+- **`groupByDate(transactions)`** walks the (already date-sorted) list once and emits `DateGroup[]` with `key` (raw ISO), `label` (formatted via `formatTransactionDateGroup`), and `transactions[]`. `useMemo`'d on the input list. No re-sort — the backend already returns `ORDER BY date DESC, created_at DESC`.
+- **Section headers** — `microLabelSmall` uppercase tracked text in `colors.textMuted`, padded `paddingHorizontal: 20` (aligned to the row's leading inset), `paddingTop: 14` (8 for the first group, via a `groupHeaderFirst` override).
+- **Card padding** restructured — `padding: 20` → `paddingVertical: 8` on the card, with rows/headers carrying their own horizontal padding so date-header text and row content share the same leading edge.
+- **Rows** pass `hideDate` so the metadata line shows only `category · account` (the date is now in the group header above).
+- **Empty state** unchanged.
+
+### Mobile — Store Plumbing
+
+- **`stores/transactions.ts`** — `Transaction` type gains `category_color: string | null`. `updateTransactionCategory` signature extended to `(id, categoryName, categoryColor?)`; when `categoryColor` is omitted the existing color is preserved (so callers that haven't been updated keep working). The setter function passes through both fields.
+- **`app/transaction/[id].tsx`** — `TransactionDetail` type gains `category_color`. `handleCategorySelect` and `handleClearCategory` track `{id, name, color}` for revert, pass `category.color` into both the local `setTxn` optimistic update and the store's `updateTransactionCategory` call. The avatar in any screen showing this txn updates instantly on category change without waiting for the next refresh.
+
+### Out of scope (parked for follow-up)
+
+- Item #4 from the review: switching the list to `FlatList` virtualization (currently `transactions.map` with up to 200 rows inside a parent `ScrollView`). Pending — needs the parent ScrollView lifted in `(tabs)/transactions.tsx`, `account-transactions.tsx`, `budget-transactions.tsx` to avoid nested vertical scrolls.
+- Item #6: replacing `transaction/[id].tsx`'s hard-coded `paddingTop: 60` with `useSafeAreaInsets()` and the Unicode `←` with `MaterialCommunityIcons name="arrow-left"`.
+- Item #7: swipe-to-categorize / swipe-to-delete on rows via `react-native-gesture-handler` `Swipeable`.
+- Item #8: collapsing the filter panel's category grid for users with 20+ categories.
+- Item #10: unsaved-notes confirmation on detail-screen back navigation.
+- Item #11: renaming "Filtered total" → "Net" with row count.
+- Items #12–#14: `colors.primary` vs `colors.accent` consistency pass; skeleton loaders; in-context search on `account-transactions.tsx`.
+
+### First-run after pulling
+
+No native changes, no new packages — just code:
+
+```bash
+cd backend && uv sync                # only if pulling other branch changes
+cd ../mobile && npx tsc --noEmit     # verify (already passes)
+```
+
+---
+
+## 2026-04-29 — Global AI Chat (Out of the Tab Bar)
+
+The AI assistant lifted out of the tab navigator into a globally accessible floating action button + draggable bottom sheet. Users can now talk to the assistant from any authenticated screen — Dashboard, Transactions, Budgets, detail screens, Settings — and reference on-screen figures (transactions, charts, budget rows) at the smaller snap point while typing, instead of losing their context to a full-screen tab.
+
+### Mobile — UI/UX
+
+- **Tab bar reduced from 5 to 4 entries** (`Dashboard`, `Transactions`, `Budgets`, `Settings`). The `AI Chat` tab entry was removed from `app/(tabs)/_layout.tsx` and `app/(tabs)/ai-chat.tsx` was deleted.
+- **Global FAB** (`src/components/GlobalChatFAB.tsx`): 56pt circular button anchored bottom-right, colored `colors.primary` with `shadows.hero`. Lifted above the tab bar via `useSafeAreaInsets()` + a fixed `TAB_BAR_HEIGHT` offset when inside the tabs group; uses just the safe-area inset on stack-pushed detail screens. Hidden on `(auth)` and `(onboarding)` segments via `useSegments()` (chat is meaningless before login + profile setup). Auto-hides while the sheet is open so it isn't visible behind the dim backdrop.
+- **Global chat sheet** (`src/components/ChatSheet.tsx`): chat UI ported into a `BottomSheetModal` from `@gorhom/bottom-sheet` with snap points `["35%", "75%", "95%"]`. Opens at the 75% snap by default; the 35% snap leaves the underlying screen partially visible (this is the whole point of the refactor — referencing figures while chatting). `BottomSheetFlatList` replaces the message-list `FlatList` and `BottomSheetTextInput` replaces the input `TextInput` so gesture-pan-to-close, scroll, and keyboard interactions cooperate with the sheet. The `BottomSheetBackdrop` dims at 0.4 opacity and dismisses on tap. `keyboardBehavior="interactive"` + `keyboardBlurBehavior="restore"` mean the keyboard doesn't collapse the sheet when dismissed. The conversation history modal is preserved as a plain RN `Modal` overlay (it correctly stacks on top of the sheet because RN modals render at the OS layer).
+- **Header replacement**: the old chat tab had its `headerLeft`/`headerRight` icons (history + new conversation) attached via `navigation.setOptions`. Inside the sheet, the same controls live in a custom in-sheet header row at the top, since `BottomSheetModal` has no native nav header.
+- **Health Score "Ask AI for Tips" button** (`app/health-score.tsx`): now calls `useChatUIStore.getState().openChat()` instead of `router.push("/(tabs)/ai-chat?prefill=...")`. The `?prefill=` query param it was passing was never actually consumed by the chat screen — dormant code path retired. Unused `useRouter` import dropped.
+
+### Mobile — State
+
+- New `src/stores/chatUI.ts` — tiny Zustand store (`open`, `openChat`, `closeChat`). Kept separate from `aiChat.ts` so message/conversation domain state stays decoupled from sheet UI presentation state.
+- `aiChat.ts` (Zustand AI chat store) is **untouched** — all streaming, tool-call handling, conversation persistence, and abort logic continues to work identically. The refactor was purely a UI re-shell.
+- `api/streaming.ts` is untouched. No backend changes.
+
+### Mobile — Root Layout (`app/_layout.tsx`)
+
+- Wraps the app in `<GestureHandlerRootView style={{ flex: 1 }}>` (required by both `react-native-gesture-handler` and `@gorhom/bottom-sheet`) and `<BottomSheetModalProvider>`.
+- Mounts `<GlobalChatFAB />` and `<ChatSheet />` as siblings of the existing `<Stack>` so they overlay every route the user can reach.
+
+### Mobile — Babel Config (`mobile/babel.config.js`, new file)
+
+- Created with `babel-preset-expo` + `react-native-worklets/plugin` (Reanimated v4's worklets plugin) registered last, as required. Without this plugin, Reanimated worklets fail to compile at bundle time.
+
+### Mobile — Dependencies
+
+- `@gorhom/bottom-sheet@^5.2.10` — sheet primitive.
+- `react-native-gesture-handler@~2.30.0` — peer dep.
+- `react-native-reanimated@4.2.1` — peer dep.
+- `react-native-worklets@0.7.4` — explicit pin. Reanimated 4.2.1's podspec validates worklets against `min: 0.7.0, max: 0.7`; the latest `0.8.x` line that npm pulls in by default fails `pod install` with "Failed to validate worklets version." Pinning to `0.7.4` (Expo SDK 55's known-good version) resolves it.
+- `babel-preset-expo@~55.0.11` — added as a top-level `devDependency`. It existed transitively under `expo/node_modules`, but Babel's preset resolver only checks the project root's `node_modules`, so bundling failed with "Cannot find module 'babel-preset-expo'" until the preset was hoisted.
+
+### First-run after pulling
+
+```bash
+cd mobile
+npm install
+cd ios && pod install && cd ..   # native modules added — Reanimated, Gesture Handler
+npx expo start -c                 # `-c` clears Metro cache after the new Babel plugin
+```
+
+### Out of scope (tracked under Phase 7 in README)
+
+- Auto-injecting current-screen context into the chat prompt (e.g. "user is viewing transaction X" / "user is on the Budgets tab for April").
+- Per-screen suggested prompts in the global chat sheet — different starter chips based on the active route.
+- Persisting global chat sheet open/closed state and last snap point across app restarts.
+
+---
+
+## 2026-04-23 — Onboarding Flow + Account Deactivation
+
+### Sign-up Now Collects Birthday (Required, Pre-SMS)
+
+Sign-up captures the four required identity fields (full name, email, phone, **birthday**) in a single screen before SMS verification. Birthday flows through the existing register/initiate → SMS verify pipeline and is set on the `User` row at account creation.
+
+#### Backend
+- `InitiateRegisterRequest` (`schemas/auth.py`) gained a required `date_of_birth: datetime.date` field with the same `_validate_dob` check shared by `UpdateProfileRequest` (not in future, year ≥ 1900). DOB validator extracted to a module-level helper alongside `_validate_phone`.
+- `services/phone_verification.py` now serializes `date_of_birth` into the Redis pending-registration blob (`isoformat()` in, `fromisoformat()` out) and passes it into the `User()` constructor on `verify_and_create_user`.
+
+#### Mobile
+- `app/(auth)/register.tsx` adds a "Birthday (YYYY-MM-DD)" input below phone with auto-dash formatting (`formatDobInput`) and client-side validity check (`isValidDob` — round-trips through `Date` to reject e.g. `2025-02-30`). Used a `TextInput` to stay consistent with the existing `settings.tsx` DOB pattern and avoid pulling in `@react-native-community/datetimepicker`.
+- `useAuthStore.initiateRegister(...)` signature gained a `dateOfBirth: string` (YYYY-MM-DD) parameter, included as `date_of_birth` in the POST body.
+
+### Multi-Step Onboarding Wizard (Skippable Per Step)
+
+After SMS verification, new users are routed through a 6-step wizard for the optional profile fields. Each step has Continue + "Skip for now" — skipping never blocks. The final step writes `onboarding_completed: true` and replaces to `/(tabs)`.
+
+#### Backend
+- `User.onboarding_completed: bool` (default `false`, `server_default="false"`) added to `models/user.py`.
+- `UpdateProfileRequest` accepts `onboarding_completed: bool | None`, so the mobile completes onboarding via the existing `PATCH /v1/auth/profile` endpoint with no new route.
+- `UserResponse` and `_user_response()` (`routers/auth.py`) surface `onboarding_completed`.
+
+#### Mobile — Routing
+- New `app/(onboarding)/` route group with `_layout.tsx` (Stack, headers off, gestures disabled).
+- `app/_layout.tsx` `AuthGate` now also redirects authenticated users with `!user.onboarding_completed` to `/(onboarding)/occupation`. Existing users get one-shot prompted on next login (no migration backfill — `active` defaults via column default mean they all get the wizard once).
+
+#### Mobile — Step Screens
+6 single-purpose files under `app/(onboarding)/`:
+1. `occupation.tsx` — text input (max 100 chars)
+2. `state.tsx` — chip-grid US state picker
+3. `income.tsx` — formatted income input with `$` prefix (uses shared `formatIncome`)
+4. `marital-status.tsx` — single-select chip row
+5. `dependents.tsx` — `−`/`+` stepper
+6. `goals.tsx` — multi-select financial goals chips, also flips `onboarding_completed = true` and `router.replace("/(tabs)")`
+
+#### Mobile — Shared Component & Refactor
+- `src/components/OnboardingStep.tsx` — shared layout: progress bar (filled segments per `stepIndex`), title + subtitle, scrollable body slot, footer with primary `Continue` button + `Skip for now` link. Match the existing `KeyboardAvoidingView` + `colors`/`borderRadius` theme.
+- `src/constants/profile.ts` (new) — lifted `US_STATES`, `MARITAL_OPTIONS`, `GOAL_OPTIONS`, `capitalize` from `settings.tsx` so onboarding screens and settings share one source of truth.
+- `src/utils/format.ts` (new) — `formatIncome` extracted from `settings.tsx`.
+- `app/(tabs)/settings.tsx` refactored to import the shared constants/utility (no behavior change).
+
+### Account Deactivation
+
+`active: bool` flag on `User` gates all authenticated interaction. Self-serve deactivation lives in Settings; reactivation is intentionally not exposed self-serve.
+
+#### Backend
+- `User.active: bool` (default `true`, `server_default="true"`, indexed via `ix_users_active`) added to `models/user.py`.
+- `middleware/auth.py`: both `get_current_user` and `get_user_by_api_key` now reject inactive users with `403 "Account has been deactivated"` — blocks every authenticated route.
+- `services/auth.py`: `login_user` and `refresh_tokens` also reject inactive users so deactivated accounts can't get fresh tokens even with valid credentials/refresh JWTs.
+- `POST /v1/auth/deactivate` (`routers/auth.py`) flips `active = false` for the current user.
+- `UserResponse.active: bool` (defaults `true`) plumbed through `_user_response()`.
+
+#### Mobile
+- `useAuthStore` adds `deactivateAccount()` — POSTs to `/v1/auth/deactivate`, clears tokens via `clearTokens()`, and resets the store (which boots the user back to login through the existing `AuthGate`).
+- `app/(tabs)/settings.tsx` adds a red "Deactivate Account" button below Sign Out with a confirmation `Alert` warning the user the action will sign them out and prevent re-login.
+
+### Database Migration
+
+- New Alembic revision `4a2b1c3d5e7f_add_onboarding_completed_and_active` (parent: `39efcd9dc1dd`) adds both `onboarding_completed` and `active` columns plus the `ix_users_active` index in a single upgrade.
+- Local Postgres wiped (`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`) and re-migrated through all 12 revisions to verify the chain replays cleanly from scratch.
+
+---
+
 ## 2026-04-08 — Staging Environment + Native Build Migration
 
 ### Staging Environment

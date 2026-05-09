@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-nati
 import { apiRequest } from "../api/client";
 import LineChart from "./LineChart";
 import { formatCurrency } from "../utils/dashboard";
-import { colors, fonts } from "../theme";
+import { colors, fonts, borderRadius } from "../theme";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const CHART_WIDTH = SCREEN_WIDTH - 80; // card padding + container padding
@@ -29,9 +29,12 @@ type Period = (typeof PERIODS)[number];
 type NetWorthChartProps = {
   /** Change this value to trigger a re-fetch of chart data. */
   refreshKey?: number;
+  /** Visual variant — "dark" renders for placement on a dark hero card. */
+  variant?: "light" | "dark";
 };
 
-export default memo(function NetWorthChart({ refreshKey }: NetWorthChartProps) {
+export default memo(function NetWorthChart({ refreshKey, variant = "light" }: NetWorthChartProps) {
+  const isDark = variant === "dark";
   const [period, setPeriod] = useState<Period>("1Y");
   const [data, setData] = useState<NetWorthHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,7 +62,9 @@ export default memo(function NetWorthChart({ refreshKey }: NetWorthChartProps) {
   const changePct = data?.change_pct ? parseFloat(data.change_pct) : null;
   const isPositive = change !== null && change >= 0;
 
-  const chartColor = isPositive ? colors.primary : colors.negative;
+  const chartColor = isPositive
+    ? (isDark ? colors.incomePositive : colors.primary)
+    : (isDark ? colors.heroNegative : colors.negative);
 
   // Build x-axis labels from point dates based on period
   const xLabels = useMemo(() => {
@@ -128,14 +133,19 @@ export default memo(function NetWorthChart({ refreshKey }: NetWorthChartProps) {
         {PERIODS.map((p) => (
           <TouchableOpacity
             key={p}
-            style={[styles.periodTab, period === p && styles.periodTabActive]}
+            style={[
+              styles.periodTab,
+              isDark && styles.periodTabDark,
+              period === p && (isDark ? styles.periodTabActiveDark : styles.periodTabActive),
+            ]}
             onPress={() => setPeriod(p)}
             activeOpacity={0.7}
           >
             <Text
               style={[
                 styles.periodLabel,
-                period === p && styles.periodLabelActive,
+                isDark && styles.periodLabelDark,
+                period === p && (isDark ? styles.periodLabelActiveDark : styles.periodLabelActive),
               ]}
             >
               {p}
@@ -177,18 +187,30 @@ const styles = StyleSheet.create({
   periodTab: {
     paddingHorizontal: 16,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: borderRadius.md,
     backgroundColor: colors.background,
+  },
+  periodTabDark: {
+    backgroundColor: colors.heroBorder,
   },
   periodTabActive: {
     backgroundColor: colors.primary,
+  },
+  periodTabActiveDark: {
+    backgroundColor: colors.heroFillStrong,
   },
   periodLabel: {
     fontSize: 13,
     fontFamily: fonts.semiBold,
     color: colors.textSecondary,
   },
+  periodLabelDark: {
+    color: colors.heroTextSecondary,
+  },
   periodLabelActive: {
     color: colors.textOnPrimary,
+  },
+  periodLabelActiveDark: {
+    color: colors.heroTextPrimary,
   },
 });

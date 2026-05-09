@@ -12,6 +12,7 @@ from pebble.models.account import Account
 from pebble.models.category import Category
 from pebble.models.transaction import Transaction
 from pebble.schemas.csv_import import CSVImportError, CSVImportResponse
+from pebble.services.health_score import invalidate_health_score_cache
 
 MAX_ROWS = 5_000
 
@@ -259,6 +260,7 @@ async def import_transactions(
 
     if imported > 0:
         await db.commit()
+        await invalidate_health_score_cache(str(uid))
 
     return CSVImportResponse(
         imported=imported,

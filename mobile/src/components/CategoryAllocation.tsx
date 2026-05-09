@@ -1,7 +1,7 @@
 import React, { memo, useCallback } from "react";
 import { View, Text, StyleSheet, TextInput, FlatList } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors, fonts, borderRadius } from "../theme";
+import { colors, fonts, borderRadius, microLabelSmall } from "../theme";
 import { withOpacity } from "../utils/color";
 import { formatCurrency } from "../utils/dashboard";
 import { getCategoryIcon } from "../utils/categoryIcons";
@@ -58,8 +58,20 @@ const CategoryRow = memo(function CategoryRow({ item, amount, onAmountChange }: 
       <Text style={styles.categoryName} numberOfLines={1}>
         {item.name}
       </Text>
-      <View style={styles.amountInputWrap}>
-        <Text style={styles.dollarSign}>$</Text>
+      <View
+        style={[
+          styles.amountInputWrap,
+          hasAmount && styles.amountInputWrapActive,
+        ]}
+      >
+        <Text
+          style={[
+            styles.dollarSign,
+            hasAmount && styles.dollarSignActive,
+          ]}
+        >
+          $
+        </Text>
         <TextInput
           style={[
             styles.amountInput,
@@ -173,7 +185,13 @@ export default memo(function CategoryAllocation({
 });
 
 const styles = StyleSheet.create({
-  container: {},
+  container: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}33`,
+  },
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -184,36 +202,35 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   summaryLabel: {
-    fontSize: 12,
-    fontFamily: fonts.labelMedium,
-    letterSpacing: 1,
-    textTransform: "uppercase",
+    ...microLabelSmall,
     color: colors.textMuted,
     marginBottom: 4,
   },
   summaryValue: {
-    fontSize: 18,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    fontSize: 20,
+    fontFamily: fonts.extraBold,
+    color: colors.heroSurface,
+    letterSpacing: -0.3,
   },
   overAllocated: {
     color: colors.error,
   },
   progressTrack: {
-    height: 8,
-    backgroundColor: colors.surface,
-    borderRadius: 9999,
+    height: 10,
+    backgroundColor: colors.trackLight,
+    borderRadius: borderRadius.pill,
     marginBottom: 20,
+    overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: colors.primary,
-    borderRadius: 9999,
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.pill,
   },
   categoryRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   iconCircle: {
     width: 40,
@@ -232,11 +249,13 @@ const styles = StyleSheet.create({
   amountInputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceContainerLow,
     borderRadius: borderRadius.sm,
     paddingHorizontal: 12,
     paddingVertical: 8,
     minWidth: 100,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   dollarSign: {
     fontSize: 16,
@@ -250,11 +269,21 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     minWidth: 60,
     textAlign: "right",
+    padding: 0,
   },
   amountInputActive: {
-    color: colors.primary,
+    color: colors.accentDark,
+  },
+  amountInputWrapActive: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentBorderStrong,
+  },
+  dollarSignActive: {
+    color: colors.accentDark,
   },
   separator: {
-    height: 4,
+    height: 1,
+    backgroundColor: colors.divider,
+    marginLeft: 52,
   },
 });

@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "../../src/stores/auth";
-import { colors, borderRadius } from "../../src/theme";
+import { colors, borderRadius, fonts } from "../../src/theme";
 
 const RESEND_COOLDOWN = 60;
 
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 36,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.primary,
     textAlign: "center",
   },
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: colors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   resendButton: {
     marginTop: 24,
@@ -179,11 +179,11 @@ const styles = StyleSheet.create({
   resendText: {
     color: colors.primary,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   resendDisabled: {
     color: colors.textSecondary,
-    fontWeight: "400",
+    fontFamily: fonts.regular,
   },
   backButton: {
     marginTop: 16,

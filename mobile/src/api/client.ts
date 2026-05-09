@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
-const API_URL =
+export const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   (__DEV__ ? "http://localhost:8000" : "https://api.pebble.app");
 

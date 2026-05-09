@@ -6,7 +6,8 @@ const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 day
 export type Account = {
   id: string;
   name: string;
-  official_name: string | null;
+  nickname: string | null;
+  mask: string | null;
   type: string;
   subtype: string | null;
   balance_current: string | null;
@@ -29,6 +30,8 @@ type AccountsState = {
   load: () => Promise<void>;
   /** Force refresh from the API. */
   refresh: () => Promise<void>;
+  /** Update an account's nickname. Empty string clears it. */
+  updateNickname: (accountId: string, nickname: string) => Promise<Account>;
 };
 
 export const useAccountsStore = create<AccountsState>((set, get) => ({
@@ -65,5 +68,16 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  updateNickname: async (accountId, nickname) => {
+    const updated = await apiRequest<Account>(`/v1/accounts/${accountId}`, {
+      method: "PATCH",
+      body: { nickname },
+    });
+    set((state) => ({
+      accounts: state.accounts.map((a) => (a.id === accountId ? updated : a)),
+    }));
+    return updated;
   },
 }));

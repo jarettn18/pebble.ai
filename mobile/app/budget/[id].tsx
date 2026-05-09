@@ -13,7 +13,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiRequest } from "../../src/api/client";
 import { useBudgetsStore, type Budget } from "../../src/stores/budgets";
-import { colors, borderRadius, shadows } from "../../src/theme";
+import { colors, borderRadius, fonts, shadows } from "../../src/theme";
 
 type Category = {
   id: string;
@@ -182,7 +182,7 @@ export default function BudgetDetailScreen() {
             <View style={styles.currentCategory}>
               <View style={styles.currentCategoryLeft}>
                 <View
-                  style={[styles.categoryDot, { backgroundColor: selectedCategory.color || "#999" }]}
+                  style={[styles.categoryDot, { backgroundColor: selectedCategory.color || colors.dotInactive }]}
                 />
                 <Text style={styles.currentCategoryText}>{selectedCategory.name}</Text>
               </View>
@@ -208,7 +208,7 @@ export default function BudgetDetailScreen() {
                 onPress={() => setSelectedCategoryId(item.id)}
               >
                 <View
-                  style={[styles.chipDot, { backgroundColor: item.color || "#999" }]}
+                  style={[styles.chipDot, { backgroundColor: item.color || colors.dotInactive }]}
                 />
                 <Text
                   style={[
@@ -292,11 +292,11 @@ const styles = StyleSheet.create({
   backArrow: {
     fontSize: 24,
     color: colors.primary,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   body: {
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 4,
@@ -325,14 +325,14 @@ const styles = StyleSheet.create({
   },
   amountPrefix: {
     fontSize: 28,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
     marginRight: 4,
   },
   amountInput: {
     flex: 1,
     fontSize: 28,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   currentCategory: {
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   },
   currentCategoryText: {
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textPrimary,
   },
   clearBtn: {
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
   },
   periodText: {
     fontSize: 16,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     color: colors.textPrimary,
   },
   errorText: {
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: colors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   deleteBtn: {
     borderRadius: borderRadius.lg,
@@ -430,6 +430,6 @@ const styles = StyleSheet.create({
   deleteBtnText: {
     color: colors.error,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
 });

@@ -28,5 +28,6 @@ class ChatMessage(Base, TimestampMixin):
     )
     role: Mapped[str] = mapped_column(String(20))  # user, assistant
     content: Mapped[str] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     conversation: Mapped[ChatConversation] = relationship(back_populates="messages")

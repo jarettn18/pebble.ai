@@ -13,6 +13,8 @@ type Slice = {
 type Props = {
   slices: Slice[];
   size?: number;
+  /** Visual variant — "dark" renders legend text light for placement on a dark hero card. */
+  variant?: "light" | "dark";
 };
 
 function wedgePath(
@@ -33,7 +35,8 @@ function wedgePath(
   return `M ${x1} ${y1} L ${x2} ${y2} A ${outerR} ${outerR} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x1} ${y1} Z`;
 }
 
-export default memo(function PieChart({ slices, size = 110 }: Props) {
+export default memo(function PieChart({ slices, size = 110, variant = "light" }: Props) {
+  const isDark = variant === "dark";
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const total = slices.reduce((sum, s) => sum + s.value, 0);
   if (total === 0) return null;
@@ -137,8 +140,8 @@ export default memo(function PieChart({ slices, size = 110 }: Props) {
         {/* Center bubble */}
         {selected && (
           <View style={styles.bubble} pointerEvents="none">
-            <Text style={styles.bubbleAmount}>{formatCurrency(selected.value)}</Text>
-            <Text style={styles.bubbleLabel} numberOfLines={1}>{selected.label}</Text>
+            <Text style={[styles.bubbleAmount, isDark && styles.bubbleAmountDark]}>{formatCurrency(selected.value)}</Text>
+            <Text style={[styles.bubbleLabel, isDark && styles.bubbleLabelDark]} numberOfLines={1}>{selected.label}</Text>
           </View>
         )}
       </View>
@@ -154,15 +157,15 @@ export default memo(function PieChart({ slices, size = 110 }: Props) {
               activeOpacity={0.7}
             >
               <View style={[styles.legendDot, { backgroundColor: slice.color }]} />
-              <Text style={styles.legendLabel} numberOfLines={1}>
+              <Text style={[styles.legendLabel, isDark && styles.legendLabelDark]} numberOfLines={1}>
                 {slice.label}
               </Text>
               {isSelected ? (
-                <Text style={[styles.legendPct, { color: slice.color }]}>
+                <Text style={[styles.legendPct, isDark && styles.legendPctDark, { color: slice.color }]}>
                   {formatCurrency(slice.value)}
                 </Text>
               ) : (
-                <Text style={styles.legendPct}>{pct}%</Text>
+                <Text style={[styles.legendPct, isDark && styles.legendPctDark]}>{pct}%</Text>
               )}
             </TouchableOpacity>
           );
@@ -192,12 +195,18 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
+  bubbleAmountDark: {
+    color: colors.heroTextPrimary,
+  },
   bubbleLabel: {
     fontSize: 10,
     fontFamily: fonts.medium,
     color: colors.textSecondary,
     maxWidth: 70,
     textAlign: "center",
+  },
+  bubbleLabelDark: {
+    color: colors.heroTextSecondary,
   },
   legend: {
     flex: 1,
@@ -221,11 +230,17 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 4,
   },
+  legendLabelDark: {
+    color: colors.heroTextPrimary,
+  },
   legendPct: {
     fontSize: 13,
     fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     minWidth: 32,
     textAlign: "right",
+  },
+  legendPctDark: {
+    color: colors.heroTextSecondary,
   },
 });

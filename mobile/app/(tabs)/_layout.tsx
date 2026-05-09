@@ -36,13 +36,6 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="ai-chat"
-        options={{
-          title: "AI Chat",
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="robot-outline" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="settings"
         options={{
           title: "Settings",

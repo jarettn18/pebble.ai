@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiRequest } from "../../src/api/client";
-import { colors, borderRadius, shadows } from "../../src/theme";
+import { colors, borderRadius, fonts, shadows } from "../../src/theme";
 import { useAssetsStore } from "../../src/stores/assets";
 import { useDashboardStore } from "../../src/stores/dashboard";
 import { formatCurrency } from "../../src/utils/dashboard";
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
   },
   valueDisplay: {
     fontSize: 36,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
     textAlign: "center",
     marginBottom: 4,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
     color: colors.textSecondary,
     marginBottom: 8,
     marginTop: 4,
@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: colors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   deleteBtn: {
     borderWidth: 1,
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   deleteBtnText: {
     color: colors.error,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
   errorText: {
     color: colors.error,
@@ -424,6 +424,6 @@ const styles = StyleSheet.create({
   backBtnText: {
     color: colors.textOnPrimary,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.semiBold,
   },
 });

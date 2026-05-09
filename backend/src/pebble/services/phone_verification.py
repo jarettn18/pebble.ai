@@ -1,3 +1,4 @@
+import datetime
 import json
 import uuid
 
@@ -45,6 +46,7 @@ async def initiate_registration(
         "hashed_password": hash_password(req.password),
         "full_name": req.full_name,
         "phone_number": req.phone_number,
+        "date_of_birth": req.date_of_birth.isoformat(),
     }
 
     await redis_client.setex(
@@ -87,6 +89,7 @@ async def verify_and_create_user(
         full_name=blob["full_name"],
         phone_number=blob["phone_number"],
         phone_verified=True,
+        date_of_birth=datetime.date.fromisoformat(blob["date_of_birth"]),
     )
 
     try:

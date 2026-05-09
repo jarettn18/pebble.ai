@@ -23,12 +23,13 @@ import { useTransactionsStore } from "../../src/stores/transactions";
 import { usePlaidLink } from "../../src/hooks/usePlaidLink";
 import { apiRequest } from "../../src/api/client";
 import { formatCurrency } from "../../src/utils/dashboard";
+import { exportTransactions } from "../../src/utils/exportTransactions";
 import PieChart from "../../src/components/PieChart";
 import NetWorthChart from "../../src/components/NetWorthChart";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useBudgetPlansStore } from "../../src/stores/budgetPlans";
 import { useHealthScoreStore } from "../../src/stores/healthScore";
-import { colors, borderRadius, shadows, fonts, progressBarStyles } from "../../src/theme";
+import { colors, borderRadius, shadows, fonts, progressBarStyles, heroCard } from "../../src/theme";
 import { getCategoryColor } from "../../src/utils/color";
 
 const PIE_COLORS = colors.spendingPalette;
@@ -71,11 +72,11 @@ const ASSET_TYPE_ICONS: Record<string, string> = {
 
 function gradeColor(grade: string | null): string {
   switch (grade) {
-    case "A": return colors.gradeA;
-    case "B": return colors.gradeB;
-    case "C": return colors.gradeC;
-    case "D": return colors.gradeD;
-    default: return colors.gradeF;
+    case "A": return colors.gradeADark;
+    case "B": return colors.gradeBDark;
+    case "C": return colors.gradeCDark;
+    case "D": return colors.gradeDDark;
+    default: return colors.gradeFDark;
   }
 }
 
@@ -92,14 +93,15 @@ const HealthScoreCard = memo(function HealthScoreCard({
   const color = gradeColor(grade);
   return (
     <TouchableOpacity
-      style={styles.healthScoreCard}
+      style={[styles.heroCard, styles.healthScoreCard]}
       onPress={() => router.push("/health-score")}
-      activeOpacity={0.7}
+      activeOpacity={0.85}
       accessibilityLabel={`Financial health score ${score}, grade ${grade}`}
       accessibilityRole="button"
     >
+      <View style={styles.heroCardGlow} />
       <View style={styles.healthScoreLeft}>
-        <Text style={styles.healthScoreLabel}>FINANCIAL HEALTH</Text>
+        <Text style={styles.heroCardLabel}>FINANCIAL HEALTH</Text>
         <Text style={styles.healthScoreDetail}>
           {completeness < 1
             ? `Based on ${Math.round(completeness * 100)}% of data`
@@ -107,8 +109,10 @@ const HealthScoreCard = memo(function HealthScoreCard({
         </Text>
       </View>
       <View style={styles.healthScoreRight}>
-        <Text style={[styles.healthScoreValue, { color }]}>{score}</Text>
-        <Text style={[styles.healthScoreGrade, { color }]}>{grade}</Text>
+        <View style={[styles.healthScorePill, { backgroundColor: `${color}33`, borderColor: `${color}99` }]}>
+          <Text style={[styles.healthScoreValue, { color }]}>{score}</Text>
+          <Text style={[styles.healthScoreGrade, { color }]}>{grade}</Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -123,8 +127,8 @@ function AssetRow({ asset, onPress }: { asset: AssetSummary; onPress: () => void
     <TouchableOpacity style={styles.itemCard} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.itemCardRow}>
         <View style={styles.itemCardLeft}>
-          <View style={[styles.iconCircle, { backgroundColor: `${colors.secondaryContainer}80` }]}>
-            <MaterialCommunityIcons name={iconName as any} size={22} color={colors.secondary} />
+          <View style={[styles.iconCircle, { backgroundColor: colors.accentSoft }]}>
+            <MaterialCommunityIcons name={iconName as any} size={22} color={colors.accentDark} />
           </View>
           <View style={styles.itemCardInfo}>
             <Text style={styles.itemCardName} numberOfLines={1}>{asset.name}</Text>
@@ -146,6 +150,7 @@ export default function DashboardScreen() {
   const user = useAuthStore((s) => s.user);
   const [exchanging, setExchanging] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
 
   const {
@@ -202,7 +207,7 @@ export default function DashboardScreen() {
           accessibilityLabel="Add account or asset"
           accessibilityRole="button"
         >
-          <MaterialCommunityIcons name="plus" size={22} color={colors.primary} />
+          <MaterialCommunityIcons name="plus" size={22} color={colors.accent} />
         </TouchableOpacity>
       ),
     });
@@ -240,6 +245,7 @@ export default function DashboardScreen() {
             refreshAccounts(),
             syncTransactions(),
             refreshDashboard(),
+            loadHealthScore(),
           ]);
         }
       } catch (err) {
@@ -353,7 +359,7 @@ export default function DashboardScreen() {
           <RefreshControl
             refreshing={dashLoading}
             onRefresh={refreshDashboard}
-            tintColor={colors.primary}
+            tintColor={colors.accent}
           />
         }
       >
@@ -364,18 +370,24 @@ export default function DashboardScreen() {
 
         {/* Onboarding popup — shown when no accounts or assets */}
 
-      <View style={styles.card}>
-        <Text style={styles.netWorthLabel}>YOUR NETWORTH</Text>
+      <View style={[styles.heroCard, styles.heroCardSpaced]}>
+        <View style={styles.heroCardGlow} />
+        <Text style={styles.heroCardLabel}>YOUR NETWORTH</Text>
         {dashLoading && !hasAccounts ? (
-          <ActivityIndicator size="small" color={colors.primary} style={styles.cardLoader} />
+          <ActivityIndicator size="small" color={colors.accent} style={styles.cardLoader} />
         ) : (
-          <Text style={[styles.cardValue, netWorth !== null && netWorth < 0 && styles.negative]}>
+          <Text
+            style={[
+              styles.heroCardValueXL,
+              netWorth !== null && netWorth < 0 && styles.heroCardValueNegative,
+            ]}
+          >
             {netWorth !== null ? formatCurrency(netWorth) : "--"}
           </Text>
         )}
-        {hasAccounts && <NetWorthChart refreshKey={refreshCount} />}
+        {hasAccounts && <NetWorthChart refreshKey={refreshCount} variant="dark" />}
         {!hasAccounts && !dashLoading && (
-          <Text style={styles.cardHint}>Connect a bank account to get started</Text>
+          <Text style={styles.heroCardHint}>Connect a bank account to get started</Text>
         )}
       </View>
 
@@ -391,44 +403,46 @@ export default function DashboardScreen() {
           contentContainerStyle={styles.carouselContent}
         >
           <TouchableOpacity
-            style={[styles.card, styles.carouselCard, { width: cardWidth }]}
+            style={[styles.heroCard, styles.carouselCard, { width: cardWidth }]}
             onPress={() => router.push("/income")}
-            activeOpacity={0.7}
+            activeOpacity={0.85}
           >
-            <Text style={styles.cardTitle}>This Month's Income</Text>
+            <View style={styles.heroCardGlow} />
+            <Text style={styles.heroCardLabel}>THIS MONTH'S INCOME</Text>
             {dashLoading && !hasAccounts ? (
-              <ActivityIndicator size="small" color={colors.primary} style={styles.cardLoader} />
+              <ActivityIndicator size="small" color={colors.accent} style={styles.cardLoader} />
             ) : (
-              <Text style={[styles.cardValue, styles.incomeValue]}>
+              <Text style={[styles.heroCardValue, styles.heroIncomeValue]}>
                 {hasAccounts ? formatCurrency(monthlyIncome) : "--"}
               </Text>
             )}
             {incomeSlices.length > 0 && (
-              <PieChart slices={incomeSlices} />
+              <PieChart slices={incomeSlices} variant="dark" />
             )}
             {hasAccounts && (
-              <Text style={styles.cardLink}>View details →</Text>
+              <Text style={styles.heroCardLink}>View details →</Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.card, styles.carouselCard, styles.carouselCardLast, { width: cardWidth }]}
+            style={[styles.heroCard, styles.carouselCard, styles.carouselCardLast, { width: cardWidth }]}
             onPress={() => router.push("/spending")}
-            activeOpacity={0.7}
+            activeOpacity={0.85}
           >
-            <Text style={styles.cardTitle}>This Month's Spending</Text>
+            <View style={styles.heroCardGlow} />
+            <Text style={styles.heroCardLabel}>THIS MONTH'S SPENDING</Text>
             {dashLoading && !hasAccounts ? (
-              <ActivityIndicator size="small" color={colors.primary} style={styles.cardLoader} />
+              <ActivityIndicator size="small" color={colors.accent} style={styles.cardLoader} />
             ) : (
-              <Text style={styles.cardValue}>
+              <Text style={styles.heroCardValue}>
                 {hasAccounts ? formatCurrency(monthlySpending) : "--"}
               </Text>
             )}
             {spendingSlices.length > 0 && (
-              <PieChart slices={spendingSlices} />
+              <PieChart slices={spendingSlices} variant="dark" />
             )}
             {hasAccounts && (
-              <Text style={styles.cardLink}>View details →</Text>
+              <Text style={styles.heroCardLink}>View details →</Text>
             )}
           </TouchableOpacity>
         </ScrollView>
@@ -568,7 +582,7 @@ export default function DashboardScreen() {
             <MaterialCommunityIcons
               name={budgetExpanded ? "chevron-up" : "chevron-down"}
               size={24}
-              color={colors.primary}
+              color={colors.accent}
             />
           </TouchableOpacity>
         </View>
@@ -585,10 +599,11 @@ export default function DashboardScreen() {
 
       {/* Accounts */}
       {accounts.length > 0 && (
-        <View style={styles.accountsWidget}>
+        <View style={[styles.heroCard, styles.accountsWidget]}>
+          <View style={styles.heroCardGlow} />
           {/* Decorative background icon */}
           <View style={styles.accountsWidgetDecor}>
-            <MaterialCommunityIcons name="wallet-outline" size={140} color="#ffffff" />
+            <MaterialCommunityIcons name="wallet-outline" size={140} color={colors.heroTextPrimary} />
           </View>
           <View style={styles.accountsWidgetTitleRow}>
             <Text style={styles.accountsWidgetTitle}>My Accounts</Text>
@@ -608,14 +623,17 @@ export default function DashboardScreen() {
                   styles.accountsWidgetRow,
                   index < accounts.length - 1 && styles.accountsWidgetRowBorder,
                 ]}
-                onPress={() => router.push(`/account-transactions?account_id=${acct.id}&account_name=${encodeURIComponent(acct.name)}&balance_current=${acct.balance_current || ""}&account_type=${acct.type}&institution_name=${encodeURIComponent(acct.institution_name || "")}`)}
+                onPress={() => router.push(`/account-transactions?account_id=${acct.id}`)}
                 activeOpacity={0.7}
               >
                 <View style={styles.accountsWidgetLeft}>
                   <Text style={styles.accountsWidgetSub}>
                     {acct.institution_name ?? ACCOUNT_TYPE_LABELS[acct.type] ?? acct.type}
+                    {acct.mask ? ` ··${acct.mask}` : ""}
                   </Text>
-                  <Text style={styles.accountsWidgetName} numberOfLines={1} ellipsizeMode="tail">{acct.name}</Text>
+                  <Text style={styles.accountsWidgetName} numberOfLines={1} ellipsizeMode="tail">
+                    {acct.nickname ?? acct.name}
+                  </Text>
                 </View>
                 {acct.balance_current && (
                   <Text style={[
@@ -687,7 +705,7 @@ export default function DashboardScreen() {
               accessibilityLabel="Add bank account"
               accessibilityRole="button"
             >
-              <MaterialCommunityIcons name="bank-outline" size={20} color={colors.primary} />
+              <MaterialCommunityIcons name="bank-outline" size={20} color={colors.accent} />
               <Text style={styles.addMenuText}>Add Account</Text>
             </TouchableOpacity>
             <View style={styles.addMenuDivider} />
@@ -701,7 +719,7 @@ export default function DashboardScreen() {
               accessibilityLabel="Add property or vehicle"
               accessibilityRole="button"
             >
-              <MaterialCommunityIcons name="home-outline" size={20} color={colors.primary} />
+              <MaterialCommunityIcons name="home-outline" size={20} color={colors.accent} />
               <Text style={styles.addMenuText}>Add Property or Vehicle</Text>
             </TouchableOpacity>
             <View style={styles.addMenuDivider} />
@@ -715,8 +733,37 @@ export default function DashboardScreen() {
               accessibilityLabel="Import transactions from CSV"
               accessibilityRole="button"
             >
-              <MaterialCommunityIcons name="file-upload-outline" size={20} color={colors.primary} />
+              <MaterialCommunityIcons name="file-upload-outline" size={20} color={colors.accent} />
               <Text style={styles.addMenuText}>Import Transactions</Text>
+            </TouchableOpacity>
+            <View style={styles.addMenuDivider} />
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              disabled={exporting}
+              onPress={async () => {
+                if (exporting) return;
+                setShowAddMenu(false);
+                setExporting(true);
+                try {
+                  await exportTransactions();
+                } catch (err) {
+                  Alert.alert(
+                    "Export failed",
+                    err instanceof Error ? err.message : "Could not export transactions."
+                  );
+                } finally {
+                  setExporting(false);
+                }
+              }}
+              activeOpacity={0.7}
+              accessibilityLabel="Export transactions to CSV"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: exporting }}
+            >
+              <MaterialCommunityIcons name="file-download-outline" size={20} color={colors.accent} />
+              <Text style={styles.addMenuText}>
+                {exporting ? "Exporting…" : "Export Transactions"}
+              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -738,23 +785,26 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 28,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    fontFamily: fonts.extraBold,
+    color: colors.heroSurface,
     marginTop: 8,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 14,
-    fontFamily: fonts.medium,
-    color: colors.textSecondary,
+    fontSize: 13,
+    fontFamily: fonts.labelMedium,
+    color: colors.textMuted,
     marginBottom: 24,
-    marginTop: 4,
+    marginTop: 6,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
   },
   headerAddButton: {
     width: 30,
     height: 30,
     borderRadius: 15,
     borderWidth: 2,
-    borderColor: `${colors.textPrimary}26`, // 15% opacity
+    borderColor: `${colors.accent}55`,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -777,7 +827,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: `${colors.outlineVariant}33`,
     zIndex: 12,
-    shadowColor: "#000",
+    shadowColor: colors.heroSurface,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,
     shadowRadius: 16,
@@ -799,52 +849,39 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginHorizontal: 16,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 20,
+  // Shared hero card — dark surface used by NetWorth / Income / Spending / Health / Accounts
+  heroCard: {
+    ...heroCard.surface,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: `${colors.outlineVariant}1A`,
-    ...shadows.card,
   },
-  netWorthLabel: {
-    fontSize: 12,
-    fontFamily: fonts.labelMedium,
-    color: colors.textSecondary,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    marginBottom: 8,
+  heroCardSpaced: {
+    // net-worth hero has more content — keep the original marginBottom cadence
   },
-  cardTitle: {
-    fontSize: 14,
-    fontFamily: fonts.medium,
-    color: colors.textSecondary,
-    marginBottom: 8,
-  },
-  cardValue: {
+  heroCardGlow: heroCard.glow,
+  heroCardLabel: heroCard.label,
+  heroCardValue: {
     fontSize: 36,
     fontFamily: fonts.extraBold,
-    color: colors.textPrimary,
+    color: colors.heroTextPrimary,
+    letterSpacing: -0.5,
   },
+  heroCardValueXL: {
+    fontSize: 40,
+    fontFamily: fonts.extraBold,
+    color: colors.heroTextPrimary,
+    letterSpacing: -0.5,
+  },
+  heroCardValueNegative: {
+    color: colors.heroNegative,
+  },
+  heroIncomeValue: {
+    color: colors.incomePositive,
+  },
+  heroCardHint: heroCard.hint,
+  heroCardLink: heroCard.link,
   cardLoader: {
     alignSelf: "flex-start",
     marginVertical: 8,
-  },
-  cardHint: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 8,
-  },
-  cardLink: {
-    fontSize: 13,
-    color: colors.primary,
-    fontWeight: "600",
-    marginTop: "auto",
-    paddingTop: 12,
-  },
-  incomeValue: {
-    color: colors.textSecondary,
   },
   carouselWrapper: {
     marginBottom: 16,
@@ -862,23 +899,29 @@ const styles = StyleSheet.create({
   dots: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: 10,
+    marginTop: 14,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.dotInactive,
     marginHorizontal: 4,
   },
   dotActive: {
-    backgroundColor: colors.primary,
+    width: 20,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
   },
   negative: {
     color: colors.negative,
   },
   budgetPillMargin: {
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: `${colors.outlineVariant}33`,
+    ...shadows.card,
   },
   budgetChevron: {
     alignItems: "center",
@@ -907,7 +950,7 @@ const styles = StyleSheet.create({
   },
   budgetCategorySpentSub: {
     fontSize: 13,
-    fontWeight: "400",
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
   },
   viewTxnBtn: {
@@ -916,15 +959,16 @@ const styles = StyleSheet.create({
   seeAllText: {
     fontSize: 14,
     fontFamily: fonts.semiBold,
-    color: "#ffffff",
+    color: colors.heroTextPrimary,
     opacity: 0.8,
   },
   sectionTitle: {
     fontSize: 20,
     fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    color: colors.heroSurface,
     marginBottom: 12,
     marginTop: 8,
+    letterSpacing: -0.3,
   },
   itemCard: {
     backgroundColor: colors.surface,
@@ -996,7 +1040,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: colors.scrimSubtle,
     zIndex: 20,
   },
   onboardingPopup: {
@@ -1009,7 +1053,7 @@ const styles = StyleSheet.create({
     padding: 14,
     alignItems: "center",
     zIndex: 21,
-    shadowColor: "#000",
+    shadowColor: colors.heroSurface,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 20,
@@ -1047,26 +1091,16 @@ const styles = StyleSheet.create({
   },
   onboardingBold: {
     fontFamily: fonts.bold,
-    color: colors.primary,
+    color: colors.accent,
   },
   accountsWidget: {
-    backgroundColor: "#2d5a56",
-    borderRadius: borderRadius.lg,
-    padding: 24,
-    marginBottom: 16,
-    overflow: "hidden",
-    position: "relative",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 6,
+    // extends heroCard
   },
   accountsWidgetDecor: {
     position: "absolute",
     top: -10,
     right: -10,
-    opacity: 0.2,
+    opacity: 0.12,
   },
   accountsWidgetTitleRow: {
     flexDirection: "row",
@@ -1077,7 +1111,7 @@ const styles = StyleSheet.create({
   accountsWidgetTitle: {
     fontSize: 18,
     fontFamily: fonts.bold,
-    color: "#ffffff",
+    color: colors.heroTextPrimary,
     opacity: 0.9,
   },
   accountsWidgetList: {
@@ -1092,7 +1126,7 @@ const styles = StyleSheet.create({
   },
   accountsWidgetRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.1)",
+    borderBottomColor: colors.heroDivider,
   },
   accountsWidgetLeft: {
     flex: 0.75,
@@ -1101,64 +1135,61 @@ const styles = StyleSheet.create({
   accountsWidgetSub: {
     fontSize: 13,
     fontFamily: fonts.medium,
-    color: "#ffffff",
+    color: colors.heroTextPrimary,
     opacity: 0.7,
     marginBottom: 2,
   },
   accountsWidgetName: {
     fontSize: 18,
     fontFamily: fonts.bold,
-    color: "#ffffff",
+    color: colors.heroTextPrimary,
   },
   accountsWidgetBalance: {
     fontSize: 18,
     fontFamily: fonts.bold,
-    color: "#ffffff",
+    color: colors.heroTextPrimary,
     flexShrink: 0,
     textAlign: "right",
   },
   accountsWidgetBalanceDebt: {
-    color: "#adeef0",
+    color: colors.heroDebt,
   },
   healthScoreCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 20,
-    marginBottom: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: `${colors.outlineVariant}1A`,
-    ...shadows.card,
+    paddingVertical: 20,
   },
   healthScoreLeft: {
     flex: 1,
     marginRight: 16,
   },
-  healthScoreLabel: {
-    fontSize: 12,
-    fontFamily: fonts.labelMedium,
-    color: colors.textSecondary,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
   healthScoreDetail: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: fonts.medium,
-    color: colors.textMuted,
+    color: colors.heroTextSecondary,
+    marginTop: 2,
   },
   healthScoreRight: {
     alignItems: "center",
   },
+  healthScorePill: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    alignItems: "center",
+    minWidth: 72,
+  },
   healthScoreValue: {
     fontSize: 32,
-    fontFamily: fonts.bold,
+    fontFamily: fonts.extraBold,
+    letterSpacing: -0.5,
   },
   healthScoreGrade: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    marginTop: -2,
+    fontSize: 12,
+    fontFamily: fonts.labelMedium,
+    letterSpacing: 2,
+    marginTop: 0,
   },
 });

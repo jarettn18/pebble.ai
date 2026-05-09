@@ -25,9 +25,14 @@ class User(Base, TimestampMixin):
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
         Enum(SubscriptionTier), default=SubscriptionTier.free
     )
-    api_key_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
     phone_number: Mapped[str | None] = mapped_column(String(20), unique=True, index=True)
     phone_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    onboarding_completed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", index=True
+    )
 
     # Profile fields
     date_of_birth: Mapped[datetime.date | None] = mapped_column(Date)
@@ -45,3 +50,6 @@ class User(Base, TimestampMixin):
     conversations: Mapped[list["ChatConversation"]] = relationship(back_populates="user")  # noqa: F821
     assets: Mapped[list["Asset"]] = relationship(back_populates="user")  # noqa: F821
     budget_plans: Mapped[list["BudgetPlan"]] = relationship(back_populates="user")  # noqa: F821
+    api_keys: Mapped[list["APIKey"]] = relationship(  # noqa: F821
+        back_populates="user", cascade="all, delete-orphan"
+    )

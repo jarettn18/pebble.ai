@@ -516,5 +516,13 @@ async def get_health_score_history(
 
 
 async def invalidate_health_score_cache(user_id: str) -> None:
-    """Invalidate the cached health score for a user."""
-    await redis_client.delete(f"{CACHE_PREFIX}{user_id}")
+    """Invalidate the cached health score for a user.
+
+    Best-effort: a Redis outage must not block the user's underlying
+    mutation (transaction add, Plaid sync, etc.). A stale cache will
+    self-heal within CACHE_TTL.
+    """
+    try:
+        await redis_client.delete(f"{CACHE_PREFIX}{user_id}")
+    except Exception as exc:
+        logger.warning("Failed to invalidate health score cache: %s", exc)

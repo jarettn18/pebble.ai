@@ -15,6 +15,8 @@ type User = {
   marital_status: string | null;
   dependents: number | null;
   financial_goals: string[] | null;
+  onboarding_completed: boolean;
+  active: boolean;
 };
 
 type ProfileUpdate = Partial<
@@ -28,6 +30,7 @@ type ProfileUpdate = Partial<
     | "marital_status"
     | "dependents"
     | "financial_goals"
+    | "onboarding_completed"
   >
 >;
 
@@ -52,7 +55,8 @@ type AuthState = {
     email: string,
     password: string,
     fullName: string,
-    phoneNumber: string
+    phoneNumber: string,
+    dateOfBirth: string
   ) => Promise<void>;
   verifyAndRegister: (code: string) => Promise<void>;
   resendCode: () => Promise<void>;
@@ -60,6 +64,7 @@ type AuthState = {
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
   updateProfile: (data: ProfileUpdate) => Promise<void>;
+  deactivateAccount: () => Promise<void>;
 };
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -69,7 +74,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   pendingVerificationId: null,
   pendingPhoneNumber: null,
 
-  initiateRegister: async (email, password, fullName, phoneNumber) => {
+  initiateRegister: async (email, password, fullName, phoneNumber, dateOfBirth) => {
     const res = await apiRequest<InitiateResponse>(
       "/v1/auth/register/initiate",
       {
@@ -79,6 +84,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           password,
           full_name: fullName,
           phone_number: phoneNumber,
+          date_of_birth: dateOfBirth,
         },
         noAuth: true,
       }
@@ -154,5 +160,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       body: data,
     });
     set({ user });
+  },
+
+  deactivateAccount: async () => {
+    await apiRequest("/v1/auth/deactivate", { method: "POST" });
+    await clearTokens();
+    set({ user: null, isAuthenticated: false });
   },
 }));

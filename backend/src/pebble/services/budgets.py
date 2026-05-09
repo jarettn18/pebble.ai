@@ -10,6 +10,7 @@ from sqlalchemy.orm import joinedload
 from pebble.models.budget import Budget
 from pebble.models.category import Category
 from pebble.models.transaction import Transaction
+from pebble.services.health_score import invalidate_health_score_cache
 
 
 def _budget_to_dict(b: Budget, spent: Decimal = Decimal("0")) -> dict:
@@ -146,6 +147,7 @@ async def create_budget(
     db.add(budget)
     await db.commit()
     await db.refresh(budget, ["category"])
+    await invalidate_health_score_cache(user_id)
     return _budget_to_dict(budget)
 
 
@@ -183,6 +185,7 @@ async def update_budget(
 
     await db.commit()
     await db.refresh(budget, ["category"])
+    await invalidate_health_score_cache(user_id)
     return _budget_to_dict(budget)
 
 
@@ -205,3 +208,4 @@ async def delete_budget(
 
     await db.delete(budget)
     await db.commit()
+    await invalidate_health_score_cache(user_id)

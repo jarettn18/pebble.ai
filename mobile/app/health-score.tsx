@@ -7,12 +7,13 @@ import {
   RefreshControl,
   TouchableOpacity,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import {
   useHealthScoreStore,
   type ComponentScore,
   type BenchmarkInsight,
 } from "../src/stores/healthScore";
+import { useChatUIStore } from "../src/stores/chatUI";
 import {
   colors,
   borderRadius,
@@ -22,17 +23,17 @@ import {
 } from "../src/theme";
 
 const GRADE_COLORS: Record<string, string> = {
-  A: "#2e7d32",
-  B: "#45655a",
-  C: "#d99e33",
-  D: "#e67e66",
-  F: "#ba1a1a",
+  A: colors.gradeA,
+  B: colors.gradeB,
+  C: colors.gradeC,
+  D: colors.gradeD,
+  F: colors.gradeF,
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  good: "#2e7d32",
-  fair: "#d99e33",
-  poor: "#ba1a1a",
+  good: colors.gradeA,
+  fair: colors.gradeC,
+  poor: colors.gradeF,
   no_data: colors.textMuted,
 };
 
@@ -46,7 +47,6 @@ const MISSING_DATA_HINTS: Record<string, string> = {
 };
 
 export default function HealthScoreScreen() {
-  const router = useRouter();
   const {
     overallScore,
     grade,
@@ -172,14 +172,7 @@ export default function HealthScoreScreen() {
       <TouchableOpacity
         style={styles.aiButton}
         activeOpacity={0.8}
-        onPress={() =>
-          router.push(
-            "/(tabs)/ai-chat?prefill=" +
-              encodeURIComponent(
-                "How can I improve my financial health score?"
-              )
-          )
-        }
+        onPress={() => useChatUIStore.getState().openChat()}
       >
         <Text style={styles.aiButtonText}>Ask AI for Tips</Text>
       </TouchableOpacity>
@@ -222,12 +215,12 @@ function InsightRow({ insight }: { insight: BenchmarkInsight }) {
   const percentile = insight.percentile;
   const barColor =
     percentile !== null && percentile >= 75
-      ? "#2e7d32"
+      ? colors.gradeA
       : percentile !== null && percentile >= 50
-        ? "#45655a"
+        ? colors.gradeB
         : percentile !== null && percentile >= 25
-          ? "#d99e33"
-          : "#ba1a1a";
+          ? colors.gradeC
+          : colors.gradeF;
 
   return (
     <View style={styles.insightRow}>

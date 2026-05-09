@@ -45,18 +45,6 @@ services:
       redis:
         condition: service_healthy
 
-  mobile:
-    build: ./mobile
-    ports:
-      - "8081:8081"
-    environment:
-      EXPO_PUBLIC_API_URL: http://localhost:8000
-    volumes:
-      - ./mobile:/app
-      - /app/node_modules
-    depends_on:
-      - backend
-
 volumes:
   pgdata:
   redisdata:
