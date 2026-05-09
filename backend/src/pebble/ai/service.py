@@ -41,9 +41,6 @@ def _provider_kwargs(litellm_id: str) -> dict:
 
 
 class AIChatService:
-    def __init__(self) -> None:
-        self.model_default = settings.default_chat_model
-
     async def stream_chat(
         self,
         user_id: str,
@@ -165,14 +162,17 @@ class AIChatService:
                 assistant_text = content_acc
                 break
 
-            # Persist
+            if not assistant_text:
+                yield _sse("error", message="Model did not produce a response after tool calls")
+                return
+
             await self._save_message(conversation.id, "user", message, model_key=None, db=db)
             await self._save_message(
                 conversation.id, "assistant", assistant_text,
                 model_key=litellm_id, db=db,
             )
 
-            if len(history) == 0 and assistant_text:
+            if len(history) == 0:
                 await self._auto_title(conversation, message, litellm_id, provider_kwargs, db)
 
             await self._track_usage(user_id, total_input_tokens + total_output_tokens, db)
