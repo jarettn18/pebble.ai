@@ -29,3 +29,14 @@ class ConversationDetailResponse(BaseModel):
     id: str
     title: str | None
     messages: list[MessageOut]
+
+
+class ModelOption(BaseModel):
+    key: str
+    label: str
+    tier: str
+
+
+class ModelsResponse(BaseModel):
+    models: list[ModelOption]
+    default: str
