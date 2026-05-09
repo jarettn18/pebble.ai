@@ -17,6 +17,7 @@ import {
   Modal,
   Pressable,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Markdown from "react-native-marked";
@@ -33,6 +34,7 @@ import {
   useAIChatStore,
   Message,
   Conversation,
+  ModelOption,
 } from "../stores/aiChat";
 import { useChatUIStore } from "../stores/chatUI";
 
@@ -296,10 +298,43 @@ export default function ChatSheet() {
     loadConversations,
     loadConversation,
     deleteConversation,
+    availableModels,
+    loadModels,
+    selectedModel,
+    defaultModel,
+    setSelectedModel,
   } = useAIChatStore();
 
   const [inputText, setInputText] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
+
+  const currentModelLabel =
+    availableModels.find((m) => m.key === (selectedModel ?? defaultModel))
+      ?.label ?? "Pebble AI";
+
+  const groupedModels = useMemo(() => {
+    const tiers: Array<{ tier: ModelOption["tier"]; label: string }> = [
+      { tier: "fast", label: "Fast" },
+      { tier: "balanced", label: "Balanced" },
+      { tier: "max", label: "Max" },
+    ];
+    return tiers
+      .map(({ tier, label }) => ({
+        tier,
+        label,
+        models: availableModels.filter((m) => m.tier === tier),
+      }))
+      .filter((g) => g.models.length > 0);
+  }, [availableModels]);
+
+  const handleSelectModel = useCallback(
+    (key: string) => {
+      setSelectedModel(key);
+      setShowModelPicker(false);
+    },
+    [setSelectedModel]
+  );
   const inputTextRef = useRef(inputText);
   inputTextRef.current = inputText;
   // Both FlatList and BottomSheetFlatList expose scrollToEnd; we just need
@@ -315,10 +350,15 @@ export default function ChatSheet() {
     }
   }, [open]);
 
-  // Load conversations on mount.
+  // Load conversations + model list on mount.
   useEffect(() => {
     loadConversations();
-  }, [loadConversations]);
+    if (availableModels.length === 0) {
+      loadModels();
+    }
+    // availableModels intentionally omitted: we only want one initial fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadConversations, loadModels]);
 
   const handleDismiss = useCallback(() => {
     if (open) closeChat();
@@ -419,7 +459,22 @@ export default function ChatSheet() {
             color={colors.primary}
           />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Pebble AI</Text>
+        <TouchableOpacity
+          onPress={() => setShowModelPicker(true)}
+          style={styles.modelChip}
+          accessibilityLabel="Select AI model"
+          accessibilityRole="button"
+          activeOpacity={0.7}
+        >
+          <Text style={styles.modelChipText} numberOfLines={1}>
+            {currentModelLabel}
+          </Text>
+          <MaterialCommunityIcons
+            name="chevron-down"
+            size={16}
+            color={colors.textSecondary}
+          />
+        </TouchableOpacity>
         <TouchableOpacity
           onPress={startNewConversation}
           style={styles.headerBtn}
@@ -549,6 +604,72 @@ export default function ChatSheet() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Model picker modal */}
+      <Modal
+        visible={showModelPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowModelPicker(false)}
+      >
+        <Pressable
+          style={styles.historyOverlay}
+          onPress={() => setShowModelPicker(false)}
+        >
+          <Pressable
+            style={styles.historySheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.historySheetTitle}>Select Model</Text>
+            {availableModels.length === 0 ? (
+              <Text style={styles.historyEmpty}>Loading models...</Text>
+            ) : (
+              <ScrollView style={styles.modelPickerList}>
+                {groupedModels.map((group) => (
+                  <View key={group.tier}>
+                    <Text style={styles.tierHeader}>{group.label}</Text>
+                    {group.models.map((model) => {
+                      const isSelected =
+                        model.key === (selectedModel ?? defaultModel);
+                      return (
+                        <TouchableOpacity
+                          key={model.key}
+                          style={[
+                            styles.modelRow,
+                            isSelected && styles.modelRowSelected,
+                          ]}
+                          onPress={() => handleSelectModel(model.key)}
+                          activeOpacity={0.7}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${model.label}${
+                            isSelected ? ", selected" : ""
+                          }`}
+                        >
+                          <Text style={styles.modelRowText}>{model.label}</Text>
+                          {isSelected ? (
+                            <MaterialCommunityIcons
+                              name="check"
+                              size={18}
+                              color={colors.primary}
+                            />
+                          ) : null}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity
+              style={styles.historyCancelBtn}
+              onPress={() => setShowModelPicker(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.historyCancelText}>Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </BottomSheetModal>
   );
 }
@@ -583,6 +704,55 @@ const styles = StyleSheet.create({
   headerBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+
+  // Model chip (replaces static title)
+  modelChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    gap: 4,
+    maxWidth: 220,
+  },
+  modelChipText: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+  },
+
+  // Model picker list
+  modelPickerList: {
+    maxHeight: 400,
+  },
+  tierHeader: {
+    fontSize: 12,
+    fontFamily: fonts.semiBold,
+    color: colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  modelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  modelRowSelected: {
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: borderRadius.sm,
+  },
+  modelRowText: {
+    fontSize: 15,
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
   },
 
   // Empty state
