@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { isDemoMode } from "./demo/mode";
+import { handleDemoRequest } from "./demo/router";
 
 export const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -76,6 +78,10 @@ export async function apiRequest<T = unknown>(
 ): Promise<T> {
   const { method = "GET", body, headers = {}, noAuth = false, signal } = options;
 
+  if (isDemoMode()) {
+    return handleDemoRequest<T>(path, method, body);
+  }
+
   const requestHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...headers,
@@ -127,6 +133,10 @@ export async function apiUpload<T = unknown>(
   path: string,
   formData: FormData | (() => FormData)
 ): Promise<T> {
+  if (isDemoMode()) {
+    return handleDemoRequest<T>(path, "POST");
+  }
+
   const buildFormData = typeof formData === "function" ? formData : () => formData;
   const requestHeaders: Record<string, string> = {};
 
