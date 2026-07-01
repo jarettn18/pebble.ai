@@ -178,8 +178,8 @@ function generateTransactions(months: number): DemoTransaction[] {
     for (const t of TEMPLATES) {
       const day = String(t.day).padStart(2, "0");
       const date = `${y}-${String(m).padStart(2, "0")}-${day}`;
-      // Don't generate future-dated transactions in the current month.
-      if (new Date(`${date}T00:00:00`) > now) continue;
+      // Every month is fully populated (including the current one) so the
+      // dashboard's default month is never empty — even on the 1st.
       out.push({
         id: `txn-${y}-${m}-${t.day}-${t.name.replace(/\s+/g, "")}`,
         account_id: t.account_id,
