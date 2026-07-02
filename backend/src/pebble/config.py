@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     gemini_api_key: str = ""
 
+    # CORS — comma-separated exact origins, plus an optional regex for dynamic
+    # origins (e.g. Vercel preview deploys, whose subdomain changes per build).
+    cors_origins: str = "http://localhost:8081,http://localhost:19006"
+    cors_origin_regex: str = r"https://pebble[a-z0-9-]*\.vercel\.app"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     # Encryption
     encryption_key: str = ""
 
