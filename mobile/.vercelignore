@@ -1,0 +1,8 @@
+# The web export (`expo export --platform web`) doesn't need these, and the
+# build reinstalls dependencies via installCommand. Excluding them keeps the
+# CLI upload well under Vercel's 15,000-file limit.
+node_modules
+ios
+android
+.expo
+dist

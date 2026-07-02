@@ -18,6 +18,7 @@ import {
   Pressable,
   ActivityIndicator,
   ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Markdown from "react-native-marked";
@@ -38,6 +39,7 @@ import {
 } from "../stores/aiChat";
 import { useChatUIStore } from "../stores/chatUI";
 import { isDemoMode } from "../api/demo/mode";
+import { shouldShowFrame, FRAME_WIDTH } from "../api/demo/frame";
 
 // ── Suggested prompts for empty state ──────────────────────
 const SUGGESTIONS = [
@@ -269,17 +271,6 @@ const ConversationItem = memo(function ConversationItem({
   );
 });
 
-// ── Backdrop with stronger dim near full snap ──────────────
-const renderBackdrop = (props: BottomSheetBackdropProps) => (
-  <BottomSheetBackdrop
-    {...props}
-    appearsOnIndex={0}
-    disappearsOnIndex={-1}
-    opacity={0.4}
-    pressBehavior="close"
-  />
-);
-
 // ── Main sheet ─────────────────────────────────────────────
 export default function ChatSheet() {
   const open = useChatUIStore((s) => s.open);
@@ -310,6 +301,37 @@ export default function ChatSheet() {
   const [showHistory, setShowHistory] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const demo = isDemoMode();
+
+  // On web in demo mode the sheet portals to <body>, escaping the simulator
+  // frame. Constrain it (and its backdrop) to the phone-card width, centered,
+  // so the sheet stays inside the illusion. No effect on native or non-demo.
+  const { width: viewportWidth } = useWindowDimensions();
+  const framed = Platform.OS === "web" && shouldShowFrame(demo, viewportWidth);
+  const framedStyle = useMemo(
+    () =>
+      framed
+        ? {
+            maxWidth: FRAME_WIDTH,
+            width: "100%" as const,
+            marginHorizontal: "auto" as const,
+          }
+        : undefined,
+    [framed]
+  );
+
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        style={[props.style, framedStyle]}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.4}
+        pressBehavior="close"
+      />
+    ),
+    [framedStyle]
+  );
 
   const currentModelLabel =
     availableModels.find((m) => m.key === (selectedModel ?? defaultModel))
@@ -440,6 +462,7 @@ export default function ChatSheet() {
       index={1}
       snapPoints={snapPoints}
       onDismiss={handleDismiss}
+      style={framedStyle}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.handle}
       backgroundStyle={styles.sheetBackground}
