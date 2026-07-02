@@ -7,6 +7,7 @@
  */
 
 import { getTokens, refreshAccessToken } from "./client";
+import { isDemoMode } from "./demo/mode";
 
 /** Toggle this to skip real API calls during frontend development. */
 const USE_MOCK = __DEV__ && false;
@@ -149,6 +150,11 @@ export async function streamChat(
   model: string | null = null,
   _retryCount = 0,
 ): Promise<{ abort: () => void }> {
+  if (isDemoMode()) {
+    // AI chat is disabled in the demo — do nothing.
+    return { abort: () => {} };
+  }
+
   if (USE_MOCK) {
     return streamChatMock(message, conversationId, callbacks, model);
   }

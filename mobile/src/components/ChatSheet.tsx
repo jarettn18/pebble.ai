@@ -37,6 +37,7 @@ import {
   ModelOption,
 } from "../stores/aiChat";
 import { useChatUIStore } from "../stores/chatUI";
+import { isDemoMode } from "../api/demo/mode";
 
 // ── Suggested prompts for empty state ──────────────────────
 const SUGGESTIONS = [
@@ -308,6 +309,7 @@ export default function ChatSheet() {
   const [inputText, setInputText] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const demo = isDemoMode();
 
   const currentModelLabel =
     availableModels.find((m) => m.key === (selectedModel ?? defaultModel))
@@ -537,21 +539,25 @@ export default function ChatSheet() {
           style={styles.input}
           value={inputText}
           onChangeText={setInputText}
-          placeholder="Ask about your finances..."
+          placeholder={
+            demo
+              ? "AI chat is disabled in the demo"
+              : "Ask about your finances..."
+          }
           placeholderTextColor={colors.textMuted}
           multiline
           maxLength={500}
-          editable={!isStreaming}
+          editable={!isStreaming && !demo}
           onSubmitEditing={handleSend}
           blurOnSubmit={false}
         />
         <TouchableOpacity
           style={[
             styles.sendBtn,
-            (!inputText.trim() || isStreaming) && styles.sendBtnDisabled,
+            (!inputText.trim() || isStreaming || demo) && styles.sendBtnDisabled,
           ]}
           onPress={handleSend}
-          disabled={!inputText.trim() || isStreaming}
+          disabled={!inputText.trim() || isStreaming || demo}
           activeOpacity={0.7}
           accessibilityLabel={isStreaming ? "Stop response" : "Send message"}
           accessibilityRole="button"
