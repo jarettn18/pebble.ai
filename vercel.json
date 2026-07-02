@@ -1,6 +1,0 @@
-{
-  "installCommand": "cd mobile && npm ci --include=dev",
-  "buildCommand": "cd mobile && npx expo export --platform web",
-  "outputDirectory": "mobile/dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-}
