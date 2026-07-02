@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from pebble.config import settings
 from pebble.mcp.auth_middleware import MCPAuthMiddleware
 from pebble.mcp.server import get_streamable_http_app
 from pebble.routers import accounts, ai_chat, api_keys, assets, auth, budget_plans, budgets, categories, csv_import, dashboard, health_score, plaid, transactions
@@ -53,7 +54,8 @@ app = FastAPI(title="Pebble", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8081"],
+    allow_origins=settings.cors_origins_list,
+    allow_origin_regex=settings.cors_origin_regex or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
