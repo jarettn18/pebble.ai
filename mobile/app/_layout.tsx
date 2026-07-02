@@ -18,6 +18,7 @@ import { useAuthStore } from "../src/stores/auth";
 import { colors, fonts } from "../src/theme";
 import GlobalChatFAB from "../src/components/GlobalChatFAB";
 import ChatSheet from "../src/components/ChatSheet";
+import SimulatorFrame from "../src/components/SimulatorFrame";
 
 function AuthGate() {
   const { isAuthenticated, isLoading, loadUser, user } = useAuthStore();
@@ -150,9 +151,11 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <BottomSheetModalProvider>
-        <AuthGate />
-      </BottomSheetModalProvider>
+      <SimulatorFrame>
+        <BottomSheetModalProvider>
+          <AuthGate />
+        </BottomSheetModalProvider>
+      </SimulatorFrame>
     </GestureHandlerRootView>
   );
 }
